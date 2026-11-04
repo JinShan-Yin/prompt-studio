@@ -609,7 +609,6 @@
   </div>
 
   <script>
-    const token = new URLSearchParams(window.location.search).get('token') || '';
     let companies = [];
     let activeProjectId = '';
     let pinnedIds = JSON.parse(localStorage.getItem('pinnedIds') || '[]');
@@ -641,8 +640,8 @@
     // --- 数据获取与左侧渲染 ---
     async function fetchData() {
       try {
-        const cJson = await safeFetchJson(`/api/companies?token=${token}`);
-        const pJson = await safeFetchJson(`/api/projects?token=${token}`);
+        const cJson = await safeFetchJson(`/api/companies`);
+        const pJson = await safeFetchJson(`/api/projects`);
         if (cJson.success && pJson.success) {
           companies = cJson.data.map(c => ({ ...c, open: true, children: pJson.data.filter(p => p.company_id === c.id) }));
           renderTree();
@@ -758,7 +757,7 @@
       const l3 = document.getElementById('val-L3').value;
 
       try {
-        const d = await safeFetchJson(`/api/snapshots/create?token=${token}`, {
+        const d = await safeFetchJson(`/api/snapshots/create`, {
           method: 'POST', headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
             project_id: activeProjectId,
@@ -802,7 +801,7 @@
       const container = document.getElementById('kb-list-container');
       container.innerHTML = '<div class="kb-empty">加载中...</div>';
       try {
-        const d = await safeFetchJson(`/api/kb/list?token=${token}&project_id=${encodeURIComponent(projectIdAtFetch)}`);
+        const d = await safeFetchJson(`/api/kb/list?project_id=${encodeURIComponent(projectIdAtFetch)}`);
         // 项目守卫：响应回来前已切换项目则丢弃，避免旧项目 KB 覆盖新项目
         if (activeProjectId !== projectIdAtFetch) return;
         currentKbData = d && d.success && Array.isArray(d.data) ? d.data : [];
@@ -966,14 +965,14 @@
             const text = await file.text();
             if (activeProjectId !== projectIdAtImport) { aborted = true; break; }
             if (!text || !text.trim()) { skippedFiles++; continue; } // 空文件跳过
-            const parsed = await safeFetchJson(`/api/kb/parse?token=${token}`, {
+            const parsed = await safeFetchJson(`/api/kb/parse`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ raw_text: text })
             });
             if (activeProjectId !== projectIdAtImport) { aborted = true; break; }
             const pairs = parsed && parsed.success && Array.isArray(parsed.data) ? parsed.data : [];
             if (pairs.length === 0) { failedFiles++; continue; }
-            const saved = await safeFetchJson(`/api/kb/save?token=${token}`, {
+            const saved = await safeFetchJson(`/api/kb/save`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ project_id: projectIdAtImport, pairs }) // 固定写入发起导入时的项目
             });
@@ -1020,7 +1019,7 @@
       modal.style.display = 'flex';
       modalCallback = async () => {
         try {
-          const d = await safeFetchJson(`/api/kb/delete?token=${token}`, {
+          const d = await safeFetchJson(`/api/kb/delete`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id })
           });
           if (d && d.success) {
@@ -1041,7 +1040,7 @@
       btn.innerText = '解析中...'; btn.disabled = true;
 
       try {
-        const d = await safeFetchJson(`/api/kb/parse?token=${token}`, {
+        const d = await safeFetchJson(`/api/kb/parse`, {
           method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ raw_text: text })
         });
         if (d.success) {
@@ -1060,7 +1059,7 @@
       btn.innerText = '入库中...'; btn.disabled = true;
 
       try {
-        const d = await safeFetchJson(`/api/kb/save?token=${token}`, {
+        const d = await safeFetchJson(`/api/kb/save`, {
           method: 'POST', headers: {'Content-Type': 'application/json'}, 
           body: JSON.stringify({ project_id: activeProjectId, pairs: currentKbPairs })
         });
@@ -1155,7 +1154,7 @@
       if (btn) { btn.disabled = true; btn.classList.add('loading'); }
       renderChatBubbles();
       try {
-        const d = await safeFetchJson(`/api/chat/reply?token=${token}`, {
+        const d = await safeFetchJson(`/api/chat/reply`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             project_id: projectIdAtSend,
@@ -1360,7 +1359,7 @@
             botReply = item.bot_reply || '';
             // 1) 缺省 bot_reply 时先调对话接口自动生成回复
             if (!botReply) {
-              const chat = await safeFetchJson(`/api/chat/reply?token=${token}`, {
+              const chat = await safeFetchJson(`/api/chat/reply`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   project_id: projectIdAtRun,
@@ -1374,7 +1373,7 @@
               else throw new Error((chat && (chat.error || chat.message)) || '自动生成回复失败');
             }
             // 2) 调评测接口
-            const d = await safeFetchJson(`/api/eval/run?token=${token}`, {
+            const d = await safeFetchJson(`/api/eval/run`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ user_query: item.user_query, standard_answer: item.standard_answer, bot_reply: botReply })
             });
@@ -1446,7 +1445,7 @@
       tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #909399;">加载中...</td></tr>';
       
       try {
-        const d = await safeFetchJson(`/api/snapshots/list?token=${token}&project_id=${activeProjectId}`);
+        const d = await safeFetchJson(`/api/snapshots/list?project_id=${activeProjectId}`);
         
         if (d.success && d.data.length > 0) {
           tbody.innerHTML = d.data.map(snap => {
@@ -1477,7 +1476,7 @@
 
     function downloadSnapshot(id) {
       // 生产级下载：优先 <a download>（避免 window.open 被弹窗拦截导致下载失败），异常降级 window.open
-      const url = `/api/gate/export?token=${token}&snapshot_id=${id}`;
+      const url = `/api/gate/export?snapshot_id=${id}`;
       try {
         const a = document.createElement('a');
         a.href = url;
@@ -1500,7 +1499,7 @@
       if (!projectIdAtRollback) { showToast('请先选择一个项目'); return; }
       const seq = ++rollbackSeq;
       try {
-        const d = await safeFetchJson(`/api/snapshots/detail?token=${token}&id=${encodeURIComponent(id)}`);
+        const d = await safeFetchJson(`/api/snapshots/detail?id=${encodeURIComponent(id)}`);
         // 双守卫：已有更新的回滚 / 已切换项目 → 丢弃在途响应，绝不再写编辑器
         if (seq !== rollbackSeq || activeProjectId !== projectIdAtRollback) return;
         if (!d || !d.success || !d.data) {
@@ -1632,7 +1631,7 @@
         const url = type === 'company' ? '/api/companies/create' : '/api/projects/create';
         const body = type === 'company' ? { name } : { company_id: companySelect.value, name };
         try {
-          const d = await safeFetchJson(`${url}?token=${token}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+          const d = await safeFetchJson(`${url}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
           if (d.success) { showToast('创建成功'); closeModal(); fetchData(); } else { showToast(d.error); }
         } catch (e) { showToast(e.message); }
       };
@@ -1663,7 +1662,7 @@
         if (!name || name === currentName) return closeModal();
         const url = type === 'company' ? '/api/companies/update' : '/api/projects/update';
         try {
-          const d = await safeFetchJson(`${url}?token=${token}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id, name }) });
+          const d = await safeFetchJson(`${url}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id, name }) });
           if (d.success) {
             showToast('修改成功'); closeModal();
             if (activeProjectId === id) document.getElementById('current-name').innerText = name;
@@ -1692,7 +1691,7 @@
 
       modalCallback = async () => {
         try {
-          const d = await safeFetchJson(`/api/${apiPath}/delete?token=${token}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id}) });
+          const d = await safeFetchJson(`/api/${apiPath}/delete`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id}) });
           if (d.success) { 
             showToast('删除成功'); closeModal();
             if (activeProjectId === id) {
@@ -1782,7 +1781,7 @@
 
       let info = null;
       try {
-        const res = await safeFetchJson(`/api/settings/api-key?token=${token}`);
+        const res = await safeFetchJson(`/api/settings/api-key`);
         info = res && res.success ? res.data : null;
       } catch (e) {
         info = null;
@@ -1804,7 +1803,7 @@
         confirmBtn.classList.add('loading');
         confirmBtn.innerText = '保存中...';
         try {
-          const d = await safeFetchJson(`/api/settings/api-key?token=${token}`, {
+          const d = await safeFetchJson(`/api/settings/api-key`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ api_key: value })
@@ -1861,7 +1860,7 @@
       const originalText = btn ? btn.innerText : '';
       if (btn) { btn.disabled = true; btn.innerText = '组装中...'; }
       try {
-        const d = await safeFetchJson(`/api/prompt/assemble?token=${token}`, {
+        const d = await safeFetchJson(`/api/prompt/assemble`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1894,13 +1893,13 @@
       const originalText = btn ? btn.innerText : '';
       if (btn) { btn.disabled = true; btn.innerText = '检查中...'; }
       try {
-        const d = await safeFetchJson(`/api/snapshots/list?token=${token}&project_id=${encodeURIComponent(activeProjectId)}`);
+        const d = await safeFetchJson(`/api/snapshots/list?project_id=${encodeURIComponent(activeProjectId)}`);
         const list = d && d.success && Array.isArray(d.data) ? d.data : [];
         if (list.length === 0) {
           showToast('暂无快照可导出');
           return;
         }
-        const url = `/api/projects/export_zip?token=${encodeURIComponent(token)}&project_id=${encodeURIComponent(activeProjectId)}`;
+        const url = `/api/projects/export_zip?project_id=${encodeURIComponent(activeProjectId)}`;
         const a = document.createElement('a');
         a.href = url;
         a.setAttribute('download', '');
@@ -2197,7 +2196,7 @@
 
     async function saveContextSilently(projectId, payload) {
       try {
-        await safeFetchJson(`/api/context/save?token=${token}`, {
+        await safeFetchJson(`/api/context/save`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ project_id: projectId, context_data: payload })
@@ -2218,7 +2217,7 @@
       abortExtractRequest();
       clearContext();
       try {
-        const d = await safeFetchJson(`/api/context/get?token=${token}&project_id=${encodeURIComponent(projectId)}`);
+        const d = await safeFetchJson(`/api/context/get?project_id=${encodeURIComponent(projectId)}`);
         if (activeProjectId !== projectId) return; // 竞态：响应回来前用户已切到别的项目
         if (!d || !d.success || !d.data || typeof d.data !== 'object') return;
         const data = d.data;
@@ -2277,7 +2276,7 @@
 
       try {
         // 1. 先拉知识库列表，空库直接提示并 return，不调用 extract
-        const kbJson = await safeFetchJson(`/api/kb/list?token=${token}&project_id=${encodeURIComponent(projectIdAtRequest)}`, { signal: controller.signal });
+        const kbJson = await safeFetchJson(`/api/kb/list?project_id=${encodeURIComponent(projectIdAtRequest)}`, { signal: controller.signal });
         if (activeProjectId !== projectIdAtRequest) return;
         const kbList = kbJson && kbJson.success && Array.isArray(kbJson.data) ? kbJson.data : [];
         if (kbList.length === 0) {
@@ -2286,7 +2285,7 @@
         }
 
         // 2. 调 AI 提取接口（带 signal，切项目可中断）
-        const d = await safeFetchJson(`/api/context/extract?token=${token}`, {
+        const d = await safeFetchJson(`/api/context/extract`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ project_id: projectIdAtRequest }),
