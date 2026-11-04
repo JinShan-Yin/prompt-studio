@@ -612,6 +612,168 @@
     button { -webkit-tap-highlight-color: transparent; }
     select { background-color: #ffffff; color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 6px; }
     button:disabled, .btn:disabled { cursor: not-allowed; opacity: 0.6; }
+
+    /* ============================================================
+       V3.0 ULTIMATE · 极简商业级 UI 精修（按钮瘦身 / 去色 / 防塌陷 / 防丑）
+       纯 CSS 覆盖层：不修改任何 DOM 结构与 JS 逻辑
+       ============================================================ */
+    /* ---------- 一、主操作按钮：DeepSeek 亮蓝、瘦身、物理微交互 ---------- */
+    .btn-primary {
+      background-color: #4d6bfe !important;
+      border: 1px solid #4d6bfe !important;
+      color: #ffffff !important;
+      width: auto !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      flex: 0 0 auto !important;
+      padding: 10px 24px !important;
+      border-radius: 8px !important;
+      box-shadow: none !important;
+      font-weight: 500 !important;
+      line-height: 1.4 !important;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background-color: #3b5bdb !important;
+      border-color: #3b5bdb !important;
+      color: #ffffff !important;
+      box-shadow: 0 4px 12px rgba(77, 107, 254, 0.2) !important;
+    }
+    .btn-primary:active:not(:disabled) {
+      transform: scale(0.98) !important;
+      box-shadow: 0 2px 6px rgba(77, 107, 254, 0.18) !important;
+    }
+    .btn-primary:focus-visible {
+      outline: none !important;
+      box-shadow: 0 0 0 3px rgba(77, 107, 254, 0.18) !important;
+    }
+    .btn-primary:disabled {
+      background-color: #a5b4fc !important;
+      border-color: #a5b4fc !important;
+      color: #ffffff !important;
+      box-shadow: none !important;
+      opacity: 1 !important;
+      cursor: not-allowed !important;
+    }
+    /* ---------- 二、次要按钮 / 辅助操作去色：白底细灰边、深灰文字 ---------- */
+    .btn-secondary, .btn-success, .btn-warning,
+    #batch-select-btn, #copy-prompt-btn, #chat-clear-btn {
+      background: #ffffff !important;
+      background-color: #ffffff !important;
+      color: #4b5563 !important;
+      border: 1px solid #e5e7eb !important;
+      border-radius: 6px !important;
+      box-shadow: none !important;
+      width: auto !important;
+      flex: 0 0 auto !important;
+      padding: 8px 16px !important;
+      font-weight: 500 !important;
+    }
+    .btn-secondary:hover:not(:disabled), .btn-success:hover:not(:disabled), .btn-warning:hover:not(:disabled),
+    #batch-select-btn:hover:not(:disabled), #copy-prompt-btn:hover:not(:disabled), #chat-clear-btn:hover:not(:disabled) {
+      background: #f9fafb !important;
+      color: #111827 !important;
+      border-color: #e5e7eb !important;
+      box-shadow: none !important;
+      text-decoration: none !important;
+    }
+    /* 文本型辅助操作（清空对话 / 刷新列表 / 批量导入 / 导出 / 清理排版等）统一为次操作按钮 */
+    .btn-link {
+      background: #ffffff !important;
+      color: #4b5563 !important;
+      border: 1px solid #e5e7eb !important;
+      border-radius: 6px !important;
+      box-shadow: none !important;
+      width: auto !important;
+      flex: 0 0 auto !important;
+      padding: 8px 14px !important;
+      font-size: 13px !important;
+      font-weight: 500 !important;
+      text-decoration: none !important;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-link:hover { background: #f9fafb !important; color: #111827 !important; text-decoration: none !important; }
+    /* AI 智能提取：浅蓝底 + 深蓝字 + 细蓝边（无阴影） */
+    #ctx-extract-btn {
+      background: #eff6ff !important;
+      color: #3b5bdb !important;
+      border: 1px solid #c7d2fe !important;
+      border-radius: 6px !important;
+      box-shadow: none !important;
+      width: auto !important;
+      flex: 0 0 auto !important;
+      padding: 7px 14px !important;
+      font-size: 13px !important;
+    }
+    #ctx-extract-btn:hover:not(:disabled) {
+      background: #dbeafe !important;
+      color: #3b5bdb !important;
+      border-color: #a5b4fc !important;
+      box-shadow: none !important;
+    }
+    /* ---------- 三、布局与对齐：按钮区 Flex 右对齐（防全宽塌陷） ---------- */
+    .editor-actions {
+      display: flex !important;
+      justify-content: flex-end !important;
+      align-items: center !important;
+      gap: 12px !important;
+    }
+    .editor-actions .btn { width: auto !important; }
+    .modal-footer { display: flex !important; justify-content: flex-end !important; gap: 12px !important; }
+    .batch-toolbar { display: flex !important; justify-content: flex-end !important; align-items: center !important; gap: 12px !important; }
+    .batch-toolbar .batch-file-name { margin-right: auto !important; }
+    .chat-input-row { display: flex !important; align-items: flex-end !important; justify-content: flex-end !important; gap: 10px !important; }
+    .chat-input-row .chat-input { flex: 1 1 auto !important; min-width: 0; }
+    .chat-input-row .btn-primary { flex: 0 0 auto !important; }
+    /* ---------- 四、左侧选中态与 Tag 防丑 ---------- */
+    .menu-child.active {
+      background: #eef2ff !important;
+      color: #4d6bfe !important;
+      font-weight: 600 !important;
+      box-shadow: none !important;
+    }
+    .menu-child.active:hover { background: #eef2ff !important; color: #4d6bfe !important; }
+    .menu-child:hover:not(.active) { background: #f3f4f6 !important; color: #374151 !important; }
+    .tag-chip {
+      background: #eff6ff !important;
+      color: #4d6bfe !important;
+      border: 1px solid #c7d2fe !important;
+      border-radius: 4px !important;
+      max-width: 150px !important;
+      min-width: 0 !important;
+      padding: 2px 8px !important;
+      overflow: hidden;
+    }
+    .tag-chip-label {
+      max-width: 100% !important;
+      min-width: 0 !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      white-space: nowrap !important;
+      display: block;
+      flex: 1 1 auto;
+    }
+    .tag-chip-del { flex: 0 0 16px !important; width: 16px !important; height: 16px !important; color: #4d6bfe !important; }
+    .tag-chip-del:hover { background: #4d6bfe !important; color: #ffffff !important; }
+    /* Token 进度条：0-80% 蓝 / >80%-100% 橙 / 满 100% 及超限 红 */
+    .token-progress-fill { background: #4d6bfe !important; transition: width 0.2s ease, background-color 0.2s ease !important; }
+    .token-progress-fill.warn { background: #f59e0b !important; }
+    .token-progress-fill.warn[style*="width: 100%"] { background: #ef4444 !important; }
+    .token-progress-fill.danger { background: #ef4444 !important; }
+    .token-progress-track { background: #eef2ff !important; }
+    /* ---------- 五、去丑补丁：焦点柔光 / 空数据居中提示 ---------- */
+    button:focus, button:active { outline: none !important; }
+    button:focus-visible:not(.btn-primary) { outline: none !important; box-shadow: 0 0 0 3px rgba(77, 107, 254, 0.16) !important; }
+    input:focus, textarea:focus, select:focus {
+      outline: none !important;
+      border-color: #4d6bfe !important;
+      box-shadow: 0 0 0 3px rgba(77, 107, 254, 0.15) !important;
+    }
+    #snapshot-tbody td { text-align: center !important; color: #9ca3af !important; padding: 26px 12px !important; font-size: 13px !important; }
+    .kb-empty, .chat-empty, .model-empty, #empty-state { text-align: center !important; color: #9ca3af !important; }
+    .card-header { gap: 12px; }
   </style>
 </head>
 <body>

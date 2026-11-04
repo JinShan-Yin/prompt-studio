@@ -76,3 +76,13 @@
 - 原生清理：`*:focus{outline:none!important}`、输入框 focus 蓝色边框 `#4d6bfe` + 柔光 `0 0 0 3px rgba(77,107,254,.15)`、滚动条 6px 透明轨道 `#cbd5e1`/悬浮 `#94a3b8`。
 - 层级与交互：子级项目 `border-left:1px solid #e5e7eb` + margin 22px 引导线；z-index 下拉 9990 / 弹窗 9999 / Toast 10000；图标按钮 Flex 居中 + 0.2s 过渡。
 - 真机断言（`dsh-ego-browser`）：① 50 字超长项目名 → 侧边栏未变形、`text-overflow:ellipsis`、clientWidth 170 < scrollWidth 799；② 输入框聚焦 → outline:none、边框 rgb(77,107,254)、box-shadow 柔光；③ 树最底部 “...” 菜单 → 完整显示于视口内（left 81 / width 150）、elementFromPoint 命中菜单项、z-index 9990 > 卡片；④ 子级引导线 1px #e5e7eb；⑤ 全程 0 JS 报错。截图：`s5-01-sidebar-overflow-focus.png`、`s5-02-dropdown-over-card.png`、`s5-03-final-minimal-blue.png`。
+
+## 8. 附加交付：极简商业级 UI 终极精修（用户追加需求 · 纯 CSS）
+
+- **主操作按钮**：`.btn-primary` 统一 `#4d6bfe` 纯白文字、`width:auto` + `padding:10px 24px` + 圆角 8px；hover `#3b5bdb` + `0 4px 12px rgba(77,107,254,.2)`；active `scale(.98)`。实测「组装并生成快照」宽 148px（占容器 9.5%，不再全宽），Flex 容器 `justify-content:flex-end; gap:12px` 右对齐。
+- **次要按钮去色**：`.btn-secondary/.btn-success/.btn-warning/.btn-link` 统一白底 `#e5e7eb` 细灰边 + `#4b5563` 文字 + 6px 圆角，hover `#f9fafb`；全站 337 个按钮扫描 0 个绿/橙/紫残留。AI 智能提取为 `#eff6ff` 底 + `#3b5bdb` 字 + `#c7d2fe` 边。
+- **左侧选中态**：`#eef2ff` 底 + `#4d6bfe` 字 + `font-weight:600`，无阴影无边线指示；非选中 hover `#f3f4f6`，两者不混淆。
+- **Tag 防丑**：`#eff6ff` 底 + `#4d6bfe` 字 + 4px 圆角，`max-width:150px` + 省略号；实测 30 字 Tag 宽 150px、label clientWidth 110 < scrollWidth 360、× 固定 16×16、页面无横向溢出。
+- **Token 进度条**：0-80% 蓝 `#4d6bfe` / 87.5% 橙 `#f59e0b` / 100% 红 `#ef4444` / 超限红 + 提示，实测四档均通过。
+- **去丑补丁**：button/input/textarea focus 无黑框，统蓝边 + `rgba(77,107,254,.15)` 光晕；空状态（快照/kb/chat/model）居中浅灰 `#9ca3af`。
+- 真机截图：`s6-01-primary-secondary-buttons.png`、`s6-02-long-tag-ellipsis.png`、`s6-03-final-refined-ui.png`；全程 0 JS Error。
