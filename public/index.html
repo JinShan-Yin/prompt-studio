@@ -418,6 +418,64 @@
     .insert-var-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
     /* 变量高亮 span 的中文 title 提示（仅悬浮提示，不改变镜像文本） */
     .editor-mirror span[title] { cursor: help; }
+
+    /* ==================== V3.0 阶段四：功能样式 ==================== */
+    /* 2) 左侧树搜索（深色侧边栏适配） */
+    .tree-search-wrap { padding: 0 12px 10px; }
+    .tree-search-input { width: 100%; padding: 7px 10px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.06); color: var(--sidebar-text-strong); font-size: 13px; font-family: inherit; outline: none; transition: var(--transition); }
+    .tree-search-input::placeholder { color: rgba(199, 201, 228, 0.75); }
+    .tree-search-input:hover { border-color: rgba(255, 255, 255, 0.32); }
+    .tree-search-input:focus { border-color: #818cf8; background: rgba(255, 255, 255, 0.1); box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.22); }
+    .tree-empty { padding: 14px 16px; font-size: 13px; color: var(--sidebar-text); text-align: center; }
+
+    /* 5) Token 红线进度条（4px，上限 4000） */
+    .token-progress-track { height: 4px; width: 100%; background: #e5e7eb; border-radius: 999px; overflow: hidden; margin-bottom: 6px; }
+    .token-progress-fill { height: 100%; width: 0; border-radius: 999px; background: var(--success); transition: width 0.2s ease, background-color 0.2s ease; }
+    .token-progress-fill.warn { background: var(--warning-strong); }
+    .token-progress-fill.danger { background: var(--danger); }
+    .token-progress-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+    .token-progress-meta .limit-warning { color: var(--danger); font-weight: 600; }
+
+    /* 3) AI 生成刁钻测试题 */
+    .gen-question-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .gen-question-status { font-size: 12px; color: var(--text-muted); }
+    .gen-questions-result { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+    .gen-q-card { border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: var(--radius-md); background: var(--bg-soft); padding: 10px 12px; font-size: 13px; line-height: 1.7; }
+    .gen-q-row { color: var(--text-main); }
+    .gen-q-row .gen-q-k { color: var(--text-muted); margin-right: 6px; }
+    .gen-q-row.answer { color: var(--text-secondary); margin-top: 4px; }
+    .gen-q-row.reply { color: var(--text-secondary); margin-top: 4px; font-size: 12px; }
+    .gen-q-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+
+    /* 1) 知识库编辑弹窗 */
+    .kb-edit-box { width: 640px; max-width: calc(100vw - 32px); }
+    .kb-edit-body { display: flex; flex-direction: column; gap: 12px; }
+    .kb-edit-body .form-textarea { min-height: 76px; }
+
+    /* 6) 快照 Diff 全屏对比（固定覆盖层，纯原生） */
+    .diff-mask { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.62); backdrop-filter: blur(2px); z-index: 10100; display: none; align-items: center; justify-content: center; }
+    .diff-panel { width: 94vw; max-width: 1500px; height: 86vh; background: #fff; border-radius: var(--radius-card); box-shadow: var(--shadow-modal); display: flex; flex-direction: column; overflow: hidden; }
+    .diff-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--bg-card); flex-shrink: 0; }
+    .diff-title { font-size: 14px; font-weight: 600; color: var(--text-main); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .diff-stats { font-size: 12px; font-family: var(--font-mono); }
+    .diff-added-stat { color: var(--success); }
+    .diff-removed-stat { color: var(--danger); }
+    .diff-header-actions { display: flex; align-items: center; gap: 12px; }
+    .diff-legend { font-size: 12px; color: var(--text-secondary); }
+    .diff-legend-red { color: var(--danger); }
+    .diff-legend-green { color: var(--success); }
+    .diff-columns-head { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border); background: var(--bg-soft); font-size: 12px; font-weight: 600; color: var(--text-secondary); flex-shrink: 0; }
+    .diff-columns-head > span { padding: 8px 12px; }
+    .diff-columns-head > span:first-child { border-right: 1px solid var(--border); }
+    .diff-body { flex: 1; overflow: auto; font-family: var(--font-mono); font-size: 12px; line-height: 1.7; }
+    .diff-row { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #f1f5f9; }
+    .diff-cell { padding: 1px 12px; white-space: pre-wrap; word-break: break-word; min-height: 22px; color: var(--text-main); }
+    .diff-cell.left { border-right: 1px solid var(--border); }
+    .diff-cell.same { background: #fff; }
+    .diff-cell.removed { background: #fef2f2; color: #b91c1c; }
+    .diff-cell.added { background: #ecfdf5; color: #15803d; }
+    .diff-cell.empty { background: #f8fafc; }
+    .diff-loading { padding: 30px; text-align: center; color: var(--text-muted); }
   </style>
 </head>
 <body>
@@ -433,6 +491,9 @@
         <svg width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
         开启新项目
       </button>
+      <div class="tree-search-wrap">
+        <input id="tree-search" class="tree-search-input" type="text" placeholder="🔍 搜索项目/场景" autocomplete="off" oninput="renderTree()" />
+      </div>
       <div class="tree-container" id="tree-container"></div>
     </div>
 
@@ -453,7 +514,12 @@
         
         <!-- 卡片1：提示词编辑 -->
         <div class="card">
-          <div class="card-header">📝 提示词编辑与快照</div>
+          <div class="card-header">
+            <span>📝 提示词编辑与快照</span>
+            <div class="card-header-actions">
+              <button class="btn-link" id="clean-format-btn" type="button" onclick="cleanupFormatting()">🧹 清理排版</button>
+            </div>
+          </div>
           <div class="card-body">
             <div class="form-group">
               <div class="label-row">
@@ -487,6 +553,13 @@
                 <div class="editor-mirror" id="mirror-L3" aria-hidden="true"></div>
                 <textarea id="val-L3" class="form-textarea editor-input" rows="3" spellcheck="false"></textarea>
               </div>
+            </div>
+            <div class="token-progress-track" id="token-progress-track" title="Token 上限 4000">
+              <div class="token-progress-fill" id="token-progress-bar"></div>
+            </div>
+            <div class="token-progress-meta">
+              <span id="token-progress-label">Token 占用 0%</span>
+              <span class="limit-warning" id="token-limit-warning" style="display: none;">⚠️ 超出 4000 Token 上限</span>
             </div>
             <div class="editor-stats" id="editor-stats">
               <span>总字符数：<span class="stat-strong" id="stats-chars">0</span></span>
@@ -571,6 +644,15 @@
             <button class="btn-link" id="chat-clear-btn" onclick="clearChat()">清空对话</button>
           </div>
           <div class="card-body">
+            <div class="gen-question-toolbar">
+              <button class="btn btn-secondary" id="gen-questions-btn" type="button" onclick="generateAdversarialQuestions()">✨ AI 生成刁钻测试题</button>
+              <span class="gen-question-status" id="gen-questions-status"></span>
+            </div>
+            <div class="gen-q-actions" id="gen-questions-actions" style="display: none;">
+              <button class="btn btn-primary" id="gen-fill-batch-btn" type="button" onclick="fillBatchCasesFromQuestions()">📥 填入批量回归</button>
+              <span class="gen-question-status" id="gen-questions-hint"></span>
+            </div>
+            <div class="gen-questions-result" id="gen-questions-result"></div>
             <div class="chat-hint">使用当前 L0 / L1 / L3 与语境配置组装 System Prompt，每次发送都会请求 DeepSeek 生成回复。Enter 发送，Shift+Enter 换行（中文输入法组合态下回车不会误发送）。</div>
             <div id="chat-messages" class="chat-messages">
               <div class="chat-empty">暂无对话，输入消息开始多轮测试</div>
@@ -731,6 +813,55 @@
     </div>
   </div>
 
+  <!-- V3.0 阶段四：知识库条目在线编辑弹窗 -->
+  <div id="kb-edit-modal" class="modal-mask">
+    <div class="modal-box kb-edit-box">
+      <div class="modal-header">
+        <span>✏️ 编辑知识条目</span>
+        <button type="button" class="model-close-btn" onclick="closeKbEditModal()" title="关闭" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body kb-edit-body">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="kb-edit-question">问题（Q）</label>
+          <textarea id="kb-edit-question" class="form-textarea" rows="3" placeholder="请输入问题..."></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="kb-edit-answer">答案（A）</label>
+          <textarea id="kb-edit-answer" class="form-textarea" rows="4" placeholder="请输入答案..."></textarea>
+        </div>
+        <div id="kb-edit-error" class="model-test-result" style="min-height: 0;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-link" style="color: #606266;" type="button" onclick="closeKbEditModal()">取消</button>
+        <button class="btn btn-primary" id="kb-edit-save-btn" type="button" onclick="saveKbEdit()">💾 保存修改</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- V3.0 阶段四：快照 Diff 全屏对比（纯原生行级 LCS，左旧右新） -->
+  <div id="diff-modal" class="diff-mask">
+    <div class="diff-panel">
+      <div class="diff-header">
+        <div class="diff-title">
+          <span>📊 快照对比</span>
+          <span id="diff-snapshot-id" style="color: var(--primary); font-family: var(--font-mono);"></span>
+          <span class="diff-stats" id="diff-stats"><span class="diff-added-stat" id="diff-added">+0</span> / <span class="diff-removed-stat" id="diff-removed">-0</span></span>
+        </div>
+        <div class="diff-header-actions">
+          <span class="diff-legend"><span class="diff-legend-red">■ 旧快照多出/不同行</span>　<span class="diff-legend-green">■ 当前编辑器新增/不同行</span></span>
+          <button type="button" class="model-close-btn" onclick="closeDiffModal()" title="关闭" aria-label="关闭">×</button>
+        </div>
+      </div>
+      <div class="diff-columns-head">
+        <span>左侧：旧快照（final_prompt）</span>
+        <span>右侧：当前编辑器（实时组装）</span>
+      </div>
+      <div class="diff-body" id="diff-body">
+        <div class="diff-loading">点击快照行「对比当前」后在此展示行级差异…</div>
+      </div>
+    </div>
+  </div>
+
   <script>
     let companies = [];
     let activeProjectId = '';
@@ -772,9 +903,45 @@
       } catch (e) { console.error(e); }
     }
 
+    /** 左侧树实时搜索：读取 #tree-search 关键字（小写 trim） */
+    function getTreeSearchKeyword() {
+      const el = document.getElementById('tree-search');
+      return (el ? el.value : '').trim().toLowerCase();
+    }
+
     function renderTree() {
       const container = document.getElementById('tree-container');
+      if (!container) return;
+      const keyword = getTreeSearchKeyword();
       let html = '';
+
+      // 搜索模式：按公司名/项目名模糊过滤；命中项目的公司自动展开；不渲染置顶区避免重复
+      if (keyword) {
+        let hitCount = 0;
+        companies.forEach(c => {
+          const companyHit = String(c.name || '').toLowerCase().includes(keyword);
+          const matchedChildren = (c.children || []).filter(p => String(p.name || '').toLowerCase().includes(keyword));
+          if (!companyHit && matchedChildren.length === 0) return;
+          hitCount++;
+          const children = companyHit ? (c.children || []) : matchedChildren;
+          html += `
+            <div class="menu-parent" onclick="toggleCompany('${c.id}')">
+              <div style="display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden;">
+                <span style="font-size: 12px; color: #909399; flex-shrink:0;">▼</span>
+                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
+              </div>
+              <div class="more-btn" onclick="showMenu(event, '${c.id}', 'company')">
+                 <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+              </div>
+            </div>
+            <div style="display: block;">
+              ${children.map(p => createTreeItemHTML(p, 'project', false)).join('')}
+            </div>
+          `;
+        });
+        container.innerHTML = hitCount === 0 ? '<div class="tree-empty">无匹配项目</div>' : html;
+        return;
+      }
 
       // 渲染置顶区
       let pinnedHtml = '';
@@ -966,6 +1133,7 @@
             <div class="kb-q">Q: ${escapeHtml(item.question)}</div>
             <div class="kb-a">A: ${escapeHtml(item.answer)}</div>
           </div>
+          <button class="btn btn-link" style="margin-left:10px;" onclick='editKb(${escapeHtml(JSON.stringify(String(item.id)))})'>编辑</button>
           <button class="btn btn-link" style="color: var(--danger); margin-left:10px;" onclick='deleteKb(${escapeHtml(JSON.stringify(String(item.id)))})'>删除</button>
         </div>`).join('');
     }
@@ -1155,6 +1323,84 @@
         } catch (e) { showToast(e.message); }
       };
     }
+
+    // ==================== V3.0 阶段四：知识库条目在线编辑 ====================
+    let editingKbId = null;
+    let kbEditSaving = false;
+
+    function setKbEditError(text) {
+      const el = document.getElementById('kb-edit-error');
+      if (!el) return;
+      el.className = 'model-test-result' + (text ? ' err' : '');
+      el.innerText = text || '';
+    }
+
+    /** 打开编辑弹窗：从 currentKbData 预填 Q/A（不泄露其它字段） */
+    function editKb(id) {
+      const item = (Array.isArray(currentKbData) ? currentKbData : []).find((row) => String(row.id) === String(id));
+      if (!item) { showToast('未找到知识条目'); return; }
+      editingKbId = id;
+      setKbEditError('');
+      const questionEl = document.getElementById('kb-edit-question');
+      const answerEl = document.getElementById('kb-edit-answer');
+      if (questionEl) questionEl.value = item.question || '';
+      if (answerEl) answerEl.value = item.answer || '';
+      const modal = document.getElementById('kb-edit-modal');
+      if (modal) modal.style.display = 'flex';
+      if (questionEl) {
+        if (typeof questionEl.focus === 'function') questionEl.focus();
+        if (typeof questionEl.setSelectionRange === 'function') questionEl.setSelectionRange(questionEl.value.length, questionEl.value.length);
+      }
+    }
+    window.editKb = editKb;
+
+    function closeKbEditModal() {
+      const modal = document.getElementById('kb-edit-modal');
+      if (modal) modal.style.display = 'none';
+      editingKbId = null;
+      kbEditSaving = false;
+      const saveBtn = document.getElementById('kb-edit-save-btn');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = '💾 保存修改'; }
+      setKbEditError('');
+    }
+    window.closeKbEditModal = closeKbEditModal;
+
+    /** 💾 保存知识条目修改：POST /api/kb/update {id, question, answer}；成功后刷新列表（搜索词保留） */
+    async function saveKbEdit() {
+      if (kbEditSaving) return;
+      if (!editingKbId) { setKbEditError('缺少条目 ID'); return; }
+      const questionEl = document.getElementById('kb-edit-question');
+      const answerEl = document.getElementById('kb-edit-answer');
+      const question = (questionEl ? questionEl.value : '').trim();
+      const answer = (answerEl ? answerEl.value : '').trim();
+      if (!question || !answer) { setKbEditError('问题和答案都不能为空'); return; }
+      kbEditSaving = true;
+      const saveBtn = document.getElementById('kb-edit-save-btn');
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = '保存中...'; }
+      try {
+        const d = await safeFetchJson('/api/kb/update', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: editingKbId, question, answer })
+        });
+        if (d && d.success) {
+          showToast(d.message || '更新成功');
+          closeKbEditModal();
+          await loadKbList(); // loadKbList 内部 renderKbList 读取当前搜索框值，关键字自然保留
+        } else {
+          const msg = (d && (d.error || d.message)) || '更新失败';
+          setKbEditError(msg);
+          showToast(msg);
+        }
+      } catch (e) {
+        const msg = (e && e.message) || '更新失败';
+        setKbEditError(msg);
+        showToast(msg);
+      } finally {
+        kbEditSaving = false;
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = '💾 保存修改'; }
+      }
+    }
+    window.saveKbEdit = saveKbEdit;
 
     async function parseKb() {
       const text = document.getElementById('kb-text').value;
@@ -1561,6 +1807,159 @@
     }
     window.runBatchRegression = runBatchRegression;
 
+    // ==================== V3.0 阶段四：AI 生成「刁钻测试题」（红蓝对抗出题机） ====================
+    let generatedQuestions = [];
+    let generatingQuestions = false;
+
+    /** 稳健解析题目数组：已知字段 → 正则 /\[[\s\S]*\]/ 提取 JSON.parse → /\{[\s\S]*\}/ 兜底；失败返回 null（绝不白屏） */
+    function parseGeneratedQuestionsPayload(payload) {
+      const pickArray = (obj) => {
+        if (!obj || typeof obj !== 'object') return null;
+        if (Array.isArray(obj)) return obj;
+        if (Array.isArray(obj.questions)) return obj.questions;
+        if (Array.isArray(obj.data)) return obj.data;
+        if (obj.data && Array.isArray(obj.data.questions)) return obj.data.questions;
+        return null;
+      };
+      const direct = pickArray(payload);
+      if (direct) return direct;
+      const text = typeof payload === 'string' ? payload : JSON.stringify(payload == null ? '' : payload);
+      const arrayMatch = String(text).match(/\[[\s\S]*\]/);
+      if (arrayMatch) {
+        try {
+          const arr = JSON.parse(arrayMatch[0]);
+          if (Array.isArray(arr)) return arr;
+        } catch (e) { /* 继续对象兜底 */ }
+      }
+      const objectMatch = String(text).match(/\{[\s\S]*\}/);
+      if (objectMatch) {
+        try {
+          const obj = JSON.parse(objectMatch[0]);
+          const fromObj = pickArray(obj);
+          if (fromObj) return fromObj;
+        } catch (e) { /* 解析失败，返回 null */ }
+      }
+      return null;
+    }
+    window.parseGeneratedQuestionsPayload = parseGeneratedQuestionsPayload;
+
+    /** 归一化单题：兼容 user_query/question/query + standard_answer/answer/expected + bot_reply/reply */
+    function normalizeGeneratedQuestion(item) {
+      if (!item || typeof item !== 'object') return null;
+      const userQuery = String(item.user_query || item.question || item.query || '').trim();
+      const standardAnswer = String(item.standard_answer || item.answer || item.expected || '').trim();
+      if (!userQuery || !standardAnswer) return null;
+      return {
+        user_query: userQuery,
+        standard_answer: standardAnswer,
+        bot_reply: String(item.bot_reply || item.reply || '').trim(),
+      };
+    }
+
+    /** 渲染题目卡片列表（DOM 构建 + innerHTML 转义，杜绝注入/白屏） */
+    function renderGeneratedQuestions() {
+      const container = document.getElementById('gen-questions-result');
+      const actions = document.getElementById('gen-questions-actions');
+      const hint = document.getElementById('gen-questions-hint');
+      if (!container) return;
+      container.innerHTML = '';
+      const questions = Array.isArray(generatedQuestions) ? generatedQuestions : [];
+      if (actions) actions.style.display = questions.length > 0 ? 'flex' : 'none';
+      if (hint) hint.innerText = questions.length > 0 ? `已生成 ${questions.length} 道刁钻测试题，可一键填入批量回归` : '';
+      if (questions.length === 0) return;
+      questions.forEach((q, index) => {
+        const card = document.createElement('div');
+        card.className = 'gen-q-card';
+        const qRow = document.createElement('div');
+        qRow.className = 'gen-q-row';
+        qRow.innerHTML = `<span class="gen-q-k">Q${index + 1}：</span>${escapeHtml(q.user_query)}`;
+        const aRow = document.createElement('div');
+        aRow.className = 'gen-q-row answer';
+        aRow.innerHTML = `<span class="gen-q-k">标准答案：</span>${escapeHtml(q.standard_answer)}`;
+        card.appendChild(qRow);
+        card.appendChild(aRow);
+        if (q.bot_reply) {
+          const rRow = document.createElement('div');
+          rRow.className = 'gen-q-row reply';
+          rRow.innerHTML = `<span class="gen-q-k">参考回复：</span>${escapeHtml(q.bot_reply)}`;
+          card.appendChild(rRow);
+        }
+        container.appendChild(card);
+      });
+    }
+    window.renderGeneratedQuestions = renderGeneratedQuestions;
+
+    /** ✨ AI 生成刁钻测试题：POST /api/eval/generate_questions {project_id, count:5}，loading/禁用 */
+    async function generateAdversarialQuestions() {
+      if (generatingQuestions) return;
+      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
+      generatingQuestions = true;
+      const btn = document.getElementById('gen-questions-btn');
+      const statusEl = document.getElementById('gen-questions-status');
+      if (btn) { btn.disabled = true; btn.innerText = '生成中...（约 10~30s）'; }
+      if (statusEl) statusEl.innerText = '正在让 AI 构造刁钻问题…';
+      try {
+        const d = await safeFetchJson('/api/eval/generate_questions', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: activeProjectId, count: 5 })
+        });
+        if (!d || !d.success) {
+          const msg = (d && (d.error || d.message)) || 'AI 出题失败';
+          generatedQuestions = [];
+          renderGeneratedQuestions();
+          if (statusEl) statusEl.innerText = msg;
+          showToast(msg);
+          return;
+        }
+        const raw = d.data || d.questions || d;
+        const parsed = parseGeneratedQuestionsPayload(raw);
+        const normalized = Array.isArray(parsed) ? parsed.map(normalizeGeneratedQuestion).filter(Boolean) : [];
+        if (normalized.length === 0) {
+          generatedQuestions = [];
+          renderGeneratedQuestions();
+          if (statusEl) statusEl.innerText = 'AI 返回格式无法解析';
+          showToast('AI 返回格式无法解析为测试题（已安全兜底，未白屏）');
+          return;
+        }
+        generatedQuestions = normalized;
+        renderGeneratedQuestions();
+        if (statusEl) statusEl.innerText = `已生成 ${normalized.length} 道刁钻测试题`;
+        showToast(`已生成 ${normalized.length} 道刁钻测试题`);
+      } catch (e) {
+        generatedQuestions = [];
+        renderGeneratedQuestions();
+        const msg = (e && e.message) || 'AI 出题失败';
+        if (statusEl) statusEl.innerText = msg;
+        showToast(msg);
+      } finally {
+        generatingQuestions = false;
+        if (btn) { btn.disabled = false; btn.innerText = '✨ AI 生成刁钻测试题'; }
+      }
+    }
+    window.generateAdversarialQuestions = generateAdversarialQuestions;
+
+    /** 📥 把 AI 生成题目转换为 batchCases 并填入批量回归（可直接点开始回归测试） */
+    function fillBatchCasesFromQuestions() {
+      const questions = Array.isArray(generatedQuestions) ? generatedQuestions : [];
+      if (questions.length === 0) { showToast('请先生成测试题'); return; }
+      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
+      const cases = questions.map((q, index) => ({
+        no: index + 1,
+        user_query: q.user_query,
+        standard_answer: q.standard_answer,
+        ...(q.bot_reply ? { bot_reply: q.bot_reply } : {}),
+      }));
+      resetBatchState();
+      batchCases = cases;
+      const fileNameEl = document.getElementById('batch-file-name');
+      if (fileNameEl) fileNameEl.innerText = `AI 生成 · ${cases.length} 条用例`;
+      const runBtn = document.getElementById('batch-run-btn');
+      if (runBtn) runBtn.disabled = false;
+      showToast(`已填入 ${cases.length} 条 AI 生成用例到批量回归`);
+    }
+    window.fillBatchCasesFromQuestions = fillBatchCasesFromQuestions;
+
+
     // 4. 历史快照
     async function loadSnapshots() {
       if (!activeProjectId) return;
@@ -1585,6 +1984,7 @@
                 <td style="text-align: right; white-space: nowrap;">
                   <button class="btn btn-link" ${disabled} onclick="downloadSnapshot('${snap.id}')">下载 TXT</button>
                   <button class="btn btn-link" style="margin-left: 12px;" onclick="rollbackSnapshot('${snap.id}')">回滚</button>
+                  <button class="btn btn-link" style="margin-left: 12px;" onclick="openSnapshotDiff('${snap.id}')">对比当前</button>
                 </td>
               </tr>
             `;
@@ -1666,6 +2066,123 @@
       }
     }
     window.rollbackSnapshot = rollbackSnapshot;
+
+    // ==================== V3.0 阶段四：历史快照「对比当前」行级 Diff（LCS，禁止字符级） ====================
+    let diffSeq = 0;
+
+    function closeDiffModal() {
+      const modal = document.getElementById('diff-modal');
+      if (modal) modal.style.display = 'none';
+      diffSeq++; // 使在途 diff 请求失效
+    }
+    window.closeDiffModal = closeDiffModal;
+
+    /** 行级最长公共子序列（LCS）动态规划：返回 [{type:'same'|'removed'|'added', text}]；超大文本退化为全删全增防御 */
+    function computeLineDiff(oldLines, newLines) {
+      const a = Array.isArray(oldLines) ? oldLines : [];
+      const b = Array.isArray(newLines) ? newLines : [];
+      const n = a.length;
+      const m = b.length;
+      if (n * m > 4000000) {
+        const rows = [];
+        a.forEach((line) => rows.push({ type: 'removed', text: line }));
+        b.forEach((line) => rows.push({ type: 'added', text: line }));
+        return rows;
+      }
+      const dp = new Array(n + 1);
+      for (let i = 0; i <= n; i++) dp[i] = new Uint32Array(m + 1);
+      for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+          dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+      }
+      const rows = [];
+      let i = 0;
+      let j = 0;
+      while (i < n && j < m) {
+        if (a[i] === b[j]) { rows.push({ type: 'same', text: a[i] }); i++; j++; }
+        else if (dp[i + 1][j] >= dp[i][j + 1]) { rows.push({ type: 'removed', text: a[i] }); i++; }
+        else { rows.push({ type: 'added', text: b[j] }); j++; }
+      }
+      while (i < n) { rows.push({ type: 'removed', text: a[i] }); i++; }
+      while (j < m) { rows.push({ type: 'added', text: b[j] }); j++; }
+      return rows;
+    }
+    window.computeLineDiff = computeLineDiff;
+
+    /** 双栏渲染 diff 行：相同行双侧普通；左侧多出/不同行红色；右侧新增/不同行绿色 */
+    function renderDiffRows(rows) {
+      const body = document.getElementById('diff-body');
+      if (!body) return;
+      body.innerHTML = rows.map((row) => {
+        const text = escapeHtml(row.text == null ? '' : row.text) || '&nbsp;';
+        if (row.type === 'removed') return `<div class="diff-row"><div class="diff-cell left removed">${text}</div><div class="diff-cell empty"></div></div>`;
+        if (row.type === 'added') return `<div class="diff-row"><div class="diff-cell left empty"></div><div class="diff-cell added">${text}</div></div>`;
+        return `<div class="diff-row"><div class="diff-cell left same">${text}</div><div class="diff-cell same">${text}</div></div>`;
+      }).join('');
+    }
+    window.renderDiffRows = renderDiffRows;
+
+    /** 当前编辑器文本：调用 /api/prompt/assemble（与生成快照同格式），失败抛出由调用方兜底 */
+    async function getCurrentAssembledPrompt() {
+      const d = await safeFetchJson('/api/prompt/assemble', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: activeProjectId,
+          layers: getCurrentLayers(),
+          context_data: getContextDataForSnapshot(),
+        })
+      });
+      if (d && d.success) return String(d.final_prompt || '');
+      throw new Error((d && (d.error || d.message)) || '当前内容组装失败');
+    }
+
+    /** 打开全屏 Diff：GET 旧快照 detail.final_prompt_content + 当前 assemble → 行级 LCS 对比 */
+    async function openSnapshotDiff(snapshotId) {
+      if (!snapshotId) { showToast('快照 ID 无效'); return; }
+      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
+      const projectIdAtOpen = activeProjectId;
+      const seq = ++diffSeq;
+      const modal = document.getElementById('diff-modal');
+      const body = document.getElementById('diff-body');
+      const stats = document.getElementById('diff-stats');
+      const idEl = document.getElementById('diff-snapshot-id');
+      if (idEl) idEl.innerText = snapshotId;
+      if (stats) stats.innerHTML = '<span class="diff-loading" style="padding: 0;">对比中…</span>';
+      if (body) body.innerHTML = '<div class="diff-loading">正在加载旧快照与当前编辑器内容…</div>';
+      if (modal) modal.style.display = 'flex';
+      try {
+        const [detail, currentPrompt] = await Promise.all([
+          safeFetchJson(`/api/snapshots/detail?id=${encodeURIComponent(snapshotId)}`),
+          getCurrentAssembledPrompt(),
+        ]);
+        if (seq !== diffSeq || activeProjectId !== projectIdAtOpen) return; // 已关闭/已切项目：丢弃在途结果
+        if (!detail || !detail.success || !detail.data) {
+          showToast((detail && (detail.error || detail.message)) || '旧快照加载失败');
+          if (body) body.innerHTML = '<div class="diff-loading">旧快照加载失败</div>';
+          return;
+        }
+        const snapshot = detail.data;
+        const oldText = String(snapshot.final_prompt_content || snapshot.final_prompt || '');
+        const newText = String(currentPrompt || '');
+        const oldLines = oldText.split('\n');
+        const newLines = newText.split('\n');
+        const rows = computeLineDiff(oldLines, newLines);
+        const added = rows.filter((row) => row.type === 'added').length;
+        const removed = rows.filter((row) => row.type === 'removed').length;
+        if (stats) {
+          stats.innerHTML = `<span class="diff-added-stat">+${added}</span> / <span class="diff-removed-stat">-${removed}</span> 行（旧 ${oldLines.length} 行 → 新 ${newLines.length} 行）`;
+        }
+        renderDiffRows(rows);
+      } catch (e) {
+        if (seq !== diffSeq || activeProjectId !== projectIdAtOpen) return;
+        const msg = (e && e.message) || 'Diff 对比失败';
+        showToast(msg);
+        if (body) body.innerHTML = `<div class="diff-loading">对比失败：${escapeHtml(msg)}</div>`;
+      }
+    }
+    window.openSnapshotDiff = openSnapshotDiff;
+
 
     // --- 左侧菜单交互 (保持不变) ---
     function showMenu(e, id, type) {
@@ -2237,12 +2754,29 @@
       if (modal) {
         modal.addEventListener('click', (e) => { if (e.target === modal) closeModelConfigModal(); });
       }
+      // Esc 关闭统一由 initGlobalEscHandler 处理（按层级只关最上层）
+    }
+
+    // ==================== V3.0 阶段四：Esc 关闭最上层弹层 ====================
+    /** 优先级：Diff 全屏 > KB 编辑 > 模型配置中心 > 全局确认弹窗 > 下拉菜单；每次 Esc 只关一层 */
+    function initGlobalEscHandler() {
       document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
-        const modalEl = document.getElementById('model-config-modal');
-        if (modalEl && getComputedStyle(modalEl).display !== 'none') closeModelConfigModal();
+        if (e.isComposing) return; // 中文输入法组合态不拦截
+        const isVisible = (el) => !!el && getComputedStyle(el).display !== 'none';
+        const layers = [
+          () => { if (isVisible(document.getElementById('diff-modal'))) { closeDiffModal(); return true; } return false; },
+          () => { if (isVisible(document.getElementById('kb-edit-modal'))) { closeKbEditModal(); return true; } return false; },
+          () => { if (isVisible(document.getElementById('model-config-modal'))) { closeModelConfigModal(); return true; } return false; },
+          () => { if (isVisible(document.getElementById('global-modal'))) { closeModal(); return true; } return false; },
+          () => { if (isVisible(document.getElementById('global-dropdown'))) { closeMenu(); return true; } return false; },
+        ];
+        for (const layer of layers) {
+          if (layer()) { e.preventDefault(); break; }
+        }
       });
     }
+    window.initGlobalEscHandler = initGlobalEscHandler;
 
     // ==================== 模块六：复制 NewLync Text / Zip 导出 / Ctrl+S ====================
     /** 剪贴板写入：优先 navigator.clipboard，失败降级 execCommand('copy')（纯原生实现） */
@@ -2374,9 +2908,73 @@
       const tokensEl = document.getElementById('stats-tokens');
       if (charsEl) charsEl.innerText = String(totalChars);
       if (tokensEl) tokensEl.innerText = String(totalTokens);
+      updateTokenProgress(totalTokens);
     }
     window.updateEditorStats = updateEditorStats;
     window.scheduleEditorStats = scheduleEditorStats;
+
+    // ==================== V3.0 阶段四：Token 红线进度条（上限 4000） ====================
+    const TOKEN_LIMIT = 4000;
+    /** 进度条：≤80% 绿、80%~100% 黄、>100% 红；超限显示红色提示（随 updateEditorStats 同步） */
+    function updateTokenProgress(totalTokens) {
+      const bar = document.getElementById('token-progress-bar');
+      if (!bar) return;
+      const label = document.getElementById('token-progress-label');
+      const warning = document.getElementById('token-limit-warning');
+      const ratio = totalTokens / TOKEN_LIMIT;
+      const pct = Math.max(0, Math.min(ratio * 100, 100));
+      bar.style.width = pct.toFixed(1) + '%';
+      bar.classList.remove('warn', 'danger');
+      if (ratio > 1) bar.classList.add('danger');
+      else if (ratio >= 0.8) bar.classList.add('warn');
+      if (label) label.innerText = `Token 占用 ${(ratio * 100).toFixed(0)}%（${totalTokens}/${TOKEN_LIMIT}）`;
+      if (warning) {
+        warning.style.display = ratio > 1 ? 'inline' : 'none';
+        if (ratio > 1) warning.innerText = `⚠️ 超出 4000 Token 上限（当前 ${totalTokens} Token）`;
+      }
+    }
+    window.updateTokenProgress = updateTokenProgress;
+    window.TOKEN_LIMIT = TOKEN_LIMIT;
+
+    // ==================== V3.0 阶段四：一键清理排版 ====================
+    /** 对 L0/L1/L3 执行：行首尾空白去除、连续空行折叠为 1、删除首尾空行、中文逗号「，」→ 英文逗号「,」 */
+    function cleanupFormatting() {
+      let removedChars = 0;
+      let changedBlocks = 0;
+      EDITOR_LAYERS.forEach(layer => {
+        const el = document.getElementById('val-' + layer);
+        if (!el) return;
+        const original = el.value || '';
+        if (!original) return;
+        const rawLines = original.split('\n').map((line) => line.replace(/^[\s\u3000]+|[\s\u3000]+$/g, '').replace(/，/g, ','));
+        const cleanedLines = [];
+        let lastBlank = false;
+        rawLines.forEach((line) => {
+          if (line === '') {
+            if (!lastBlank && cleanedLines.length > 0) cleanedLines.push(''); // 连续空行折叠为单个
+            lastBlank = true;
+          } else {
+            cleanedLines.push(line);
+            lastBlank = false;
+          }
+        });
+        while (cleanedLines.length > 0 && cleanedLines[cleanedLines.length - 1] === '') cleanedLines.pop(); // 删除末尾空行
+        const next = cleanedLines.join('\n');
+        if (next !== original) {
+          changedBlocks++;
+          removedChars += Math.max(0, original.length - next.length);
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+          setter.call(el, next);
+          el.dispatchEvent(new Event('input', { bubbles: true })); // 刷新镜像高亮/自动撑高/Token 统计
+        }
+      });
+      if (changedBlocks === 0) {
+        showToast('排版已是最clean状态，无需清理');
+        return;
+      }
+      showToast(`🧹 清理排版完成：${changedBlocks} 个编辑框，共减少 ${removedChars} 个字符`);
+    }
+    window.cleanupFormatting = cleanupFormatting;
 
     // ==================== 模块一：{{变量}} 橙色高亮（镜像 div + 透明 textarea） ====================
     // 绝不使用 contenteditable：保留原生 textarea（generateSnapshot 等依赖 .value），
@@ -2848,6 +3446,8 @@
     initShortcuts(); // 模块六：Ctrl/Cmd + S 快捷键
     initInsertVariableSelect(); // V3.0 阶段三：L0 插入变量下拉
     initModelConfigUI(); // V3.0 阶段二：模型配置中心
+    initGlobalEscHandler(); // V3.0 阶段四：Esc 关闭最上层弹层
+    updateTokenProgress(0); // V3.0 阶段四：Token 进度条初始态
 
     window.onload = fetchData;
   </script>

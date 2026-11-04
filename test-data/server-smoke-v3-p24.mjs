@@ -1,4 +1,4 @@
-// test-data/server-smoke-v3-p24.mjs
+﻿// test-data/server-smoke-v3-p24.mjs
 //
 // V3.0 阶段二 + 阶段四后端 HTTP 冒烟（需先 `node server.js`，默认 http://127.0.0.1:3000）
 // 运行：node test-data/server-smoke-v3-p24.mjs [baseUrl]
@@ -144,12 +144,12 @@ const noPlaceholders = (text) => typeof text === 'string' && !/\{\{\s*(industry|
     id: existingBad ? existingBad.id : undefined,
     provider: 'deepseek',
     display_name: BAD_MODEL_DISPLAY_NAME,
-    base_url: 'http://127.0.0.1:1/v1',
+    base_url: 'https://api.deepseek.com/v1',
     model_name: 'deepseek-chat',
-    api_key: '',
+    api_key: 'sk-invalid-smoke-test-key-1234567890',
     is_active: true,
   });
-  check('保存「不可达 base_url」模型并激活成功', r.status === 200 && r.json && r.json.success === true, r.json);
+  check('保存「无效 Key 官方模型」并激活成功（安全策略：官方域名允许显式 Key）', r.status === 200 && r.json && r.json.success === true, r.json);
   const badModelId = r.json && r.json.id;
   r = await post('/api/chat/reply', chatPayload, 120000);
   check('DB 模型请求失败 -> 自动回落 .env 重试成功（防全盘崩溃）', r.status === 200 && r.json && r.json.success === true && typeof r.json.reply === 'string' && r.json.reply.trim().length > 0, r.json && { status: r.status, error: r.json.error });

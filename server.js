@@ -60,6 +60,39 @@ const CHAT_CONTENT_MAX = 4000;
 const DEFAULT_CHAT_ROLE = '你是一个专业、礼貌、高效的智能语音客服助手。';
 const CHAT_OUTPUT_CONSTRAINTS = '\n\n【输出约束】请使用自然口语回答；最终回复必须整体用 <speak>...</speak> 包裹；禁止使用 Markdown、列表符号或标题。';
 
+// ============================================================
+// 安全：模型 Base URL 校验与 API Key 注入策略（防 SSRF / .env Key 外泄）
+// 1) 非本机地址必须 https；禁止内网/链路本地地址（SSRF）；
+// 2) .env 的真实 Key 只允许注入「官方 DeepSeek 端点」；
+//    自定义/第三方端点必须显式填写该模型的 API Key，绝不自动回退 .env Key，
+//    否则「任意 base_url + 自动回退 env Key」会把真实 Key 发给攻击者域名。
+// ============================================================
+const ENV_KEY_ALLOWED_HOSTS = new Set(['api.deepseek.com']);
+const KNOWN_LLM_HOSTS = new Set([
+  'api.deepseek.com', 'api.openai.com', 'dashscope.aliyuncs.com', 'open.bigmodel.cn', 'api.moonshot.cn',
+]);
+function parseModelBaseUrl(raw) {
+  try { return new URL(String(raw || '')); } catch { return null; }
+}
+function validateModelBaseUrl(raw) {
+  const u = parseModelBaseUrl(raw);
+  if (!u) return { ok: false, error: 'Base URL 不是合法 URL' };
+  if (!/^https?:$/.test(u.protocol)) return { ok: false, error: 'Base URL 必须为 http(s)' };
+  const host = u.hostname.toLowerCase();
+  const isLoopback = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  if (u.protocol === 'http:' && !isLoopback) return { ok: false, error: '非本机 Base URL 必须使用 https' };
+  const privateV4 = /^(0\.0\.0\.0|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|169\.254(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2})$/;
+  if (!isLoopback && privateV4.test(host)) return { ok: false, error: 'Base URL 不允许指向内网/链路本地地址' };
+  return { ok: true, host, isLoopback, isEnvKeyAllowed: ENV_KEY_ALLOWED_HOSTS.has(host) };
+}
+function resolveModelApiKey(baseUrl, explicitKey) {
+  const provided = typeof explicitKey === 'string' ? explicitKey.trim() : '';
+  if (provided) return provided;
+  const validation = validateModelBaseUrl(baseUrl);
+  if (validation.ok && validation.isEnvKeyAllowed) return process.env[KEY_NAME] || '';
+  return '';
+}
+
 // LLM 并发限流（与旧 gateway 一致：最多 5 并发）
 const llmLimit = pLimit(5);
 
@@ -479,13 +512,18 @@ async function chatCompletion(config, messages) {
     const activeModel = getActiveModelConfig();
     if (activeModel) {
       const modelName = activeModel.model_name || DEFAULT_LLM_CONFIG.model_name;
-      const dbConfig = {
-        base_url: activeModel.base_url || DEFAULT_LLM_CONFIG.base_url,
-        model_name: modelName,
-        api_key: (typeof activeModel.api_key === 'string' && activeModel.api_key.trim()) || process.env[KEY_NAME],
-        temperature: Number.isFinite(Number(activeModel.temperature)) ? Number(activeModel.temperature) : callerConfig.temperature,
-      };
+      const activeBaseUrl = activeModel.base_url || DEFAULT_LLM_CONFIG.base_url;
       try {
+        const security = validateModelBaseUrl(activeBaseUrl);
+        if (!security.ok) throw new Error('激活模型 Base URL 不安全：' + security.error);
+        const dbApiKey = resolveModelApiKey(activeBaseUrl, activeModel.api_key);
+        if (!dbApiKey) throw new Error('激活模型未配置 API Key（自定义/第三方端点不允许回退 .env Key）');
+        const dbConfig = {
+          base_url: activeBaseUrl,
+          model_name: modelName,
+          api_key: dbApiKey,
+          temperature: Number.isFinite(Number(activeModel.temperature)) ? Number(activeModel.temperature) : callerConfig.temperature,
+        };
         console.log(`[LLM] 路由: DB 激活模型 (${activeModel.display_name || activeModel.id} / ${modelName})`);
         return await requestChatCompletion(dbConfig, messages);
       } catch (dbError) {
@@ -503,16 +541,24 @@ async function chatCompletion(config, messages) {
   });
 }
 
-/** 用给定配置做一次最小连通性测试（/api/models/test 专用；20s 超时；错误信息已脱敏） */
+/** 用给定配置做一次最小连通性测试（/api/models/test 专用；20s 超时；错误信息已脱敏）
+ *  安全：Base URL 必须通过 SSRF 校验；.env 真实 Key 只允许发送给官方 DeepSeek 端点。 */
 async function testModelConnection({ base_url, model_name, api_key }) {
   const startedAt = Date.now();
   const effectiveModelName = model_name || DEFAULT_LLM_CONFIG.model_name;
+  const targetBaseUrl = base_url || DEFAULT_LLM_CONFIG.base_url;
+  const security = validateModelBaseUrl(targetBaseUrl);
+  if (!security.ok) return { success: false, message: security.error };
+  const effectiveApiKey = resolveModelApiKey(targetBaseUrl, api_key);
+  if (!effectiveApiKey) {
+    return { success: false, message: '该 Base URL 必须显式填写 API Key（自定义/第三方端点禁止回退 .env Key，防 Key 外泄）' };
+  }
   try {
     await requestChatCompletion(
       {
-        base_url: base_url || DEFAULT_LLM_CONFIG.base_url,
+        base_url: targetBaseUrl,
         model_name: effectiveModelName,
-        api_key: (typeof api_key === 'string' && api_key.trim()) || process.env[KEY_NAME],
+        api_key: effectiveApiKey,
         temperature: 0,
       },
       [
@@ -565,8 +611,27 @@ async function parseTxt(rawText) {
 const app = express();
 app.disable('x-powered-by');
 
-// CORS 全局（自动处理 OPTIONS 预检，等价原插件的 204+CORS 行为）
-app.use(cors());
+// CORS 白名单：仅允许本机来源（localhost/127.0.0.1/::1）与无 Origin 的本机工具调用。
+// 目的：阻断任意恶意网页跨站调用本机 API（尤其借自定义 base_url 窃取 .env 真实 Key）。
+const LOCAL_ORIGIN_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+function isLocalOrigin(origin) {
+  if (!origin) return true; // curl / 同源请求通常无 Origin
+  try {
+    const u = new URL(origin);
+    return LOCAL_ORIGIN_HOSTS.has(u.hostname.toLowerCase());
+  } catch { return false; }
+}
+app.use(cors({
+  origin(origin, cb) {
+    if (isLocalOrigin(origin)) return cb(null, true);
+    return cb(null, false);
+  },
+}));
+// 二次防线：带非本机 Origin 的 /api 请求直接 403（浏览器跨站攻击在预检/实际请求层均被拒绝）
+app.use('/api', (req, res, next) => {
+  if (isLocalOrigin(req.headers.origin)) return next();
+  return res.status(403).json({ success: false, error: '跨站请求被拒绝：仅允许本机同源访问' });
+});
 // JSON body 解析（10MB，覆盖长提示词/批量导入）
 app.use(express.json({ limit: '10mb' }));
 // 兜底 JSON 解析：兼容未带 application/json 头的 POST（旧插件是手写裸流解析）
@@ -1114,8 +1179,9 @@ route(['POST'], '/api/models/save', async (req, res) => {
   if (!provider || !baseUrl || !modelName) {
     return sendJson(res, 400, { success: false, error: 'provider / base_url / model_name 为必填项' });
   }
-  if (!/^https?:\/\//i.test(baseUrl)) {
-    return sendJson(res, 400, { success: false, error: 'base_url 必须以 http:// 或 https:// 开头' });
+  const urlSecurity = validateModelBaseUrl(baseUrl);
+  if (!urlSecurity.ok) {
+    return sendJson(res, 400, { success: false, error: 'base_url 不安全：' + urlSecurity.error });
   }
 
   const displayName = typeof body.display_name === 'string' && body.display_name.trim() ? body.display_name.trim() : provider;
@@ -1128,8 +1194,11 @@ route(['POST'], '/api/models/save', async (req, res) => {
 
   const existing = incomingId ? db.prepare('SELECT * FROM model_configs WHERE id = ?').get(incomingId) : null;
   const id = incomingId || 'model-' + crypto.randomUUID().split('-')[0];
-  // api_key 为空时保留原值（新建允许空 -> 运行时回落 .env Key）
+  // api_key 为空时保留原值；但**非官方 DeepSeek 端点禁止空 Key**（否则运行时不会回落 .env，配置也不可用）
   const apiKey = apiKeyInput || (existing && typeof existing.api_key === 'string' ? existing.api_key : '');
+  if (!apiKey && !urlSecurity.isEnvKeyAllowed) {
+    return sendJson(res, 400, { success: false, error: '自定义/第三方 Base URL 必须填写 API Key（不允许使用 .env 回退，防 Key 外泄）' });
+  }
 
   // 单活模型：激活当前模型前先把其它模型置 0
   if (wantActive) db.prepare('UPDATE model_configs SET is_active = 0').run();

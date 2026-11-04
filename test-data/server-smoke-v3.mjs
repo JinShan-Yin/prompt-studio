@@ -1,4 +1,4 @@
-// test-data/server-smoke-v3.mjs
+﻿// test-data/server-smoke-v3.mjs
 //
 // V3.0 阶段一 · server.js HTTP 冒烟（需先 `node server.js` 启动，默认 http://127.0.0.1:3000）
 // 运行：node test-data/server-smoke-v3.mjs [baseUrl]
@@ -98,7 +98,7 @@ function noPlaceholders(text) {
   r = await request('GET', '/api/models');
   check('/api/models 阶段二已可用（success + 数组）', r.status === 200 && r.json && r.json.success === true && Array.isArray(r.json.data), r.json && { status: r.status });
   r = await request('OPTIONS', '/api/projects', undefined);
-  check('OPTIONS 预检 -> 204 + Access-Control-Allow-Origin', (r.status === 204 || r.status === 200) && r.headers.get('access-control-allow-origin') === '*', { status: r.status, acao: r.headers.get('access-control-allow-origin') });
+  check('OPTIONS 预检 -> 204（安全白名单模式：无 Origin 时可不回 ACAO，本机 Origin 回显）', (r.status === 204 || r.status === 200), { status: r.status, acao: r.headers.get('access-control-allow-origin') });
 
   console.log('');
   console.log('[2] 公司 / 项目 / 语境 / 知识库 基础接口');
