@@ -1,4 +1,4 @@
-// test-data/server-selftest-sprint-v3.mjs
+﻿// test-data/server-selftest-sprint-v3.mjs
 //
 // V3.0 阶段一 · server.js 静态自检（无服务器，只读文件 + node --check）
 // 运行：node test-data/server-selftest-sprint-v3.mjs
@@ -86,7 +86,7 @@ test('监听 3000 端口，启动时打印 URL', () => {
 
 test('express.json({limit:\'10mb\'}) + cors() + express.static(public) + 访问日志', () => {
   assert(/express\.json\(\{\s*limit:\s*'10mb'\s*\}\)/.test(source), '缺少 express.json({limit:\'10mb\'})');
-  assert(/app\.use\(cors\(\)\)/.test(source), '缺少 cors()');
+  assert(/app\.use\(cors\(/.test(source), '缺少 cors 中间件');
   assert(/express\.static\(PUBLIC_DIR/.test(source), '缺少 express.static(public)');
   assert(/res\.on\('finish'/.test(source), '缺少 method/path/耗时访问日志');
 });

@@ -611,6 +611,14 @@ async function parseTxt(rawText) {
 const app = express();
 app.disable('x-powered-by');
 
+// 基础安全响应头（防点击劫持/ MIME 嗅探）
+app.use((req, res, next) => {
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+});
+
 // CORS 白名单：仅允许本机来源（localhost/127.0.0.1/::1）与无 Origin 的本机工具调用。
 // 目的：阻断任意恶意网页跨站调用本机 API（尤其借自定义 base_url 窃取 .env 真实 Key）。
 const LOCAL_ORIGIN_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
@@ -621,16 +629,30 @@ function isLocalOrigin(origin) {
     return LOCAL_ORIGIN_HOSTS.has(u.hostname.toLowerCase());
   } catch { return false; }
 }
+// Host 头校验（防 DNS rebinding：攻击者用同端口恶意域名解析到 127.0.0.1 后无 Origin 访问本机 API）
+function isLocalHostHeader(hostHeader) {
+  const raw = String(hostHeader || '').trim();
+  if (!raw) return false;
+  try {
+    const u = new URL('http://' + raw);
+    return LOCAL_ORIGIN_HOSTS.has(u.hostname.toLowerCase().replace(/^\[|\]$/g, ''));
+  } catch { return false; }
+}
 app.use(cors({
   origin(origin, cb) {
     if (isLocalOrigin(origin)) return cb(null, true);
     return cb(null, false);
   },
 }));
-// 二次防线：带非本机 Origin 的 /api 请求直接 403（浏览器跨站攻击在预检/实际请求层均被拒绝）
+// 双重防线：非本机 Origin 或伪造 Host 的 /api 请求一律 403
 app.use('/api', (req, res, next) => {
-  if (isLocalOrigin(req.headers.origin)) return next();
-  return res.status(403).json({ success: false, error: '跨站请求被拒绝：仅允许本机同源访问' });
+  if (!isLocalOrigin(req.headers.origin)) {
+    return res.status(403).json({ success: false, error: '跨站请求被拒绝：仅允许本机同源访问' });
+  }
+  if (!isLocalHostHeader(req.headers.host)) {
+    return res.status(403).json({ success: false, error: 'Host 不被允许：仅限本机访问（防 DNS rebinding）' });
+  }
+  return next();
 });
 // JSON body 解析（10MB，覆盖长提示词/批量导入）
 app.use(express.json({ limit: '10mb' }));
@@ -1242,9 +1264,10 @@ app.use('/api', (req, res) => {
   sendJson(res, 404, { success: false, error: '接口不存在', path: req.originalUrl.split('?')[0] });
 });
 
-// 非 /api 的 GET 回退到 SPA 首页 public/index.html
+// 非 /api 的 GET 回退到 SPA 首页（仅无扩展名路径；缺失静态资源返回 404，避免被 HTML 掩盖）
 app.use((req, res, next) => {
-  if (req.method === 'GET' && !req.path.startsWith('/api')) {
+  const hasExtension = /\.[a-zA-Z0-9]+$/.test(req.path);
+  if (req.method === 'GET' && !req.path.startsWith('/api') && !hasExtension) {
     return res.sendFile(INDEX_HTML, (err) => {
       if (err) next(err);
     });

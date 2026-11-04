@@ -431,10 +431,14 @@
     /* 5) Token 红线进度条（4px，上限 4000） */
     .token-progress-track { height: 4px; width: 100%; background: #e5e7eb; border-radius: 999px; overflow: hidden; margin-bottom: 6px; }
     .token-progress-fill { height: 100%; width: 0; border-radius: 999px; background: var(--success); transition: width 0.2s ease, background-color 0.2s ease; }
-    .token-progress-fill.warn { background: var(--warning-strong); }
+    .token-progress-fill.warn { background: #eab308; }
     .token-progress-fill.danger { background: var(--danger); }
     .token-progress-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
     .token-progress-meta .limit-warning { color: var(--danger); font-weight: 600; }
+
+    /* P2-A：镜像变量自定义中文 tooltip（镜像层 pointer-events:none，span 原生 title 不可 hover） */
+    .var-tooltip { position: fixed; z-index: 10250; display: none; padding: 4px 10px; background: rgba(31, 41, 55, 0.96); color: #fff; font-size: 12px; line-height: 1.5; border-radius: var(--radius-sm); box-shadow: var(--shadow-modal); pointer-events: none; white-space: nowrap; transform: translate(-50%, -100%); }
+    .var-tooltip::after { content: ''; position: absolute; left: 50%; bottom: -4px; width: 8px; height: 8px; margin-left: -4px; background: rgba(31, 41, 55, 0.96); transform: rotate(45deg); }
 
     /* 3) AI 生成刁钻测试题 */
     .gen-question-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -484,7 +488,7 @@
     <!-- 侧边栏 -->
     <div class="sidebar">
       <div class="logo-area">
-        <img src="/public/logo.png" onerror="this.style.display='none'; document.getElementById('fallback').style.display='flex';" />
+        <img src="/logo.png" onerror="this.style.display='none'; document.getElementById('fallback').style.display='flex';" />
         <div id="fallback" style="display:none; font-size: 18px; font-weight: bold; color: #303133;">Prompt Studio</div>
       </div>
       <button class="btn-new" onclick="openCreateModal('project')">
@@ -861,6 +865,9 @@
       </div>
     </div>
   </div>
+
+  <!-- P2-A：镜像变量中文自定义 tooltip（跟随鼠标命中 span 显示） -->
+  <div id="var-tooltip" class="var-tooltip" role="tooltip" aria-hidden="true"></div>
 
   <script>
     let companies = [];
@@ -2926,7 +2933,7 @@
       bar.style.width = pct.toFixed(1) + '%';
       bar.classList.remove('warn', 'danger');
       if (ratio > 1) bar.classList.add('danger');
-      else if (ratio >= 0.8) bar.classList.add('warn');
+      else if (ratio > 0.8) bar.classList.add('warn'); // ≤80% 绿；>80% 且 ≤100% 黄；>100% 红
       if (label) label.innerText = `Token 占用 ${(ratio * 100).toFixed(0)}%（${totalTokens}/${TOKEN_LIMIT}）`;
       if (warning) {
         warning.style.display = ratio > 1 ? 'inline' : 'none';
@@ -3130,6 +3137,89 @@
       });
       updateEditorStats();
     }
+
+    // ==================== P2-A：镜像变量中文自定义 tooltip ====================
+    // 镜像层 pointer-events:none 且透明 textarea 在上层（z-index:2），底层 span 的原生 title 永远无法 hover 触发；
+    // 改为在 textarea 上监听 mousemove（rAF 节流），按坐标命中 mirror 内 span[title] 的 getBoundingClientRect 后自绘 tooltip。
+    let varTooltipRafId = null;
+    let varTooltipPending = null;
+
+    function hideVarTooltip() {
+      if (varTooltipRafId != null) {
+        if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(varTooltipRafId);
+        else clearTimeout(varTooltipRafId);
+        varTooltipRafId = null;
+      }
+      varTooltipPending = null;
+      const tip = document.getElementById('var-tooltip');
+      if (tip) tip.style.display = 'none';
+    }
+    window.hideVarTooltip = hideVarTooltip;
+
+    /** 在命中 span 上方显示中文提示（tooltip 使用 fixed + translate(-50%,-100%)，边界内 clamp） */
+    function showVarTooltipAt(text, rect) {
+      const tip = document.getElementById('var-tooltip');
+      if (!tip || !rect) return;
+      tip.textContent = text;
+      tip.style.display = 'block';
+      const halfWidth = Math.max(40, Math.min(180, rect.width / 2 + 20));
+      let left = rect.left + rect.width / 2;
+      left = Math.max(halfWidth, Math.min(left, (window.innerWidth || 1024) - halfWidth));
+      const top = Math.max(8, rect.top - 8);
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
+    }
+    window.showVarTooltipAt = showVarTooltipAt;
+
+    /** 命中检测：遍历对应 mirror 的 span[title]，坐标落在某 span 矩形内则返回该 span */
+    function hitTestVariableSpan(mirror, clientX, clientY) {
+      if (!mirror) return null;
+      const spans = mirror.querySelectorAll('span[title]');
+      for (let i = 0; i < spans.length; i++) {
+        const span = spans[i];
+        const rect = span.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) continue;
+        if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) return span;
+      }
+      return null;
+    }
+    window.hitTestVariableSpan = hitTestVariableSpan;
+
+    /** mousemove 节流（rAF ≤60fps）：命中显示 tooltip，未命中隐藏；不改变 textarea 输入/光标/选中 */
+    function handleEditorVarTooltipMove(textarea, clientX, clientY) {
+      varTooltipPending = { textarea, clientX, clientY };
+      if (varTooltipRafId != null) return;
+      const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb) => setTimeout(cb, 16);
+      varTooltipRafId = schedule(() => {
+        varTooltipRafId = null;
+        const pending = varTooltipPending;
+        if (!pending) return;
+        varTooltipPending = null;
+        const mirror = getEditorMirror(pending.textarea);
+        const span = hitTestVariableSpan(mirror, pending.clientX, pending.clientY);
+        if (!span) { hideVarTooltip(); return; }
+        const text = span.getAttribute('title') || '';
+        if (!text) { hideVarTooltip(); return; }
+        showVarTooltipAt(text, span.getBoundingClientRect());
+      });
+    }
+    window.handleEditorVarTooltipMove = handleEditorVarTooltipMove;
+
+    /** 绑定：三个编辑框 mousemove/mouseleave/scroll/input/blur + 全局滚动/resize 均隐藏 */
+    function initVariableTooltip() {
+      EDITOR_LAYERS.forEach(layer => {
+        const textarea = document.getElementById('val-' + layer);
+        if (!textarea) return;
+        textarea.addEventListener('mousemove', (e) => handleEditorVarTooltipMove(textarea, e.clientX, e.clientY));
+        textarea.addEventListener('mouseleave', () => hideVarTooltip());
+        textarea.addEventListener('scroll', () => hideVarTooltip());
+        textarea.addEventListener('input', () => hideVarTooltip());
+        textarea.addEventListener('blur', () => hideVarTooltip());
+      });
+      window.addEventListener('scroll', () => hideVarTooltip(), true); // capture：编辑器内部滚动也会触发
+      window.addEventListener('resize', () => hideVarTooltip());
+    }
+    window.initVariableTooltip = initVariableTooltip;
 
     // ==================== 模块二：语境配置（行业 / 业务场景 / 核心目标） ====================
     // state 结构：{ industry: '', business_scene: [], core_goal: [] }
@@ -3447,6 +3537,7 @@
     initInsertVariableSelect(); // V3.0 阶段三：L0 插入变量下拉
     initModelConfigUI(); // V3.0 阶段二：模型配置中心
     initGlobalEscHandler(); // V3.0 阶段四：Esc 关闭最上层弹层
+    initVariableTooltip(); // P2-A：镜像变量中文自定义 tooltip
     updateTokenProgress(0); // V3.0 阶段四：Token 进度条初始态
 
     window.onload = fetchData;
