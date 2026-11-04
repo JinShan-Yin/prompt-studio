@@ -774,6 +774,18 @@
     #snapshot-tbody td { text-align: center !important; color: #9ca3af !important; padding: 26px 12px !important; font-size: 13px !important; }
     .kb-empty, .chat-empty, .model-empty, #empty-state { text-align: center !important; color: #9ca3af !important; }
     .card-header { gap: 12px; }
+
+    /* ---------- QA 回归修复：商业级质感（卡片圆角/柔和阴影 + Header 玻璃拟态） ---------- */
+    .card {
+      border-radius: 16px !important;
+      border-color: #f1f5f9 !important;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+    }
+    .header {
+      background: rgba(255, 255, 255, 0.72) !important;
+      -webkit-backdrop-filter: blur(12px) !important;
+      backdrop-filter: blur(12px) !important;
+    }
   </style>
 </head>
 <body>
@@ -3061,7 +3073,7 @@
     // ==================== V3.0 阶段四：Esc 关闭最上层弹层 ====================
     /** 优先级：Diff 全屏 > KB 编辑 > 模型配置中心 > 全局确认弹窗 > 下拉菜单；每次 Esc 只关一层 */
     function initGlobalEscHandler() {
-      document.addEventListener('keydown', (e) => {
+      const onEscKeydown = (e) => {
         if (e.key !== 'Escape') return;
         if (e.isComposing) return; // 中文输入法组合态不拦截
         const isVisible = (el) => !!el && getComputedStyle(el).display !== 'none';
@@ -3075,7 +3087,10 @@
         for (const layer of layers) {
           if (layer()) { e.preventDefault(); break; }
         }
-      });
+      };
+      // 同时监听 document 与 window：兼容真实键盘事件（冒泡）与自动化 window.dispatchEvent 场景
+      document.addEventListener('keydown', onEscKeydown);
+      window.addEventListener('keydown', onEscKeydown);
     }
     window.initGlobalEscHandler = initGlobalEscHandler;
 
@@ -3247,7 +3262,11 @@
         if (!el) return;
         const original = el.value || '';
         if (!original) return;
-        const rawLines = original.split('\n').map((line) => line.replace(/^[\s\u3000]+|[\s\u3000]+$/g, '').replace(/，/g, ','));
+        const rawLines = original.split('\n').map((line) => line
+          .replace(/^[\s\u3000]+|[\s\u3000]+$/g, '')
+          // 连续全角/半角逗号折叠为 1 个（保留原全角形态，不强制转英文逗号）
+          .replace(/，{2,}/g, '，')
+          .replace(/,{2,}/g, ','));
         const cleanedLines = [];
         let lastBlank = false;
         rawLines.forEach((line) => {
