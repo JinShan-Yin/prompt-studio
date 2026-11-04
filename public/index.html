@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Prompt Studio - 提示词工程流水线</title>
+  <script src="https://cdn.bootcdn.net/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; background-color: #f3f4f6; }
+    .tree-node { cursor: pointer; padding: 6px 12px; border-radius: 4px; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center; }
+    .tree-node:hover { background-color: #e5e7eb; }
+    .tree-node.active { background-color: #dbeafe; color: #1d4ed8; font-weight: bold; }
+    .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
+    .edit-icon { opacity: 0; transition: opacity 0.2s; cursor: pointer; }
+    .tree-node:hover .edit-icon { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div id="app" class="flex h-screen overflow-hidden">
+    
+    <!-- 左侧导航树 -->
+    <div class="w-72 bg-white border-r border-gray-200 flex flex-col shadow-sm">
+      <div class="p-4 border-b border-gray-200">
+        <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2 mb-3">🚀 Prompt Studio</h1>
+        <div class="flex gap-2">
+          <button @click="openCompanyModal()" class="flex-1 bg-teal-500 text-white text-xs px-2 py-1.5 rounded hover:bg-teal-600 transition">+ 新建公司</button>
+          <button @click="openProjectModal()" class="flex-1 bg-blue-500 text-white text-xs px-2 py-1.5 rounded hover:bg-blue-600 transition">+ 新建项目</button>
+        </div>
+      </div>
+      
+      <div class="flex-1 overflow-y-auto p-2">
+        <div v-for="company in companies" :key="company.id" class="mb-2">
+          <div class="tree-node text-gray-700 font-semibold" @click="company.open = !company.open">
+            <div class="flex items-center gap-1"><span>{{ company.open ? '📂' : '📁' }}</span>{{ company.name }}</div>
+            <span class="edit-icon text-gray-400 hover:text-blue-500" @click.stop="openCompanyModal(company)">✏️</span>
+          </div>
+          <div v-show="company.open" class="pl-4 mt-1 border-l-2 border-gray-100 ml-3">
+            <div v-for="project in company.children" :key="project.id" 
+                 class="tree-node text-sm" :class="{ 'active': activeProject === project.id }"
+                 @click="selectProject(project.id, project.name)">
+              <div class="flex items-center gap-1"><span>🤖</span>{{ project.name }}</div>
+              <span class="edit-icon text-gray-400 hover:text-blue-500" @click.stop="openProjectModal(project)">✏️</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧工作区 -->
+    <div class="flex-1 flex flex-col h-screen bg-gray-50 overflow-y-auto">
+      <header class="bg-white shadow-sm border-b border-gray-200 p-4 flex justify-between items-center sticky top-0 z-10">
+        <h2 class="text-lg font-semibold text-gray-700">当前项目：{{ activeProject ? activeProjectName : '请选择项目' }}</h2>
+        <div class="text-sm text-gray-500">本地开发模式</div>
+      </header>
+
+      <main class="p-6 flex-1" v-if="activeProject">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          
+          <!-- 提示词编辑与快照 -->
+          <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-md font-bold mb-4 flex items-center gap-2"><span>🧩</span> 提示词编辑与快照</h3>
+            <div class="space-y-3 mb-4">
+              <div><label class="block text-sm font-medium text-gray-700">L0 全局安全基座</label><textarea v-model="layersContent.L0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border text-sm" rows="2"></textarea></div>
+              <div><label class="block text-sm font-medium text-gray-700">L1 语音基座</label><textarea v-model="layersContent.L1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border text-sm" rows="2"></textarea></div>
+              <div><label class="block text-sm font-medium text-gray-700">L3 项目专属话术</label><textarea v-model="layersContent.L3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border text-sm" rows="2"></textarea></div>
+            </div>
+            
+            <button @click="testSnapshot" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition">组装并生成快照 (强制执行评测)</button>
+            <pre v-if="snapshotResult" class="mt-4 bg-gray-900 text-indigo-300 p-3 rounded text-sm overflow-x-auto whitespace-pre-wrap">{{ snapshotResult }}</pre>
+          </div>
+
+          <!-- 知识库列表管理 -->
+          <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-md font-bold flex items-center gap-2"><span>🗂️</span> 知识库列表</h3>
+              <button @click="loadKbList" class="text-sm text-blue-500 hover:underline">刷新列表</button>
+            </div>
+            
+            <div v-if="kbList.length === 0" class="text-gray-400 text-sm text-center py-4">暂无数据</div>
+            <ul v-else class="max-h-60 overflow-y-auto text-sm bg-gray-50 p-2 rounded border mb-3">
+              <li v-for="item in kbList" :key="item.id" class="mb-2 border-b pb-1 flex justify-between items-start">
+                <div class="flex-1 pr-2">
+                  <span class="font-semibold text-teal-700">Q: {{ item.question }}</span><br>
+                  <span class="text-gray-600">A: {{ item.answer }}</span>
+                </div>
+                <button @click="deleteKb(item.id)" class="text-red-500 text-xs hover:underline mt-1">删除</button>
+              </li>
+            </ul>
+            
+            <div class="mt-4 border-t pt-4">
+              <textarea v-model="kbText" placeholder="在此粘贴新知识文本..." class="w-full border border-gray-300 rounded p-2 text-sm mb-2" rows="2"></textarea>
+              <button @click="parseKb" class="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700 transition">解析文本</button>
+            </div>
+            <div v-if="kbPairs.length > 0" class="mt-2 border-t pt-2">
+              <h4 class="font-bold text-sm mb-2 text-gray-700">待确认 ({{ kbPairs.length }} 条)</h4>
+              <ul class="max-h-32 overflow-y-auto text-sm bg-gray-50 p-2 rounded border mb-2">
+                <li v-for="(pair, idx) in kbPairs" :key="idx" class="mb-1 border-b">
+                  <span class="font-semibold text-teal-700">Q: {{ pair.question }}</span><br><span class="text-gray-600">A: {{ pair.answer }}</span>
+                </li>
+              </ul>
+              <button @click="saveKb" class="bg-green-600 text-white px-4 py-1.5 rounded hover:bg-green-700 transition">确认入库</button>
+            </div>
+            <pre v-if="kbResult" class="mt-2 bg-gray-900 text-teal-300 p-2 rounded text-xs overflow-x-auto whitespace-pre-wrap">{{ kbResult }}</pre>
+          </div>
+
+          <!-- 智能体评测与导出 (用于生成快照时的数据参考) -->
+          <div class="bg-white rounded-lg shadow p-6 border-2 border-indigo-100">
+            <h3 class="text-md font-bold mb-4 flex items-center gap-2"><span>⚖️</span> 评测数据 (生成快照时将使用此数据)</h3>
+            <div class="space-y-2 mb-4">
+               <input v-model="evalData.user_query" placeholder="模拟用户提问" class="w-full border p-2 text-sm rounded">
+               <input v-model="evalData.standard_answer" placeholder="标准答案" class="w-full border p-2 text-sm rounded">
+               <textarea v-model="evalData.bot_reply" placeholder="机器人实际回复" class="w-full border p-2 text-sm rounded" rows="2"></textarea>
+            </div>
+            <div class="flex gap-2">
+              <button @click="runEval" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 transition">单独测试评测</button>
+            </div>
+            <pre v-if="evalResult" class="mt-4 bg-gray-900 text-orange-300 p-3 rounded text-sm overflow-x-auto whitespace-pre-wrap">{{ evalResult }}</pre>
+          </div>
+
+          <!-- 历史快照中心 -->
+          <div class="bg-white rounded-lg shadow p-6 lg:col-span-2">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-md font-bold flex items-center gap-2"><span>🕒</span> 历史快照中心</h3>
+              <button @click="loadSnapshots" class="text-sm text-blue-500 hover:underline">刷新列表</button>
+            </div>
+            
+            <div v-if="snapshotList.length === 0" class="text-gray-400 text-sm text-center py-4">暂无历史快照</div>
+            <table v-else class="w-full text-sm text-left border">
+              <thead class="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                <tr>
+                  <th class="px-4 py-2">快照 ID</th>
+                  <th class="px-4 py-2">生成时间</th>
+                  <th class="px-4 py-2">评测状态</th>
+                  <th class="px-4 py-2 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="snap in snapshotList" :key="snap.id" class="border-b hover:bg-gray-50">
+                  <td class="px-4 py-2 font-mono text-xs text-indigo-600">{{ snap.id }}</td>
+                  <td class="px-4 py-2 text-gray-500">{{ new Date(snap.created_at).toLocaleString() }}</td>
+                  <td class="px-4 py-2">
+                    <span v-if="snap.eval_pass === 1" class="text-green-600 font-bold">✅ 通过 ({{ snap.eval_score }}分)</span>
+                    <span v-else class="text-red-500 font-bold">❌ 未通过 ({{ snap.eval_score }}分)</span>
+                  </td>
+                  <td class="px-4 py-2 text-right">
+                    <button @click="downloadSpecificSnapshot(snap.id)" :disabled="snap.eval_pass !== 1" class="bg-gray-800 text-white px-3 py-1 rounded text-xs hover:bg-black transition disabled:opacity-30 disabled:cursor-not-allowed">下载 TXT</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </main>
+
+      <div v-else class="flex-1 flex flex-col items-center justify-center text-gray-400 bg-gray-50">
+        <div class="text-6xl mb-4">👈</div><p class="text-lg">请在左侧选择一个项目开始工作，或点击左上角新建</p>
+      </div>
+    </div>
+
+    <!-- 新建/编辑 公司弹窗 -->
+    <div v-if="companyModal.show" class="modal-mask">
+      <div class="bg-white rounded-lg p-6 w-96 shadow-xl">
+        <h3 class="text-lg font-bold mb-4">{{ companyModal.isEdit ? '修改公司名称' : '新建公司' }}</h3>
+        <label class="block text-sm mb-1">公司/类型名称</label>
+        <input v-model="companyModal.name" type="text" class="w-full border rounded p-2 mb-4 text-sm" placeholder="例如：阿里旅游公司">
+        <div class="flex justify-end gap-2">
+          <button @click="companyModal.show = false" class="px-4 py-2 border rounded text-sm">取消</button>
+          <button @click="saveCompany" class="px-4 py-2 bg-teal-600 text-white rounded text-sm">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 新建/编辑 项目弹窗 -->
+    <div v-if="projectModal.show" class="modal-mask">
+      <div class="bg-white rounded-lg p-6 w-96 shadow-xl">
+        <h3 class="text-lg font-bold mb-4">{{ projectModal.isEdit ? '修改项目名称' : '新建项目' }}</h3>
+        <div v-if="!projectModal.isEdit">
+          <label class="block text-sm mb-1">所属公司</label>
+          <select v-model="projectModal.company_id" class="w-full border rounded p-2 mb-3 text-sm">
+            <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
+          </select>
+        </div>
+        <label class="block text-sm mb-1">项目名称</label>
+        <input v-model="projectModal.name" type="text" class="w-full border rounded p-2 mb-4 text-sm" placeholder="例如：GPT-v4接线员">
+        <div class="flex justify-end gap-2">
+          <button @click="projectModal.show = false" class="px-4 py-2 border rounded text-sm">取消</button>
+          <button @click="saveProject" class="px-4 py-2 bg-blue-600 text-white rounded text-sm">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted } = Vue;
+
+    createApp({
+      setup() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token') || '';
+
+        const companies = ref([]);
+        const activeProject = ref('');
+        const activeProjectName = ref('');
+        const companyModal = ref({ show: false, isEdit: false, id: '', name: '' });
+        const projectModal = ref({ show: false, isEdit: false, id: '', company_id: '', name: '' });
+
+        const lastSnapshotId = ref(''); 
+        const snapshotList = ref([]);
+        
+        // 默认的提示词内容
+        const defaultLayers = { L0: '你是一个客服机器人，严禁使用 Markdown。', L1: '所有回复必须简短，播报电话号码时必须逐位播报。', L3: '用户问好时，请用 1. 2. 3. 列出回答，并称呼用户为老板。' };
+        const layersContent = ref({ ...defaultLayers });
+
+        const evalData = ref({ user_query: '停车怎么收费？', standard_answer: '首小时8元，全天封顶50元。', bot_reply: '<speak>老板您好，停车费首小时10元，封顶100元。</speak>' });
+        const evalResult = ref('');
+        
+        const kbText = ref(''); 
+        const kbPairs = ref([]); 
+        const kbResult = ref('');
+        const kbList = ref([]);
+
+        async function fetchData() {
+          try {
+            const [compRes, projRes] = await Promise.all([
+              fetch(`/api/companies?token=${token}`), fetch(`/api/projects?token=${token}`)
+            ]);
+            const compJson = await compRes.json(); const projJson = await projRes.json();
+            if (compJson.success && projJson.success) {
+              const projects = projJson.data;
+              companies.value = compJson.data.map(comp => ({ ...comp, open: true, children: projects.filter(p => p.company_id === comp.id) }));
+              if (activeProject.value) {
+                const current = projects.find(p => p.id === activeProject.value);
+                if (current) activeProjectName.value = current.name;
+                else { activeProject.value = ''; activeProjectName.value = ''; }
+              }
+            }
+          } catch (e) { console.error('拉取数据失败', e); }
+        }
+
+        async function selectProject(id, name) {
+          activeProject.value = id; 
+          activeProjectName.value = name;
+          snapshotResult.value = ''; evalResult.value = ''; lastSnapshotId.value = '';
+          kbPairs.value = []; kbResult.value = '';
+          layersContent.value = { ...defaultLayers }; // 先恢复默认
+          
+          // 1. 自动回填最新提示词
+          try {
+            const res = await fetch(`/api/snapshots/latest?token=${token}&project_id=${id}`);
+            const json = await res.json();
+            if (json.success && json.data) {
+              // 根据 layer 标识解析回填
+              json.data.forEach(item => {
+                if (item.layer === 'L0') layersContent.value.L0 = item.content;
+                if (item.layer === 'L1') layersContent.value.L1 = item.content;
+                if (item.layer === 'L3') layersContent.value.L3 = item.content;
+              });
+            }
+          } catch (e) { console.error('回填失败', e); }
+
+          // 2. 加载列表
+          loadSnapshots();
+          loadKbList();
+        }
+
+        // --- 公司管理 ---
+        function openCompanyModal(comp = null) {
+          if (comp) companyModal.value = { show: true, isEdit: true, id: comp.id, name: comp.name };
+          else companyModal.value = { show: true, isEdit: false, id: '', name: '' };
+        }
+        async function saveCompany() {
+          if (!companyModal.value.name) return alert('名称不能为空');
+          const url = companyModal.value.isEdit ? '/api/companies/update' : '/api/companies/create';
+          const body = companyModal.value.isEdit ? { id: companyModal.value.id, name: companyModal.value.name } : { name: companyModal.value.name };
+          try {
+            const res = await fetch(`${url}?token=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const json = await res.json();
+            if (json.success) { companyModal.value.show = false; await fetchData(); } else alert(json.error);
+          } catch (e) { alert('网络错误'); }
+        }
+
+        // --- 项目管理 ---
+        function openProjectModal(proj = null) {
+          if (proj) projectModal.value = { show: true, isEdit: true, id: proj.id, company_id: '', name: proj.name };
+          else {
+            if (companies.value.length === 0) return alert('请先新建至少一个公司');
+            projectModal.value = { show: true, isEdit: false, id: '', company_id: companies.value[0].id, name: '' };
+          }
+        }
+        async function saveProject() {
+          if (!projectModal.value.name) return alert('项目名称不能为空');
+          const url = projectModal.value.isEdit ? '/api/projects/update' : '/api/projects/create';
+          const body = projectModal.value.isEdit ? { id: projectModal.value.id, name: projectModal.value.name } : { company_id: projectModal.value.company_id, name: projectModal.value.name };
+          try {
+            const res = await fetch(`${url}?token=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const json = await res.json();
+            if (json.success) {
+              projectModal.value.show = false; await fetchData();
+              if (!projectModal.value.isEdit) selectProject(json.id, projectModal.value.name);
+            } else alert(json.error);
+          } catch (e) { alert('网络错误'); }
+        }
+
+        // --- 业务：快照与评测强绑定 ---
+        const snapshotResult = ref('');
+        async function testSnapshot() {
+          snapshotResult.value = "正在组装并强制执行评测，请稍候...";
+          try {
+            const res = await fetch(`/api/snapshots/create?token=${token}`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                project_id: activeProject.value, 
+                layers: [
+                  { layer: "L0", name: "全局安全", content: layersContent.value.L0 },
+                  { layer: "L1", name: "语音基座", content: layersContent.value.L1 },
+                  { layer: "L3", name: "项目话术", content: layersContent.value.L3 }
+                ],
+                evalData: evalData.value
+              })
+            });
+            const data = await res.json();
+            snapshotResult.value = JSON.stringify(data, null, 2);
+            if (data.success) {
+              lastSnapshotId.value = data.snapshot_id;
+              loadSnapshots(); // 刷新表格
+            }
+          } catch (e) { snapshotResult.value = "请求失败: " + e.message; }
+        }
+
+        async function loadSnapshots() {
+          if (!activeProject.value) return;
+          try {
+            const res = await fetch(`/api/snapshots/list?token=${token}&project_id=${activeProject.value}`);
+            const data = await res.json();
+            if (data.success) snapshotList.value = data.data;
+          } catch (e) { console.error('加载失败', e); }
+        }
+
+        function downloadSpecificSnapshot(snapId) {
+          if (!snapId) return;
+          window.open(`/api/gate/export?token=${token}&snapshot_id=${snapId}`);
+        }
+
+        // --- 业务：单独评测测试 ---
+        async function runEval() {
+          evalResult.value = "正在调用 DeepSeek 进行裁判...";
+          try {
+            const res = await fetch(`/api/eval/run?token=${token}`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(evalData.value)
+            });
+            evalResult.value = JSON.stringify(await res.json(), null, 2);
+          } catch (e) { evalResult.value = "请求失败: " + e.message; }
+        }
+
+        // --- 业务：知识库管理 ---
+        async function loadKbList() {
+          if (!activeProject.value) return;
+          try {
+            const res = await fetch(`/api/kb/list?token=${token}&project_id=${activeProject.value}`);
+            const data = await res.json();
+            if (data.success) kbList.value = data.data;
+          } catch (e) { console.error(e); }
+        }
+
+        async function deleteKb(id) {
+          if (!confirm('确认删除这条知识吗？')) return;
+          try {
+            const res = await fetch(`/api/kb/delete?token=${token}`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id })
+            });
+            const data = await res.json();
+            if (data.success) loadKbList();
+            else alert(data.error);
+          } catch (e) { alert('网络错误'); }
+        }
+
+        async function parseKb() {
+          if (!kbText.value) return alert('请先输入文本');
+          kbResult.value = "正在调用大模型解析...";
+          try {
+            const res = await fetch(`/api/kb/parse?token=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw_text: kbText.value }) });
+            const data = await res.json();
+            if (data.success) { kbPairs.value = data.data; kbResult.value = `解析成功！共提取 ${data.data.length} 条。`; }
+            else { kbResult.value = "解析失败: " + data.error; }
+          } catch (e) { kbResult.value = "请求失败: " + e.message; }
+        }
+        async function saveKb() {
+          if (kbPairs.value.length === 0) return;
+          kbResult.value = "正在入库...";
+          try {
+            const res = await fetch(`/api/kb/save?token=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: activeProject.value, pairs: kbPairs.value }) });
+            const data = await res.json();
+            if (data.success) { 
+              kbResult.value = data.message; kbPairs.value = []; kbText.value = ''; 
+              loadKbList(); // 刷新列表
+            }
+            else { kbResult.value = "入库失败: " + data.error; }
+          } catch (e) { kbResult.value = "请求失败: " + e.message; }
+        }
+
+        onMounted(() => { fetchData(); });
+
+        return {
+          companies, activeProject, activeProjectName, selectProject,
+          companyModal, openCompanyModal, saveCompany,
+          projectModal, openProjectModal, saveProject,
+          layersContent, snapshotResult, testSnapshot,
+          evalData, evalResult, runEval, downloadSpecificSnapshot,
+          snapshotList, loadSnapshots,
+          kbText, kbPairs, kbResult, parseKb, saveKb, kbList, loadKbList, deleteKb
+        }
+      }
+    }).mount('#app')
+  </script>
+</body>
+</html>
