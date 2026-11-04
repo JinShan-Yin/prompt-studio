@@ -377,6 +377,47 @@
     body { max-width: 100vw; }
     .app-container { min-width: 0; }
     .main-content, .content-area { min-width: 0; }
+
+    /* ==================== V3.0 阶段二：模型配置中心弹窗 ==================== */
+    .model-modal-mask { z-index: 10080; }
+    .model-box { width: 760px; max-width: calc(100vw - 32px); max-height: 88vh; display: flex; flex-direction: column; }
+    .model-box .modal-header { display: flex; align-items: center; justify-content: space-between; }
+    .model-close-btn { border: none; background: transparent; color: var(--text-secondary); font-size: 20px; line-height: 1; cursor: pointer; padding: 2px 8px; border-radius: 6px; transition: var(--transition); }
+    .model-close-btn:hover { background: var(--bg-soft); color: var(--text-main); }
+    .model-body { padding: 20px; overflow-y: auto; display: grid; grid-template-columns: 280px 1fr; gap: 20px; align-items: start; }
+    @media (max-width: 780px) { .model-body { grid-template-columns: 1fr; gap: 14px; } }
+    .model-section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .model-list { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; padding-right: 2px; }
+    .model-empty { color: var(--text-muted); font-size: 12px; padding: 14px 8px; text-align: center; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); line-height: 1.6; }
+    .model-item { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; transition: var(--transition); background: #fff; }
+    .model-item:hover { border-color: var(--primary); background: var(--primary-light); }
+    .model-item.active { border-color: var(--primary); background: var(--primary-light); box-shadow: inset 3px 0 0 var(--primary); }
+    .model-item-title { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text-main); }
+    .model-item-meta { font-size: 12px; color: var(--text-secondary); margin-top: 4px; word-break: break-all; line-height: 1.5; }
+    .model-item-badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--success-light); color: var(--success); border: 1px solid #d1fae5; white-space: nowrap; }
+    .model-item-badge.inactive { background: var(--bg-soft); color: var(--text-secondary); border-color: var(--border); }
+    .model-form { display: flex; flex-direction: column; gap: 12px; }
+    .model-form .form-group { margin-bottom: 0; }
+    .model-form-row { display: flex; gap: 12px; }
+    .model-form-row > .form-group { flex: 1; }
+    .model-check-line { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-main); }
+    .model-check-line input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
+    .model-test-result { font-size: 12px; line-height: 1.6; min-height: 18px; }
+    .model-test-result.ok { color: var(--success); }
+    .model-test-result.err { color: var(--danger); }
+    .model-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .model-quick-link { font-size: 12px; color: var(--text-secondary); background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0; font-family: inherit; }
+    .model-quick-link:hover { color: var(--primary); }
+    .model-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+    /* ==================== V3.0 阶段三：插入变量下拉（中文选项 → 英文占位符） ==================== */
+    .label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .label-row .form-label { margin-bottom: 0; }
+    .insert-var-select { padding: 4px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; color: var(--text-secondary); background: #fff; cursor: pointer; font-family: inherit; outline: none; transition: var(--transition); max-width: 240px; }
+    .insert-var-select:hover { border-color: var(--primary); color: var(--primary); }
+    .insert-var-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
+    /* 变量高亮 span 的中文 title 提示（仅悬浮提示，不改变镜像文本） */
+    .editor-mirror span[title] { cursor: help; }
   </style>
 </head>
 <body>
@@ -401,7 +442,7 @@
         <div class="header-title">当前项目： <span id="current-name">请选择左侧项目</span></div>
         <div class="header-right">
           <span class="env-badge">本地开发环境</span>
-          <button type="button" class="icon-btn" id="api-key-btn" onclick="openApiKeyModal()" title="API Key 设置" aria-label="API Key 设置">
+          <button type="button" class="icon-btn" id="api-key-btn" onclick="openModelConfigModal()" title="模型配置中心" aria-label="模型配置中心">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
           </button>
         </div>
@@ -415,7 +456,19 @@
           <div class="card-header">📝 提示词编辑与快照</div>
           <div class="card-body">
             <div class="form-group">
-              <label class="form-label">L0 全局安全基座</label>
+              <div class="label-row">
+                <label class="form-label" for="val-L0">L0 全局安全基座</label>
+                <select id="insert-var-select" class="insert-var-select" title="插入变量占位符（中文选项 → 英文变量，插入到光标处）">
+                  <option value="">➕ 插入变量</option>
+                  <option value="{{industry}}">行业/公司名（{{industry}}）</option>
+                  <option value="{{business_scene}}">业务场景（{{business_scene}}）</option>
+                  <option value="{{core_goal}}">核心目标（{{core_goal}}）</option>
+                  <option value="{{user_name}}">用户姓名（{{user_name}}）</option>
+                  <option value="{{company_name}}">公司名称（{{company_name}}）</option>
+                  <option value="{{current_date}}">当前日期（{{current_date}}）</option>
+                  <option value="{{custom_var}}">自定义变量（{{custom_var}}）</option>
+                </select>
+              </div>
               <div class="editor-wrap">
                 <div class="editor-mirror" id="mirror-L0" aria-hidden="true"></div>
                 <textarea id="val-L0" class="form-textarea editor-input" rows="2" spellcheck="false"></textarea>
@@ -604,6 +657,76 @@
       <div class="modal-footer">
         <button class="btn btn-link" style="color:#606266;" onclick="closeModal()">取消</button>
         <button class="btn btn-primary" id="modal-confirm-btn">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- V3.0 阶段二：模型配置中心（独立弹窗，沿用 modal 视觉规范） -->
+  <div id="model-config-modal" class="modal-mask model-modal-mask">
+    <div class="modal-box model-box">
+      <div class="modal-header">
+        <span>⚙️ 模型配置中心</span>
+        <button type="button" class="model-close-btn" onclick="closeModelConfigModal()" title="关闭" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body model-body">
+        <div>
+          <div class="model-section-title">
+            <span>已配置模型</span>
+            <button type="button" class="btn-link" onclick="loadModels()">刷新</button>
+          </div>
+          <div class="model-list" id="model-list">
+            <div class="model-empty">加载中...</div>
+          </div>
+        </div>
+        <div class="model-form">
+          <div class="form-group">
+            <label class="form-label" for="model-provider">厂商</label>
+            <select id="model-provider" class="form-input">
+              <option value="deepseek">DeepSeek</option>
+              <option value="openai">OpenAI</option>
+              <option value="qwen">通义千问</option>
+              <option value="zhipu">智谱</option>
+              <option value="moonshot">Moonshot</option>
+              <option value="custom">自定义</option>
+            </select>
+          </div>
+          <div class="model-form-row">
+            <div class="form-group">
+              <label class="form-label" for="model-display-name">显示名称（可选）</label>
+              <input id="model-display-name" class="form-input" type="text" placeholder="如：DeepSeek 主模型" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="model-temperature">温度</label>
+              <input id="model-temperature" class="form-input" type="number" min="0" max="2" step="0.1" value="0.7" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="model-base-url">Base URL</label>
+            <input id="model-base-url" class="form-input" type="text" placeholder="https://api.deepseek.com/v1" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="model-name">模型名</label>
+            <input id="model-name" class="form-input" type="text" placeholder="deepseek-chat" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="model-api-key">API Key</label>
+            <input id="model-api-key" class="form-input" type="password" autocomplete="new-password" placeholder="留空 = 保持原值 / 使用 .env 回退（不会显示完整 Key）" />
+          </div>
+          <div class="model-check-line">
+            <input type="checkbox" id="model-is-active" />
+            <label for="model-is-active">设为激活模型</label>
+          </div>
+          <div class="model-test-result" id="model-test-result"></div>
+          <div class="model-actions">
+            <button class="btn btn-secondary" id="model-test-btn" type="button" onclick="testModelConnection()">🔌 测试连通性</button>
+            <button class="btn btn-primary" id="model-save-btn" type="button" onclick="saveModelConfig()">💾 保存配置</button>
+            <button class="model-quick-link" id="model-quick-key-btn" type="button" onclick="openQuickApiKeyFromModel()">⚙️ 快速设置 .env Key</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer model-footer">
+        <span style="font-size: 12px; color: var(--text-muted);">API Key 仅以 masked 展示；保存后立即生效</span>
+        <button class="btn btn-link" style="color: #606266;" type="button" onclick="closeModelConfigModal()">关闭</button>
       </div>
     </div>
   </div>
@@ -1826,6 +1949,301 @@
     }
     window.openApiKeyModal = openApiKeyModal;
 
+    // ==================== V3.0 阶段二：模型配置中心（多模型配置 / masked / 测试连通性） ====================
+    const MODEL_PROVIDER_PRESETS = {
+      deepseek: { label: 'DeepSeek', base_url: 'https://api.deepseek.com/v1', model_name: 'deepseek-chat' },
+      openai: { label: 'OpenAI', base_url: 'https://api.openai.com/v1', model_name: 'gpt-4o-mini' },
+      qwen: { label: '通义千问', base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model_name: 'qwen-plus' },
+      zhipu: { label: '智谱', base_url: 'https://open.bigmodel.cn/api/paas/v4', model_name: 'glm-4-flash' },
+      moonshot: { label: 'Moonshot', base_url: 'https://api.moonshot.cn/v1', model_name: 'moonshot-v1-8k' },
+      custom: { label: '自定义', base_url: '', model_name: '' },
+    };
+    let modelConfigList = [];
+    let editingModelId = null;
+    let modelBusy = false;
+
+    function setModelTestResult(text, ok) {
+      const el = document.getElementById('model-test-result');
+      if (!el) return;
+      el.className = 'model-test-result' + (text ? (ok ? ' ok' : ' err') : '');
+      el.innerText = text || '';
+    }
+
+    function setModelButtonsBusy(busy, which) {
+      const testBtn = document.getElementById('model-test-btn');
+      const saveBtn = document.getElementById('model-save-btn');
+      if (testBtn) {
+        testBtn.disabled = !!busy;
+        testBtn.innerText = busy && which === 'test' ? '测试中...' : '🔌 测试连通性';
+      }
+      if (saveBtn) {
+        saveBtn.disabled = !!busy;
+        saveBtn.innerText = busy && which === 'save' ? '保存中...' : '💾 保存配置';
+      }
+    }
+
+    /** 重置模型表单为新配置默认态（不泄露任何 Key） */
+    function resetModelForm() {
+      editingModelId = null;
+      const preset = MODEL_PROVIDER_PRESETS.deepseek;
+      const providerEl = document.getElementById('model-provider');
+      const baseEl = document.getElementById('model-base-url');
+      const nameEl = document.getElementById('model-name');
+      const displayEl = document.getElementById('model-display-name');
+      const keyEl = document.getElementById('model-api-key');
+      const tempEl = document.getElementById('model-temperature');
+      const activeEl = document.getElementById('model-is-active');
+      if (providerEl) providerEl.value = 'deepseek';
+      if (baseEl) baseEl.value = preset.base_url;
+      if (nameEl) nameEl.value = preset.model_name;
+      if (displayEl) displayEl.value = '';
+      if (keyEl) {
+        keyEl.value = '';
+        keyEl.type = 'password';
+        keyEl.placeholder = '留空 = 保持原值 / 使用 .env 回退（不会显示完整 Key）';
+      }
+      if (tempEl) tempEl.value = '0.7';
+      if (activeEl) activeEl.checked = modelConfigList.length === 0; // 首个模型默认激活
+      setModelTestResult('', true);
+    }
+
+    function openModelConfigModal() {
+      closeMenu();
+      const modal = document.getElementById('model-config-modal');
+      if (!modal) return;
+      resetModelForm();
+      modal.style.display = 'flex';
+      loadModels();
+      const providerEl = document.getElementById('model-provider');
+      if (providerEl && typeof providerEl.focus === 'function') providerEl.focus();
+    }
+    window.openModelConfigModal = openModelConfigModal;
+
+    function closeModelConfigModal() {
+      const modal = document.getElementById('model-config-modal');
+      if (modal) modal.style.display = 'none';
+      // 安全：关闭时立即清空 Key 输入框，Key 不留在 DOM 中
+      const keyEl = document.getElementById('model-api-key');
+      if (keyEl) keyEl.value = '';
+      modelBusy = false;
+      setModelButtonsBusy(false, '');
+    }
+    window.closeModelConfigModal = closeModelConfigModal;
+
+    /** 拉取模型列表（GET /api/models），接口未就绪时给出友好提示 */
+    async function loadModels() {
+      const listEl = document.getElementById('model-list');
+      if (listEl) listEl.innerHTML = '<div class="model-empty">加载中...</div>';
+      try {
+        const d = await safeFetchJson('/api/models');
+        if (!d || !d.success || !Array.isArray(d.data)) {
+          modelConfigList = [];
+          if (listEl) listEl.innerHTML = `<div class="model-empty">${escapeHtml((d && (d.error || d.message)) || '模型列表暂不可用')}</div>`;
+          return;
+        }
+        modelConfigList = d.data;
+        renderModelList();
+      } catch (e) {
+        modelConfigList = [];
+        if (listEl) listEl.innerHTML = `<div class="model-empty">${escapeHtml((e && e.message) || '模型列表加载失败')}<br>（后端 /api/models 接口就绪后自动可用）</div>`;
+      }
+    }
+    window.loadModels = loadModels;
+
+    /** 渲染已配置模型列表（DOM 构建 + textContent，防注入；active 高亮 + masked_key） */
+    function renderModelList() {
+      const listEl = document.getElementById('model-list');
+      if (!listEl) return;
+      listEl.innerHTML = '';
+      if (!Array.isArray(modelConfigList) || modelConfigList.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'model-empty';
+        empty.innerText = '暂无已配置模型。请在右侧填写厂商信息后保存，或使用 .env 中的默认 Key。';
+        listEl.appendChild(empty);
+        return;
+      }
+      modelConfigList.forEach((model) => {
+        const item = document.createElement('div');
+        item.className = 'model-item' + (model.is_active ? ' active' : '');
+        item.dataset.modelId = String(model.id == null ? '' : model.id);
+        const titleRow = document.createElement('div');
+        titleRow.className = 'model-item-title';
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = model.display_name || model.model_name || model.provider || '(未命名模型)';
+        const badge = document.createElement('span');
+        badge.className = 'model-item-badge' + (model.is_active ? '' : ' inactive');
+        badge.textContent = model.is_active ? '激活中' : '未激活';
+        titleRow.appendChild(nameSpan);
+        titleRow.appendChild(badge);
+        const meta = document.createElement('div');
+        meta.className = 'model-item-meta';
+        const keyText = model.masked_key || (model.has_key ? '已配置' : '未配置');
+        meta.textContent = `${model.provider || '-'} · ${model.model_name || '-'} · ${model.base_url || '-'} · Key: ${keyText}`;
+        item.appendChild(titleRow);
+        item.appendChild(meta);
+        item.addEventListener('click', () => selectModelForEdit(item.dataset.modelId));
+        listEl.appendChild(item);
+      });
+    }
+
+    /** 点击列表项 → 载入表单编辑（Key 永远留空不回显，仅 placeholder 显示 masked） */
+    function selectModelForEdit(modelId) {
+      const model = modelConfigList.find((m) => String(m.id) === String(modelId));
+      if (!model) return;
+      editingModelId = model.id;
+      const providerEl = document.getElementById('model-provider');
+      const providerKnown = Object.prototype.hasOwnProperty.call(MODEL_PROVIDER_PRESETS, model.provider);
+      if (providerEl) providerEl.value = providerKnown ? model.provider : 'custom';
+      const baseEl = document.getElementById('model-base-url');
+      const nameEl = document.getElementById('model-name');
+      const displayEl = document.getElementById('model-display-name');
+      const tempEl = document.getElementById('model-temperature');
+      const keyEl = document.getElementById('model-api-key');
+      const activeEl = document.getElementById('model-is-active');
+      if (baseEl) baseEl.value = model.base_url || '';
+      if (nameEl) nameEl.value = model.model_name || '';
+      if (displayEl) displayEl.value = model.display_name || '';
+      if (tempEl) tempEl.value = model.temperature == null ? '0.7' : String(model.temperature);
+      if (keyEl) {
+        keyEl.value = '';
+        keyEl.type = 'password';
+        const currentKeyText = model.masked_key || (model.has_key ? '已配置' : '未配置');
+        keyEl.placeholder = `留空 = 保持原值（当前：${currentKeyText}）`;
+      }
+      if (activeEl) activeEl.checked = !!model.is_active;
+      setModelTestResult('', true);
+      showToast(`已载入模型：${model.display_name || model.model_name || model.provider}`);
+    }
+    window.selectModelForEdit = selectModelForEdit;
+
+    /** 厂商切换 → 自动带出 base_url 与默认模型名 */
+    function onModelProviderChange() {
+      const providerEl = document.getElementById('model-provider');
+      if (!providerEl) return;
+      const preset = MODEL_PROVIDER_PRESETS[providerEl.value] || MODEL_PROVIDER_PRESETS.custom;
+      const baseEl = document.getElementById('model-base-url');
+      const nameEl = document.getElementById('model-name');
+      if (baseEl) baseEl.value = preset.base_url;
+      if (nameEl) nameEl.value = preset.model_name;
+    }
+    window.onModelProviderChange = onModelProviderChange;
+
+    function collectModelFormData() {
+      const providerEl = document.getElementById('model-provider');
+      const baseEl = document.getElementById('model-base-url');
+      const nameEl = document.getElementById('model-name');
+      const displayEl = document.getElementById('model-display-name');
+      const keyEl = document.getElementById('model-api-key');
+      const tempEl = document.getElementById('model-temperature');
+      const activeEl = document.getElementById('model-is-active');
+      const payload = {
+        provider: providerEl ? providerEl.value : 'custom',
+        base_url: (baseEl ? baseEl.value : '').trim(),
+        model_name: (nameEl ? nameEl.value : '').trim(),
+      };
+      if (displayEl && displayEl.value.trim()) payload.display_name = displayEl.value.trim();
+      if (keyEl && keyEl.value.trim()) payload.api_key = keyEl.value.trim(); // 空则不带，后端回落 .env
+      if (tempEl && tempEl.value !== '') payload.temperature = Number(tempEl.value);
+      if (activeEl) payload.is_active = !!activeEl.checked;
+      if (editingModelId != null) payload.id = editingModelId;
+      return payload;
+    }
+    window.collectModelFormData = collectModelFormData;
+
+    function validateModelForm(payload) {
+      if (!payload.base_url) return '请填写 Base URL';
+      if (!/^https?:\/\//i.test(payload.base_url)) return 'Base URL 必须以 http(s):// 开头';
+      if (!payload.model_name) return '请填写模型名';
+      if (payload.temperature != null && (isNaN(payload.temperature) || payload.temperature < 0 || payload.temperature > 2)) return '温度需在 0 ~ 2 之间';
+      return '';
+    }
+
+    /** 🔌 测试连通性：POST /api/models/test（Key 留空则由后端回落 .env） */
+    async function testModelConnection() {
+      if (modelBusy) return;
+      const payload = collectModelFormData();
+      const err = validateModelForm(payload);
+      if (err) { setModelTestResult(err, false); showToast(err); return; }
+      const body = { provider: payload.provider, base_url: payload.base_url, model_name: payload.model_name };
+      if (payload.api_key) body.api_key = payload.api_key;
+      modelBusy = true;
+      setModelButtonsBusy(true, 'test');
+      setModelTestResult('正在测试连通性…', true);
+      try {
+        const d = await safeFetchJson('/api/models/test', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        if (d && d.success) {
+          const msg = d.message || '连通性测试通过';
+          setModelTestResult(msg, true);
+          showToast(msg);
+        } else {
+          const msg = (d && (d.message || d.error)) || '连通性测试失败';
+          setModelTestResult(msg, false);
+          showToast(msg);
+        }
+      } catch (e) {
+        const msg = (e && e.message) || '连通性测试失败';
+        setModelTestResult(msg, false);
+        showToast(msg);
+      } finally {
+        modelBusy = false;
+        setModelButtonsBusy(false, '');
+      }
+    }
+    window.testModelConnection = testModelConnection;
+
+    /** 💾 保存配置：POST /api/models/save（api_key 留空则不带，保持原值/.env） */
+    async function saveModelConfig() {
+      if (modelBusy) return;
+      const payload = collectModelFormData();
+      const err = validateModelForm(payload);
+      if (err) { setModelTestResult(err, false); showToast(err); return; }
+      modelBusy = true;
+      setModelButtonsBusy(true, 'save');
+      try {
+        const d = await safeFetchJson('/api/models/save', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        });
+        if (d && d.success) {
+          showToast(d.message || '模型配置已保存');
+          const keyEl = document.getElementById('model-api-key');
+          if (keyEl) keyEl.value = '';
+          await loadModels();
+        } else {
+          showToast((d && (d.message || d.error)) || '保存失败');
+        }
+      } catch (e) {
+        showToast((e && e.message) || '保存失败');
+      } finally {
+        modelBusy = false;
+        setModelButtonsBusy(false, '');
+      }
+    }
+    window.saveModelConfig = saveModelConfig;
+
+    /** 模型弹窗内「快速设置 .env Key」→ 复用原 API Key 弹窗 */
+    function openQuickApiKeyFromModel() {
+      closeModelConfigModal();
+      openApiKeyModal();
+    }
+    window.openQuickApiKeyFromModel = openQuickApiKeyFromModel;
+
+    /** 模型配置中心 UI 初始化：厂商联动 / 遮罩点击关闭 / Esc 关闭 */
+    function initModelConfigUI() {
+      const providerEl = document.getElementById('model-provider');
+      if (providerEl) providerEl.addEventListener('change', onModelProviderChange);
+      const modal = document.getElementById('model-config-modal');
+      if (modal) {
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeModelConfigModal(); });
+      }
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const modalEl = document.getElementById('model-config-modal');
+        if (modalEl && getComputedStyle(modalEl).display !== 'none') closeModelConfigModal();
+      });
+    }
+
     // ==================== 模块六：复制 NewLync Text / Zip 导出 / Ctrl+S ====================
     /** 剪贴板写入：优先 navigator.clipboard，失败降级 execCommand('copy')（纯原生实现） */
     async function copyTextToClipboard(text) {
@@ -1978,18 +2396,78 @@
         .replace(/>/g, '&gt;');
     }
 
-    /** 镜像层渲染：转义 → \n 换 <br>、空格换 &nbsp; → {{xxx}} 包橙色 span → 末尾换行补 <br> 防错位 */
+    /** 变量中文提示映射：仅用于镜像 span 的 title 悬浮提示，绝不把中文渲染进镜像文本（防光标/对齐错位） */
+    const VARIABLE_TITLE_MAP = {
+      industry: '行业/公司名',
+      business_scene: '业务场景',
+      core_goal: '核心目标',
+      user_name: '用户姓名',
+      company_name: '公司名称',
+      current_date: '当前日期',
+    };
+    function getVariableTitle(rawName) {
+      const name = String(rawName == null ? '' : rawName)
+        .replace(/^\s*\{\{/, '')
+        .replace(/\}\}\s*$/, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .trim();
+      if (Object.prototype.hasOwnProperty.call(VARIABLE_TITLE_MAP, name)) return VARIABLE_TITLE_MAP[name];
+      return '变量：' + (name || '未知');
+    }
+    window.getVariableTitle = getVariableTitle;
+
+    /** 镜像层渲染：转义 → \n 换 <br>、空格换 &nbsp; → {{xxx}} 包橙色 span（带中文 title）→ 末尾换行补 <br> 防错位 */
     function renderEditorMirror(textarea) {
       const mirror = getEditorMirror(textarea);
       if (!textarea || !mirror) return;
       const value = textarea.value || '';
       let html = escapeEditorHtml(value);
       html = html.replace(/\n/g, '<br>').replace(/ /g, '&nbsp;');
-      html = html.replace(/{{[\s\S]*?}}/g, '<span style="color:#f59e0b;">$&</span>');
+      // span 文本保持英文占位符原样（$& 内容不变），仅额外加 title 中文提示
+      html = html.replace(/{{[\s\S]*?}}/g, (match) => {
+        const title = escapeHtml(getVariableTitle(match));
+        return `<span style="color:#f59e0b;" title="${title}">${match}</span>`;
+      });
       // value 以 \n 结尾时，末尾换行会丢掉占位高度导致两层错位，补一个 <br> 撑住
       if (value.slice(-1) === '\n') html += '<br>';
       mirror.innerHTML = html; // 单次赋值，5000+ 字符 / 数百行也不卡
       syncEditorScroll(textarea);
+    }
+
+    // ==================== V3.0 阶段三：L0「插入变量」下拉（中文选项 → 英文占位符） ====================
+    /** 在指定 textarea 光标处插入英文占位符，并刷新镜像高亮 / 自动撑高 / Token 统计 */
+    function insertVariableAtCursor(textareaId, placeholder) {
+      const el = document.getElementById(textareaId);
+      if (!el || !placeholder) return false;
+      const start = typeof el.selectionStart === 'number' ? el.selectionStart : (el.value || '').length;
+      const end = typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
+      if (typeof el.setRangeText === 'function') {
+        el.setRangeText(placeholder, start, end, 'end');
+      } else {
+        el.value = (el.value || '').slice(0, start) + placeholder + (el.value || '').slice(end);
+      }
+      const caret = start + placeholder.length;
+      el.dispatchEvent(new Event('input', { bubbles: true })); // 统一走 input：镜像/高度/统计刷新
+      if (typeof el.focus === 'function') el.focus();
+      try { el.setSelectionRange(caret, caret); } catch (e) { /* 旧浏览器忽略 */ }
+      showToast(`已插入 ${placeholder}（${getVariableTitle(placeholder)}）`);
+      return true;
+    }
+    window.insertVariableAtCursor = insertVariableAtCursor;
+
+    /** 绑定 L0 上方的「插入变量」下拉：选择后插入光标处并复位下拉 */
+    function initInsertVariableSelect() {
+      const select = document.getElementById('insert-var-select');
+      if (!select) return;
+      select.addEventListener('change', () => {
+        const placeholder = select.value;
+        if (!placeholder) return;
+        insertVariableAtCursor('val-L0', placeholder);
+        select.value = '';
+      });
     }
 
     /** 滚动严格同步：textarea 隐藏滚动条但仍可编程滚动，mirror 跟随 scrollTop / scrollLeft */
@@ -2368,6 +2846,8 @@
     initChatUI();
     resetBatchState();
     initShortcuts(); // 模块六：Ctrl/Cmd + S 快捷键
+    initInsertVariableSelect(); // V3.0 阶段三：L0 插入变量下拉
+    initModelConfigUI(); // V3.0 阶段二：模型配置中心
 
     window.onload = fetchData;
   </script>

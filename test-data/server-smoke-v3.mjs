@@ -96,7 +96,7 @@ function noPlaceholders(text) {
   r = await request('GET', '/api/not-exist-path');
   check('GET /api/未命中 -> JSON 404', r.status === 404 && r.json && r.json.success === false, r.json);
   r = await request('GET', '/api/models');
-  check('/api/models 阶段一预留（404 JSON）', r.status === 404 && r.json && r.json.success === false, r.json);
+  check('/api/models 阶段二已可用（success + 数组）', r.status === 200 && r.json && r.json.success === true && Array.isArray(r.json.data), r.json && { status: r.status });
   r = await request('OPTIONS', '/api/projects', undefined);
   check('OPTIONS 预检 -> 204 + Access-Control-Allow-Origin', (r.status === 204 || r.status === 200) && r.headers.get('access-control-allow-origin') === '*', { status: r.status, acao: r.headers.get('access-control-allow-origin') });
 

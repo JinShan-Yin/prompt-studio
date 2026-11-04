@@ -105,23 +105,35 @@ test('EADDRINUSE 自动处理：定位 PID + 强杀 + 重试一次 + 手动释�
 });
 
 console.log('');
-console.log('[3] 接口平移完整性（24 条，models 阶段二预留）');
+console.log('[3] 接口平移完整性（29 条，含阶段二多模型 + 阶段四新接口）');
 const REQUIRED_ROUTES = [
   '/api/companies', '/api/companies/create', '/api/companies/update', '/api/companies/delete',
   '/api/projects', '/api/projects/create', '/api/projects/update', '/api/projects/delete',
   '/api/context/get', '/api/context/save', '/api/context/extract',
-  '/api/kb/parse', '/api/kb/save', '/api/kb/list', '/api/kb/delete',
+  '/api/kb/parse', '/api/kb/save', '/api/kb/list', '/api/kb/delete', '/api/kb/update',
   '/api/snapshots/create', '/api/snapshots/list', '/api/snapshots/detail',
   '/api/prompt/assemble', '/api/projects/export_zip',
-  '/api/gate/export', '/api/eval/run', '/api/chat/reply', '/api/settings/api-key',
+  '/api/gate/export', '/api/eval/run', '/api/eval/generate_questions', '/api/chat/reply',
+  '/api/settings/api-key', '/api/models', '/api/models/save', '/api/models/test',
 ];
 test(`全部 ${REQUIRED_ROUTES.length} 条 API 路径均已内联注册`, () => {
   const missing = REQUIRED_ROUTES.filter((routePath) => !source.includes(`'${routePath}'`));
   assert(missing.length === 0, `缺少路由: ${missing.join(', ')}`);
 });
-test('models 三接口按阶段一要求仅预留（未注册）', () => {
-  assert(!source.includes("'/api/models'"), '阶段一不应注册 /api/models');
-  assert(/阶段二/.test(source), '应保留阶段二说明');
+test('阶段二多模型接口已注册，且绝不返回完整 api_key', () => {
+  for (const routePath of ["'/api/models'", "'/api/models/save'", "'/api/models/test'"]) {
+    assert(source.includes(routePath), `阶段二缺少路由: ${routePath}`);
+  }
+  assert(/masked_key: hasKey \? maskApiKey\(row\.api_key\) : ''/.test(source), '模型列表应返回 masked_key');
+  assert(/has_key: hasKey/.test(source), '模型列表应返回 has_key');
+  assert(!/api_key:\s*row\.api_key/.test(source), '模型列表不得把完整 api_key 返回给前端');
+});
+
+test('阶段四接口：kb/update 与 eval/generate_questions 已注册', () => {
+  assert(source.includes("'/api/kb/update'"), '缺少 /api/kb/update');
+  assert(source.includes("'/api/eval/generate_questions'"), '缺少 /api/eval/generate_questions');
+  assert(/rawText\.match\(\/\\\[\[\\s\\S\]\*\\\]\/\)/.test(source), 'generate_questions 必须用正则提取 JSON 数组');
+  assert(/requestedCount >=\s*1 && requestedCount <=\s*20/.test(source), 'generate_questions 应校验 count 范围');
 });
 
 console.log('');
@@ -150,10 +162,16 @@ test('assemblePrompt（LAYER_ORDER L0,L1,L2,L3.5,L3）/ applyContextReplace / no
     assert(source.includes(fn), `缺少内联函数: ${fn}`);
   }
 });
-test('chatCompletion 保持阶段一行为（config 或 .env，默认 deepseek 配置，p-limit 并发 5）', () => {
+test('chatCompletion 阶段二：DB 激活模型动态路由 + .env 回退 + 失败重试 + 60s 超时 + p-limit(5)', () => {
   assert(/process\.env\[KEY_NAME\]/.test(source), '应从 .env 读取 DEEPSEEK_API_KEY');
   assert(/https:\/\/api\.deepseek\.com\/v1/.test(source), '缺少默认 base_url');
   assert(/pLimit\(5\)/.test(source), '缺少 p-limit(5) 限流');
+  assert(/SELECT \* FROM model_configs WHERE is_active = 1 ORDER BY rowid DESC LIMIT 1/.test(source), '缺少活跃模型查询 SQL');
+  assert(/function getActiveModelConfig/.test(source), '缺少 getActiveModelConfig');
+  assert(/function buildEnvLlmConfig/.test(source), '缺少 .env 回退配置构造函数');
+  assert(/自动回落 \.env 配置重试一次/.test(source), '缺少 DB 模型失败后的 .env 回退重试');
+  assert(/LLM_REQUEST_TIMEOUT_MS = 60000/.test(source) && /AbortSignal\.timeout\(timeoutMs\)/.test(source), '缺少 60s 超时');
+  assert(/redactSecrets/.test(source), '缺少错误信息脱敏（防 Key 泄露）');
 });
 
 console.log('');

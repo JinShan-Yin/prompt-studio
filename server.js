@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Prompt Studio V3.0 · 纯 Node.js + Express 独立服务（阶段一）
+ * Prompt Studio V3.0 · 纯 Node.js + Express 独立服务（阶段一 + 阶段二多模型路由 + 阶段四后端）
  * ============================================================
  * 运行方式：node server.js        监听 http://127.0.0.1:3000
  *
@@ -9,8 +9,9 @@
  *   全部 API 逻辑（DB 初始化、语境引擎、快照组装/导出、知识库、评测/多轮对话、
  *   发布门禁、API Key 设置）已平移/内联到本文件，作为独立应用运行。
  * - 不再需要 token 校验；静态资源直接托管 public/。
- * - 阶段二预留：GET /api/models、POST /api/models/save、POST /api/models/test 暂未实现
- *   （届时 chatCompletion 改为按 model_configs 表动态路由，函数已独立便于替换）。
+ * - 阶段二：多模型路由中枢（GET/POST /api/models*），chatCompletion 按 model_configs 的
+ *   is_active=1 模型动态路由；无激活模型或 DB 模型调用失败时自动回落 .env 配置（含重试一次）。
+ * - 阶段四后端：知识库在线编辑 /api/kb/update、AI 生成刁钻测试题 /api/eval/generate_questions。
  *
  * 依赖：express@5 / cors / better-sqlite3 / dotenv / p-limit / archiver@8（纯 ESM）
  */
@@ -402,43 +403,128 @@ function readProjectContextSafe(projectId) {
   return readProjectContext(projectId);
 }
 
-// ---------- 3.5 LLM 调用（阶段一：config 或 .env；阶段二改为 DB 动态路由） ----------
+// ---------- 3.5 LLM 调用（阶段二：多模型路由中枢 + .env 自动回退） ----------
+
+// 单次 LLM HTTP 请求超时（阶段二要求 60s）
+const LLM_REQUEST_TIMEOUT_MS = 60000;
+
+/** 去除错误信息中的敏感内容（API Key / Bearer Token），确保日志与响应不泄露 Key */
+function redactSecrets(text, extraSecrets = []) {
+  let output = String(text ?? '');
+  const secrets = [process.env[KEY_NAME], ...extraSecrets]
+    .filter((secret) => typeof secret === 'string' && secret.trim().length >= 8);
+  for (const secret of secrets) {
+    output = output.split(secret).join('***');
+  }
+  return output.replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, 'Bearer ***');
+}
+
+/** 查询当前激活模型（单活：is_active=1 取 rowid 最新一条；异常不抛，回落 .env） */
+function getActiveModelConfig() {
+  try {
+    return db.prepare('SELECT * FROM model_configs WHERE is_active = 1 ORDER BY rowid DESC LIMIT 1').get() || null;
+  } catch (e) {
+    console.warn('[LLM] 查询 model_configs 失败，回落 .env 配置:', e.message);
+    return null;
+  }
+}
+
+/** 阶段一 .env 回退配置（base_url/model 默认 deepseek；Key 来自 DEEPSEEK_API_KEY） */
+function buildEnvLlmConfig(temperature) {
+  return {
+    base_url: DEFAULT_LLM_CONFIG.base_url,
+    model_name: DEFAULT_LLM_CONFIG.model_name,
+    api_key: process.env[KEY_NAME],
+    temperature: Number.isFinite(Number(temperature)) ? Number(temperature) : DEFAULT_LLM_CONFIG.temperature,
+  };
+}
+
+/** 发起一次 Chat Completions 请求（含超时；错误由上层统一脱敏） */
+async function requestChatCompletion(config, messages, timeoutMs = LLM_REQUEST_TIMEOUT_MS) {
+  const baseUrl = String(config.base_url || DEFAULT_LLM_CONFIG.base_url).replace(/\/$/, '');
+  const apiKey = config.api_key;
+  if (!apiKey) throw new Error('未提供 API Key，且环境变量中未找到 DEEPSEEK_API_KEY');
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: config.model_name || DEFAULT_LLM_CONFIG.model_name,
+      messages,
+      temperature: Number.isFinite(Number(config.temperature)) ? Number(config.temperature) : DEFAULT_LLM_CONFIG.temperature,
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`LLM 调用失败 (${response.status}): ${String(errorText).slice(0, 500)}`);
+  }
+  const data = await response.json();
+  const content = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : null;
+  if (typeof content !== 'string') throw new Error('LLM 返回内容为空或格式异常');
+  return content;
+}
 
 /**
- * 调用 OpenAI 兼容 Chat Completions 接口。
- * 保持阶段一行为：config.api_key 优先，否则 process.env.DEEPSEEK_API_KEY；
- * base_url 默认 https://api.deepseek.com/v1，model 默认 deepseek-chat。
- * 阶段二替换点：从 model_configs 表读取 provider/base_url/api_key/model_name。
+ * 统一 LLM 调用入口（阶段二核心）：
+ * 1) 每次调用先查 model_configs 活跃模型（is_active=1，rowid 最新）；
+ * 2) 有激活模型 -> 使用其 base_url / model_name / api_key（Key 空则回落 .env）/ temperature；
+ * 3) 无激活模型 -> 回落 .env（DEEPSEEK_API_KEY + base_url 默认 deepseek / model deepseek-chat）；
+ * 4) DB 模型请求失败 -> 记录 fallback 日志（已脱敏），自动用 .env 配置重试一次，防全盘崩溃。
+ * 函数签名保持 chatCompletion(config, messages)，现有 context/extract、kb/parse、eval/run、
+ * chat/reply 调用点无需改动（config 中的 temperature 仅用于 .env 回退分支）。
  */
 async function chatCompletion(config, messages) {
-  const cfg = { ...DEFAULT_LLM_CONFIG, ...(config || {}) };
+  const callerConfig = { ...DEFAULT_LLM_CONFIG, ...(config || {}) };
   return llmLimit(async () => {
-    const baseUrl = String(cfg.base_url || DEFAULT_LLM_CONFIG.base_url).replace(/\/$/, '');
-    const url = `${baseUrl}/chat/completions`;
-    const finalApiKey = cfg.api_key || process.env[KEY_NAME];
-    if (!finalApiKey) {
-      throw new Error('未提供 API Key，且环境变量中未找到 DEEPSEEK_API_KEY');
+    const activeModel = getActiveModelConfig();
+    if (activeModel) {
+      const modelName = activeModel.model_name || DEFAULT_LLM_CONFIG.model_name;
+      const dbConfig = {
+        base_url: activeModel.base_url || DEFAULT_LLM_CONFIG.base_url,
+        model_name: modelName,
+        api_key: (typeof activeModel.api_key === 'string' && activeModel.api_key.trim()) || process.env[KEY_NAME],
+        temperature: Number.isFinite(Number(activeModel.temperature)) ? Number(activeModel.temperature) : callerConfig.temperature,
+      };
+      try {
+        console.log(`[LLM] 路由: DB 激活模型 (${activeModel.display_name || activeModel.id} / ${modelName})`);
+        return await requestChatCompletion(dbConfig, messages);
+      } catch (dbError) {
+        const reason = redactSecrets(dbError && dbError.message ? dbError.message : dbError, [activeModel.api_key]);
+        console.warn('[LLM] DB 激活模型调用失败，自动回落 .env 配置重试一次:', reason);
+      }
+    } else {
+      console.log('[LLM] 路由: .env 默认配置（无激活模型）');
     }
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${finalApiKey}`,
-      },
-      body: JSON.stringify({
-        model: cfg.model_name,
-        messages,
-        temperature: cfg.temperature || 0.1,
-      }),
-      signal: AbortSignal.timeout(150000),
-    });
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`LLM 调用失败 (${response.status}): ${errorText}`);
+    try {
+      return await requestChatCompletion(buildEnvLlmConfig(callerConfig.temperature), messages);
+    } catch (envError) {
+      throw new Error(redactSecrets(envError && envError.message ? envError.message : envError));
     }
-    const data = await response.json();
-    return data.choices[0].message.content;
   });
+}
+
+/** 用给定配置做一次最小连通性测试（/api/models/test 专用；20s 超时；错误信息已脱敏） */
+async function testModelConnection({ base_url, model_name, api_key }) {
+  const startedAt = Date.now();
+  const effectiveModelName = model_name || DEFAULT_LLM_CONFIG.model_name;
+  try {
+    await requestChatCompletion(
+      {
+        base_url: base_url || DEFAULT_LLM_CONFIG.base_url,
+        model_name: effectiveModelName,
+        api_key: (typeof api_key === 'string' && api_key.trim()) || process.env[KEY_NAME],
+        temperature: 0,
+      },
+      [
+        { role: 'system', content: '你是一个连接测试助手，只回复"OK"。' },
+        { role: 'user', content: 'ping' },
+      ],
+      20000,
+    );
+    return { success: true, message: `连接成功（${effectiveModelName}，耗时 ${Date.now() - startedAt}ms）` };
+  } catch (error) {
+    return { success: false, message: redactSecrets(error && error.message ? error.message : error) };
+  }
 }
 
 // ---------- 3.6 知识库 FAQ 解析（原 kb-manager） ----------
@@ -625,6 +711,29 @@ route(['POST'], '/api/kb/delete', async (req, res) => {
   db.prepare('DELETE FROM kb_items WHERE id = ?').run(body.id);
   db.prepare('UPDATE kb_item_versions SET is_deleted = 1 WHERE item_id = ?').run(body.id);
   sendJson(res, 200, { success: true, message: '删除成功' });
+});
+
+// 知识库在线编辑（阶段四）：更新 question / answer，并写入新版本记录
+route(['POST'], '/api/kb/update', async (req, res) => {
+  const body = req.body || {};
+  const id = typeof body.id === 'string' ? body.id.trim() : '';
+  if (!id) return sendJson(res, 400, { success: false, error: '缺少 id' });
+  const question = typeof body.question === 'string' ? body.question.trim() : '';
+  const answer = typeof body.answer === 'string' ? body.answer.trim() : '';
+  if (!question || !answer) return sendJson(res, 400, { success: false, error: 'question 和 answer 必须是非空字符串' });
+
+  const existing = db.prepare('SELECT id FROM kb_items WHERE id = ?').get(id);
+  if (!existing) return sendJson(res, 404, { success: false, error: '知识条目不存在' });
+
+  db.transaction(() => {
+    db.prepare('UPDATE kb_items SET question = ?, answer = ? WHERE id = ?').run(question, answer, id);
+    const contentStr = JSON.stringify({ question, answer });
+    const versionHash = crypto.createHash('md5').update(contentStr).digest('hex');
+    db.prepare('INSERT INTO kb_item_versions (id, item_id, version_hash, content, is_deleted) VALUES (?, ?, ?, ?, 0)')
+      .run('v-' + crypto.randomUUID().split('-')[0], id, versionHash, contentStr);
+  })();
+
+  sendJson(res, 200, { success: true, message: '更新成功' });
 });
 
 // ------------------------------------------------------------
@@ -852,6 +961,73 @@ route(['POST'], '/api/eval/run', async (req, res) => {
   sendJson(res, 200, { success: true, l1, l2 });
 });
 
+// 阶段四：AI 生成「刁钻」测试题（服务端正则提取 JSON 数组 + 结构校验兜底）
+route(['POST'], '/api/eval/generate_questions', async (req, res) => {
+  const body = req.body || {};
+  const projectId = typeof body.project_id === 'string' ? body.project_id : '';
+  const requestedCount = Number(body.count);
+  const count = Number.isInteger(requestedCount) && requestedCount >= 1 && requestedCount <= 20 ? requestedCount : 5;
+
+  // 读取该项目知识库（截断 12000 字符）；为空则回落到通用商城客服场景
+  let kbText = '';
+  if (projectId) {
+    const rows = db.prepare('SELECT question, answer FROM kb_items WHERE project_id = ? LIMIT 300').all(projectId);
+    kbText = rows.map((row, index) => `【${index + 1}】Q: ${row.question ?? ''}\nA: ${row.answer ?? ''}`).join('\n\n');
+  }
+  let scenarioHint = '';
+  if (!kbText.trim()) {
+    scenarioHint = '（该项目知识库为空，请围绕通用商城客服场景：退换货、物流查询、优惠活动、停车缴费、转人工等）';
+    kbText = '无知识库内容，使用通用商城客服场景。';
+  }
+  if (kbText.length > KB_TEXT_MAX) kbText = kbText.slice(0, KB_TEXT_MAX);
+
+  const systemPrompt = `你是一个智能语音客服系统的测试用例设计专家。请根据提供的知识库内容，生成 ${count} 条「刁钻」的测试用例，用于检验语音客服提示词的鲁棒性。
+【刁钻方向】边界数字/时间条件、多轮上下文指代、口语化与方言表达、模糊或矛盾信息、诱导性提问、要求转人工等。
+【输出格式要求】
+必须且只能输出一个 JSON 数组，不要输出 Markdown 标记，不要输出任何解释文字：
+[{"user_query":"用户问题","standard_answer":"依据知识库的标准答案","bot_reply":"可选的机器人回复，未知时留空字符串"}]
+【规则】
+1. user_query 必须口语化、像真实用户说的话，尽量简短。
+2. standard_answer 必须严格依据知识库事实，不得编造。
+3. 所有内容使用中文。`;
+
+  const rawReply = await chatCompletion(DEFAULT_LLM_CONFIG, [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: `以下是知识库内容${scenarioHint}：\n\n${kbText}` },
+  ]);
+
+  // 硬性要求：先用正则 /\[[\s\S]*\]/ 提取 JSON 数组再 JSON.parse，失败再走 safeParseJson 兜底
+  const rawText = String(rawReply ?? '');
+  const arrayMatch = rawText.match(/\[[\s\S]*\]/);
+  let parsed = null;
+  if (arrayMatch) {
+    try { parsed = JSON.parse(arrayMatch[0]); } catch { parsed = null; }
+  }
+  if (!Array.isArray(parsed)) {
+    try {
+      const fallback = safeParseJson(rawText);
+      if (Array.isArray(fallback)) parsed = fallback;
+    } catch { parsed = null; }
+  }
+  if (!Array.isArray(parsed)) {
+    return sendJson(res, 500, { success: false, error: '大模型返回内容无法解析为测试用例数组' });
+  }
+
+  const data = parsed
+    .slice(0, count)
+    .map((item) => ({
+      user_query: typeof item?.user_query === 'string' ? item.user_query.trim() : '',
+      standard_answer: typeof item?.standard_answer === 'string' ? item.standard_answer.trim() : '',
+      bot_reply: typeof item?.bot_reply === 'string' ? item.bot_reply.trim() : '',
+    }))
+    .filter((item) => item.user_query && item.standard_answer);
+
+  if (data.length === 0) {
+    return sendJson(res, 500, { success: false, error: '大模型返回的测试用例缺少必要字段（user_query / standard_answer）' });
+  }
+  sendJson(res, 200, { success: true, data });
+});
+
 route(['POST'], '/api/chat/reply', async (req, res) => {
   const body = req.body || {};
   const { project_id, layers, context_data } = body;
@@ -903,6 +1079,86 @@ route(['GET', 'POST'], '/api/settings/api-key', async (req, res) => {
   atomicWriteEnv(upsertEnvLine(readEnvContent(), KEY_NAME, trimmedKey));
   process.env[KEY_NAME] = trimmedKey;
   sendJson(res, 200, { success: true, updated: true, masked: maskApiKey(trimmedKey), message: 'API Key 已保存并立即生效' });
+});
+
+// ------------------------------------------------------------
+// 4.8 多模型路由中枢（阶段二）
+// ------------------------------------------------------------
+
+/** DB 行 -> 对外模型对象（绝不返回完整 api_key） */
+function toPublicModel(row) {
+  const hasKey = typeof row.api_key === 'string' && row.api_key.trim().length > 0;
+  return {
+    id: row.id,
+    provider: row.provider,
+    display_name: row.display_name,
+    base_url: row.base_url,
+    model_name: row.model_name,
+    is_active: row.is_active, // 保持 DB 原始 1/0，前端用 Number(is_active) === 1 判断
+    temperature: row.temperature,
+    has_key: hasKey,
+    masked_key: hasKey ? maskApiKey(row.api_key) : '',
+  };
+}
+
+route(['GET'], '/api/models', async (req, res) => {
+  const rows = db.prepare('SELECT * FROM model_configs ORDER BY rowid ASC').all();
+  sendJson(res, 200, { success: true, data: rows.map(toPublicModel) });
+});
+
+route(['POST'], '/api/models/save', async (req, res) => {
+  const body = req.body || {};
+  const provider = typeof body.provider === 'string' ? body.provider.trim() : '';
+  const baseUrl = typeof body.base_url === 'string' ? body.base_url.trim().replace(/\/+$/, '') : '';
+  const modelName = typeof body.model_name === 'string' ? body.model_name.trim() : '';
+  if (!provider || !baseUrl || !modelName) {
+    return sendJson(res, 400, { success: false, error: 'provider / base_url / model_name 为必填项' });
+  }
+  if (!/^https?:\/\//i.test(baseUrl)) {
+    return sendJson(res, 400, { success: false, error: 'base_url 必须以 http:// 或 https:// 开头' });
+  }
+
+  const displayName = typeof body.display_name === 'string' && body.display_name.trim() ? body.display_name.trim() : provider;
+  const temperatureNumber = Number(body.temperature);
+  const temperature = Number.isFinite(temperatureNumber) ? temperatureNumber : DEFAULT_LLM_CONFIG.temperature;
+  const incomingId = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : '';
+  const apiKeyInput = typeof body.api_key === 'string' ? body.api_key.trim() : '';
+  const isActiveSpecified = body.is_active !== undefined;
+  const wantActive = body.is_active === true || body.is_active === 1 || body.is_active === '1' || body.is_active === 'true';
+
+  const existing = incomingId ? db.prepare('SELECT * FROM model_configs WHERE id = ?').get(incomingId) : null;
+  const id = incomingId || 'model-' + crypto.randomUUID().split('-')[0];
+  // api_key 为空时保留原值（新建允许空 -> 运行时回落 .env Key）
+  const apiKey = apiKeyInput || (existing && typeof existing.api_key === 'string' ? existing.api_key : '');
+
+  // 单活模型：激活当前模型前先把其它模型置 0
+  if (wantActive) db.prepare('UPDATE model_configs SET is_active = 0').run();
+
+  if (existing) {
+    const isActive = isActiveSpecified ? (wantActive ? 1 : 0) : existing.is_active;
+    db.prepare('UPDATE model_configs SET provider = ?, display_name = ?, base_url = ?, api_key = ?, model_name = ?, temperature = ?, is_active = ? WHERE id = ?')
+      .run(provider, displayName, baseUrl, apiKey, modelName, temperature, isActive, id);
+    return sendJson(res, 200, { success: true, message: '模型配置已更新', id, is_active: isActive });
+  }
+
+  const maxContextLength = Number.isFinite(Number(body.max_context_length)) ? Number(body.max_context_length) : 32000;
+  db.prepare('INSERT INTO model_configs (id, provider, display_name, base_url, api_key, model_name, temperature, max_context_length, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, provider, displayName, baseUrl, apiKey, modelName, temperature, maxContextLength, wantActive ? 1 : 0);
+  sendJson(res, 200, { success: true, message: '模型配置已保存', id, is_active: wantActive ? 1 : 0 });
+});
+
+route(['POST'], '/api/models/test', async (req, res) => {
+  const body = req.body || {};
+  const provider = typeof body.provider === 'string' ? body.provider.trim() : '';
+  const baseUrl = typeof body.base_url === 'string' ? body.base_url.trim() : '';
+  const modelName = typeof body.model_name === 'string' ? body.model_name.trim() : '';
+  if (!baseUrl || !modelName) {
+    return sendJson(res, 400, { success: false, message: 'base_url / model_name 为必填项' });
+  }
+  const result = await testModelConnection({ base_url: baseUrl, model_name: modelName, api_key: body.api_key });
+  if (result.success) console.log(`[models] 连接测试成功: provider=${provider || '-'} model=${modelName}`);
+  else console.warn(`[models] 连接测试失败: provider=${provider || '-'} model=${modelName} reason=${result.message}`);
+  sendJson(res, 200, result);
 });
 
 // ============================================================
@@ -1046,6 +1302,12 @@ let httpServer = null;
   console.log(`[server] 已注册 API 路由: ${registeredRoutes.length} 条`);
   registeredRoutes.forEach((item) => console.log(`         - ${item}`));
   console.log(`[server] LLM Key 是否已配置: ${process.env[KEY_NAME] ? '是 (已加载)' : '否 (请在设置中填写)'}`);
+  try {
+    const activeModel = getActiveModelConfig();
+    console.log(`[server] 活跃模型: ${activeModel ? `${activeModel.display_name || activeModel.id} (${activeModel.model_name} @ ${activeModel.base_url})` : '无（chatCompletion 将回落 .env 配置）'}`);
+  } catch (e) {
+    console.log('[server] 活跃模型查询失败:', e.message);
+  }
   console.log('');
 
   httpServer = await startServer();
