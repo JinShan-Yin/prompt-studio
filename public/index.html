@@ -2,416 +2,2375 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>Prompt Studio - 提示词工程流水线</title>
-  <script src="https://cdn.bootcdn.net/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Prompt Studio - 完整工作台</title>
   <style>
-    body { font-family: system-ui, sans-serif; background-color: #f3f4f6; }
-    .tree-node { cursor: pointer; padding: 6px 12px; border-radius: 4px; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center; }
-    .tree-node:hover { background-color: #e5e7eb; }
-    .tree-node.active { background-color: #dbeafe; color: #1d4ed8; font-weight: bold; }
-    .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
-    .edit-icon { opacity: 0; transition: opacity 0.2s; cursor: pointer; }
-    .tree-node:hover .edit-icon { opacity: 1; }
+    /* ==================== Sprint3：UI 规范 v2.0 设计变量 ==================== */
+    :root {
+      /* 品牌主色 / 语义色 */
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --primary-light: #eef2ff;
+      --primary-ring: rgba(79, 70, 229, 0.18);
+      --success: #16a34a;
+      --success-light: #ecfdf5;
+      --danger: #ef4444;
+      --danger-light: #fef2f2;
+      --warning: #f59e0b;
+      --warning-strong: #b45309; /* 按钮类 warning：白字对比度 ≥4.5:1；变量高亮仍用 --warning */
+      /* 中性色 */
+      --text-main: #1f2937;
+      --text-secondary: #6b7280;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --border-strong: #d1d5db;
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-soft: #f8fafc;
+      /* 侧边栏深色主题 */
+      --sidebar-bg: #1e1b4b;
+      --sidebar-bg-soft: #2b2642;
+      --sidebar-text: #c7c9e4;
+      --sidebar-text-strong: #f1f2fb;
+      --sidebar-hover: rgba(255, 255, 255, 0.08);
+      /* 圆角 / 阴影 / 动效 */
+      --radius-card: 12px;
+      --radius-md: 8px;
+      --radius-sm: 6px;
+      --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 28px -18px rgba(15, 23, 42, 0.18);
+      --shadow-modal: 0 24px 60px -20px rgba(15, 23, 42, 0.45);
+      --font-mono: Consolas, Monaco, "Courier New", monospace;
+      --transition: all 0.18s ease;
+    }
+
+    /* 全局重置 */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: var(--bg-page); color: var(--text-main); height: 100vh; display: flex; overflow: hidden; font-size: 14px; -webkit-font-smoothing: antialiased; }
+
+    /* 布局 */
+    .app-container { display: flex; width: 100%; height: 100%; }
+
+    /* 侧边栏 */
+    .sidebar { width: 260px; background: #fff; border-right: 1px solid #e4e7ed; display: flex; flex-direction: column; z-index: 10; }
+    .logo-area { height: 60px; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid #e4e7ed; }
+    .logo-area img { height: 28px; max-width: 100%; object-fit: contain; }
+    
+    .btn-new { margin: 16px; padding: 10px; background: #fff; border: 1px solid #dcdfe6; border-radius: 6px; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 14px; color: #606266; transition: all 0.3s; }
+    .btn-new:hover { color: #409eff; border-color: #c6e2ff; background-color: #ecf5ff; }
+
+    .tree-container { flex: 1; overflow-y: auto; padding-bottom: 20px; position: relative; }
+    .menu-parent { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; cursor: pointer; color: #606266; transition: background 0.2s; user-select: none; position: relative; }
+    .menu-parent:hover { background: #f5f7fa; }
+    
+    .menu-child { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px 8px 36px; margin: 2px 12px; border-radius: 6px; cursor: pointer; color: #606266; transition: all 0.2s; position: relative; user-select: none; }
+    .menu-child:hover { background: #f5f7fa; }
+    .menu-child.active { background: #ecf5ff; color: #409eff; font-weight: 500; }
+    
+    .more-btn { padding: 4px; border-radius: 4px; color: #909399; opacity: 0.5; transition: all 0.2s; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+    .menu-parent:hover .more-btn, .menu-child:hover .more-btn { opacity: 1; background: #e4e7ed; }
+    
+    /* 下拉菜单 */
+    .custom-dropdown { position: fixed; background: #fff; border: 1px solid #ebeef5; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); z-index: 9999; min-width: 130px; padding: 6px 0; display: none; }
+    .dropdown-item { padding: 8px 16px; cursor: pointer; font-size: 13px; color: #606266; display: flex; align-items: center; gap: 8px; transition: background 0.2s; }
+    .dropdown-item:hover { background: #f5f7fa; color: #409eff; }
+    .dropdown-item.danger { color: var(--danger); }
+    .dropdown-divider { height: 1px; background: #ebeef5; margin: 4px 0; }
+
+    /* 主区域 */
+    .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .header { height: 60px; background: #fff; border-bottom: 1px solid #e4e7ed; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 5; }
+    .header-title { font-size: 16px; color: #303133; display: flex; gap: 8px; align-items: center; }
+    .header-title span { font-weight: bold; color: #409eff; font-size: 18px; }
+    
+    .content-area { flex: 1; overflow-y: auto; padding: 24px; }
+    
+    /* 卡片通用样式 */
+    .card { background: #fff; border-radius: 8px; border: 1px solid #ebeef5; box-shadow: 0 2px 12px 0 rgba(0,0,0,0.05); margin-bottom: 24px; }
+    .card-header { padding: 16px 20px; border-bottom: 1px solid #ebeef5; font-weight: bold; color: #303133; display: flex; align-items: center; justify-content: space-between; }
+    .card-body { padding: 20px; }
+    
+    /* 表单元素 */
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; font-size: 14px; color: #606266; margin-bottom: 8px; font-weight: 500; }
+    .form-textarea, .form-input { width: 100%; padding: 10px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 14px; color: #606266; font-family: inherit; resize: vertical; transition: border-color 0.2s; }
+    .form-textarea:focus, .form-input:focus { outline: none; border-color: #409eff; }
+    
+    /* 按钮 */
+    .btn { padding: 8px 16px; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; transition: all 0.3s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn-primary { background: #409eff; color: #fff; }
+    .btn-primary:hover { background: #66b1ff; }
+    .btn-success { background: #67c23a; color: #fff; }
+    .btn-success:hover { background: #85ce61; }
+    .btn-warning { background: var(--warning-strong); color: #fff; }
+    .btn-warning:hover { background: #92400e; }
+    .btn-link { background: transparent; color: #409eff; padding: 0; border: none; font-size: 13px; cursor: pointer; }
+    .btn-link:hover { text-decoration: underline; }
+    
+    /* 历史快照表格 */
+    .table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+    .table th, .table td { padding: 12px; border-bottom: 1px solid #ebeef5; color: #606266; }
+    .table th { background: #fafafa; font-weight: bold; color: #909399; }
+    .table tr:hover { background: #f5f7fa; }
+    
+    /* 状态标签 */
+    .tag { padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+    .tag-success { background: #f0f9eb; color: #67c23a; border: 1px solid #e1f3d8; }
+    .tag-danger { background: var(--danger-light); color: var(--danger); border: 1px solid #fee2e2; }
+
+    /* 知识库列表 */
+    .kb-item { padding: 12px; background: #f8f9fa; border-radius: 6px; margin-bottom: 12px; border: 1px solid #ebeef5; display: flex; justify-content: space-between; align-items: flex-start; }
+    .kb-q { font-weight: bold; color: #303133; margin-bottom: 4px; }
+    .kb-a { color: #606266; font-size: 13px; }
+    
+    /* 弹窗 */
+    .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; z-index: 10000; backdrop-filter: blur(2px); }
+    .modal-box { background: #fff; width: 400px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); overflow: hidden; }
+    .modal-header { padding: 16px 20px; font-size: 16px; font-weight: bold; border-bottom: 1px solid #ebeef5; }
+    .modal-body { padding: 20px; }
+    .modal-footer { padding: 10px 20px 20px; display: flex; justify-content: flex-end; gap: 10px; }
+    
+    /* Toast */
+    .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 6px; z-index: 99999; transition: opacity 0.3s; opacity: 0; }
+    .toast.show { opacity: 1; }
+
+    /* ==================== 模块一：编辑器高亮 / Token 统计 ==================== */
+    /* 镜像 div + 透明 textarea 叠加：两层的 font / line-height / padding / border / width / box-sizing 必须完全一致，否则高亮错位 */
+    .editor-wrap { position: relative; width: 100%; }
+    .editor-input, .editor-mirror {
+      width: 100%;
+      margin: 0;
+      padding: 10px;
+      border: 1px solid #dcdfe6;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 22px;
+      letter-spacing: normal;
+      font-weight: 400;
+      text-indent: 0;
+      tab-size: 4;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      min-height: 66px;
+    }
+    #val-L3, #mirror-L3 { min-height: 88px; }
+    .editor-mirror {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background: #fff;
+      color: #606266;
+      overflow: hidden;
+      pointer-events: none;
+      user-select: none;
+      z-index: 1;
+    }
+    textarea.editor-input {
+      position: relative;
+      z-index: 2;
+      display: block;
+      resize: none;
+      overflow: hidden;
+      background: transparent;
+      color: transparent;
+      caret-color: #333;
+    }
+    textarea.editor-input:focus { border-color: #409eff; }
+    textarea.editor-input::selection { background: rgba(64, 158, 255, 0.25); }
+
+    /* Token / 字符统计条（组装按钮上方） */
+    .editor-stats { display: flex; align-items: center; gap: 12px; padding: 8px 12px; margin-bottom: 12px; background: #f8f9fa; border: 1px dashed #dcdfe6; border-radius: 4px; font-size: 13px; color: #606266; }
+    .editor-stats .stat-strong { color: #409eff; font-weight: bold; font-family: Consolas, Monaco, monospace; }
+    .editor-stats .stat-token { color: #67c23a; font-weight: bold; font-family: Consolas, Monaco, monospace; }
+
+    /* ==================== 模块二：语境配置 Tag 输入 ==================== */
+    .var-hint { color: #f59e0b; font-weight: normal; font-size: 12px; margin-left: 4px; font-family: Consolas, Monaco, monospace; }
+    .tag-input-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 40px; padding: 6px 8px; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; cursor: text; transition: border-color 0.2s; }
+    .tag-input-wrap:focus-within { border-color: #409eff; }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px; background: #ecf5ff; color: #409eff; border: 1px solid #d9ecff; border-radius: 12px; font-size: 12px; line-height: 18px; }
+    .tag-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
+    .tag-chip-del { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: none; border-radius: 50%; background: transparent; color: #409eff; font-size: 14px; line-height: 1; cursor: pointer; transition: all 0.2s; }
+    .tag-chip-del:hover { background: #409eff; color: #fff; }
+    .tag-input { flex: 1 1 140px; min-width: 120px; padding: 4px 0; border: none; outline: none; background: transparent; font-family: inherit; font-size: 14px; color: #606266; }
+    .btn[disabled], .btn.loading { opacity: 0.6; cursor: not-allowed; }
+
+    /* ==================== 模块三：知识库增强（搜索 / 冲突检测 / 批量导入） ==================== */
+    .kb-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .kb-search-input { flex: 1 1 240px; max-width: 380px; padding: 8px 10px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px; color: #606266; font-family: inherit; outline: none; transition: border-color 0.2s; }
+    .kb-search-input:focus { border-color: #409eff; }
+    .kb-count { font-size: 12px; color: #909399; }
+    .kb-count b { color: #409eff; }
+    .kb-import-status { font-size: 12px; color: #e6a23c; }
+    .kb-banner { display: none; margin-bottom: 12px; padding: 10px 30px 10px 12px; background: var(--danger-light); border: 1px solid #fee2e2; border-radius: 4px; color: var(--danger); font-size: 13px; line-height: 1.6; position: relative; }
+    .kb-banner-close { position: absolute; top: 6px; right: 8px; border: none; background: transparent; color: var(--danger); font-size: 15px; cursor: pointer; line-height: 1; padding: 2px; }
+    .kb-banner-close:hover { color: #c45656; }
+    .kb-empty { text-align: center; color: #909399; font-size: 13px; padding: 12px 0; }
+    .kb-error { text-align: center; color: var(--danger); font-size: 13px; padding: 12px 0; }
+
+    /* ==================== 模块四：多轮对话模拟器 ==================== */
+    .chat-hint { font-size: 12px; color: #909399; margin-bottom: 10px; line-height: 1.7; }
+    .chat-messages { display: flex; flex-direction: column; gap: 10px; max-height: 360px; overflow-y: auto; padding: 12px; background: #f8f9fa; border: 1px solid #ebeef5; border-radius: 6px; margin-bottom: 12px; min-height: 80px; }
+    .chat-empty { text-align: center; color: #909399; font-size: 13px; padding: 18px 0; }
+    .chat-bubble { max-width: 78%; padding: 9px 12px; border-radius: 10px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+    .chat-bubble.user { align-self: flex-end; background: #409eff; color: #fff; border-bottom-right-radius: 2px; }
+    .chat-bubble.assistant { align-self: flex-start; background: #fff; color: #303133; border: 1px solid #e4e7ed; border-bottom-left-radius: 2px; }
+    .chat-bubble.error { align-self: flex-start; background: var(--danger-light); color: var(--danger); border: 1px solid #fee2e2; }
+    .chat-bubble.thinking { align-self: flex-start; background: #fff; color: #909399; border: 1px dashed #dcdfe6; font-style: italic; }
+    .chat-input-row { display: flex; gap: 10px; align-items: flex-end; }
+    .chat-input { flex: 1; min-height: 56px; max-height: 140px; padding: 10px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 14px; color: #606266; font-family: inherit; resize: vertical; line-height: 1.5; outline: none; transition: border-color 0.2s; }
+    .chat-input:focus { border-color: #409eff; }
+
+    /* ==================== 模块四：批处理回归测试 ==================== */
+    .batch-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .batch-file-name { font-size: 12px; color: #909399; }
+    .batch-hint { font-size: 12px; color: #909399; line-height: 1.8; margin-bottom: 12px; }
+    .batch-hint code { background: #f8f9fa; border: 1px solid #ebeef5; border-radius: 3px; padding: 1px 4px; font-family: Consolas, Monaco, monospace; color: #e6a23c; }
+    .batch-progress { display: none; margin-bottom: 12px; }
+    .batch-progress-track { height: 10px; background: #ebeef5; border-radius: 5px; overflow: hidden; }
+    .batch-progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, #409eff, #67c23a); border-radius: 5px; transition: width 0.25s ease; }
+    .batch-progress-text { font-size: 12px; color: #606266; margin-top: 6px; }
+    .batch-report { display: none; }
+    .batch-rate { font-size: 15px; font-weight: bold; margin-bottom: 10px; }
+    .batch-rate.pass { color: #67c23a; }
+    .batch-rate.fail { color: var(--danger); }
+    .batch-fail-item { padding: 10px 12px; background: #fef0f0; border: 1px solid #fde2e2; border-radius: 4px; margin-bottom: 10px; font-size: 12px; color: #606266; line-height: 1.7; }
+    .batch-fail-item .batch-fail-title { color: var(--danger); font-weight: bold; margin-bottom: 4px; }
+    .batch-fail-item .batch-k { color: #909399; }
+    .batch-all-pass { padding: 14px; text-align: center; background: #f0f9eb; border: 1px solid #e1f3d8; border-radius: 4px; color: #67c23a; font-size: 14px; font-weight: bold; }
+
+    /* ==================== Sprint3 模块七：UI 规范 v2.0 统一精修 ==================== */
+    /* ---- 侧边栏：深色主题 + 选中项左侧指示条 ---- */
+    .sidebar { background: var(--sidebar-bg); border-right: 1px solid rgba(255, 255, 255, 0.06); }
+    .logo-area { border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+    #fallback { color: var(--sidebar-text-strong) !important; }
+    .btn-new { margin: 14px 16px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); color: var(--sidebar-text-strong); border-radius: var(--radius-md); transition: var(--transition); }
+    .btn-new:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.3); color: #fff; }
+    .menu-parent { color: var(--sidebar-text); transition: var(--transition); }
+    .menu-parent:hover { background: var(--sidebar-hover); color: var(--sidebar-text-strong); }
+    .menu-child { color: var(--sidebar-text); border-radius: var(--radius-md); transition: var(--transition); }
+    .menu-child:hover { background: var(--sidebar-hover); color: var(--sidebar-text-strong); }
+    .menu-child.active { background: var(--primary); color: #fff; font-weight: 600; box-shadow: inset 3px 0 0 #fff; }
+    .menu-child.active:hover { background: var(--primary-hover); }
+    .more-btn { color: var(--sidebar-text); }
+    .menu-parent:hover .more-btn, .menu-child:hover .more-btn { opacity: 1; background: rgba(255, 255, 255, 0.16); color: #fff; }
+    /* 深色侧边栏下，renderTree 生成的 inline 浅色文字/分割线适配 */
+    .sidebar [style*="color: #909399"] { color: var(--sidebar-text) !important; }
+    .sidebar [style*="background: #e4e7ed"] { background: rgba(255, 255, 255, 0.1) !important; }
+
+    /* ---- Header：白色背景 + 系统设置齿轮 ---- */
+    .header { background: var(--bg-card); border-bottom: 1px solid var(--border); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03); }
+    .header-title { color: var(--text-secondary); }
+    .header-title span { color: var(--primary); font-weight: 700; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .env-badge { color: var(--success); background: var(--success-light); padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 500; border: 1px solid #d1fae5; }
+    .icon-btn { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-card); color: var(--text-secondary); cursor: pointer; transition: var(--transition); }
+    .icon-btn:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-light); transform: rotate(20deg); }
+    .icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--primary-ring); }
+
+    /* ---- 内容区 / 卡片：圆角、阴影、间距呼吸感 ---- */
+    .content-area { padding: 24px; }
+    .card { border-radius: var(--radius-card); border: 1px solid var(--border); box-shadow: var(--shadow-card); margin-bottom: 24px; overflow: hidden; transition: box-shadow 0.2s ease; }
+    .card:hover { box-shadow: 0 2px 4px rgba(15, 23, 42, 0.04), 0 18px 36px -18px rgba(15, 23, 42, 0.2); }
+    .card-header { padding: 16px 24px; background: var(--bg-card); color: var(--text-main); font-size: 15px; border-bottom: 1px solid var(--border); }
+    .card-body { padding: 24px; }
+    .card-header-actions { display: flex; align-items: center; gap: 16px; }
+    .editor-actions { display: flex; gap: 12px; align-items: stretch; }
+    @media (max-width: 760px) { .editor-actions { flex-direction: column; } .content-area { padding: 16px; } .card-body { padding: 16px; } .card-header { padding: 14px 16px; } }
+
+    /* ---- 表单：focus 主色边框 + 轻微 focus ring ---- */
+    .form-label { color: var(--text-main); font-size: 13px; }
+    .form-textarea, .form-input { border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--text-main); background: #fff; transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+    .form-textarea:hover, .form-input:hover { border-color: #b6bcc8; }
+    .form-textarea:focus, .form-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
+
+    /* ---- 按钮：统一 hover / focus / disabled ---- */
+    .btn { border-radius: var(--radius-sm); font-weight: 500; transition: var(--transition); }
+    .btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--primary-ring); }
+    .btn-primary { background: var(--primary); color: #fff; box-shadow: 0 1px 2px rgba(79, 70, 229, 0.22); }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-success:hover { background: #15803d; }
+    .btn-warning { background: var(--warning-strong); color: #fff; }
+    .btn-warning:hover { background: #92400e; }
+    .btn-secondary { background: #fff; color: var(--text-main); border: 1px solid var(--border-strong); }
+    .btn-secondary:hover { background: var(--bg-soft); border-color: var(--primary); color: var(--primary); }
+    .btn-link { color: var(--primary); font-weight: 500; transition: var(--transition); }
+    .btn-link:hover { color: var(--primary-hover); text-decoration: underline; }
+    .btn[disabled], .btn.loading { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+
+    /* ---- 表格：浅灰表头、行 hover、淡分割线 ---- */
+    .table th, .table td { border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+    .table thead th { background: var(--bg-soft); color: var(--text-secondary); font-weight: 600; font-size: 12px; letter-spacing: 0.04em; }
+    .table tbody tr { transition: background 0.15s ease; }
+    .table tbody tr:hover { background: var(--bg-soft); }
+    .table tbody tr:last-child td { border-bottom: none; }
+    .table td a, .table td .btn-link { white-space: nowrap; }
+
+    /* ---- Tag / 状态标识 ---- */
+    .tag { border-radius: 999px; font-weight: 500; }
+    .tag-success { background: var(--success-light); color: var(--success); border: 1px solid #d1fae5; }
+    .tag-danger { background: var(--danger-light); color: var(--danger); border: 1px solid #fee2e2; }
+
+    /* ---- 知识库 / Tag 输入 / 下拉菜单 ---- */
+    .kb-item { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius-md); transition: var(--transition); }
+    .kb-item:hover { border-color: #c7d2fe; background: var(--primary-light); }
+    .kb-q { color: var(--text-main); }
+    .kb-a { color: var(--text-secondary); }
+    .kb-search-input { border-radius: var(--radius-sm); border-color: var(--border-strong); }
+    .kb-search-input:hover { border-color: #b6bcc8; }
+    .kb-search-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
+    .custom-dropdown { border-radius: var(--radius-md); border: 1px solid var(--border); box-shadow: var(--shadow-modal); }
+    .dropdown-item { color: var(--text-main); transition: var(--transition); }
+    .dropdown-item:hover { background: var(--primary-light); color: var(--primary); }
+    .tag-chip { background: var(--primary-light); color: var(--primary); border: 1px solid #e0e7ff; }
+    .tag-chip-del { color: var(--primary); }
+    .tag-chip-del:hover { background: var(--primary); color: #fff; }
+    .tag-input-wrap { border-color: var(--border-strong); border-radius: var(--radius-sm); transition: var(--transition); }
+    .tag-input-wrap:hover { border-color: #b6bcc8; }
+    .tag-input-wrap:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
+    .tag-input { color: var(--text-main); }
+
+    /* ---- 编辑器：两层对齐规则保持完全一致，仅统一边框/focus 视觉 ---- */
+    .editor-input, .editor-mirror { border-color: var(--border-strong); border-radius: var(--radius-sm); }
+    .editor-mirror { color: var(--text-main); }
+    textarea.editor-input:hover, .editor-wrap:hover .editor-mirror { border-color: #b6bcc8; }
+    textarea.editor-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
+    .editor-stats { background: var(--bg-soft); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); color: var(--text-secondary); }
+    .editor-stats .stat-strong { color: var(--primary); }
+    .editor-stats .stat-token { color: var(--success); }
+
+    /* ---- 聊天模拟器 ---- */
+    .chat-messages { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius-md); }
+    .chat-bubble.user { background: var(--primary); color: #fff; }
+    .chat-bubble.assistant { background: #fff; color: var(--text-main); border: 1px solid var(--border); }
+    .chat-bubble.error { background: var(--danger-light); color: var(--danger); border: 1px solid #fee2e2; }
+    .chat-bubble.thinking { color: var(--text-muted); border: 1px dashed var(--border-strong); background: #fff; }
+    .chat-input { border-color: var(--border-strong); border-radius: var(--radius-sm); color: var(--text-main); }
+    .chat-input:hover { border-color: #b6bcc8; }
+    .chat-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
+
+    /* ---- 进度条 / 报告（功能色保留：主色进度、绿通过、红失败） ---- */
+    .batch-progress-track { background: #e5e7eb; }
+    .batch-progress-fill { background: linear-gradient(90deg, var(--primary), #818cf8); }
+    .batch-rate.pass { color: var(--success); }
+    .batch-rate.fail { color: var(--danger); }
+    .batch-fail-item { background: var(--danger-light); border-color: #fee2e2; border-radius: var(--radius-md); }
+    .batch-fail-item .batch-fail-title { color: var(--danger); }
+    .batch-all-pass { background: var(--success-light); border-color: #d1fae5; color: var(--success); border-radius: var(--radius-md); }
+    .kb-banner { border-radius: var(--radius-sm); }
+    .var-hint { color: var(--warning); }
+
+    /* ---- 弹窗 / Toast / 滚动条 ---- */
+    .modal-box { border-radius: var(--radius-card); border: 1px solid var(--border); box-shadow: var(--shadow-modal); }
+    .modal-header { color: var(--text-main); border-bottom: 1px solid var(--border); }
+    .modal-footer { border-top: 1px solid var(--border); }
+    .toast { background: rgba(31, 41, 55, 0.96); border-radius: var(--radius-md); box-shadow: var(--shadow-modal); font-size: 13px; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    .sidebar ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.22); }
+    /* 响应式：避免横向溢出 */
+    body { max-width: 100vw; }
+    .app-container { min-width: 0; }
+    .main-content, .content-area { min-width: 0; }
   </style>
 </head>
 <body>
-  <div id="app" class="flex h-screen overflow-hidden">
+  <div class="app-container">
     
-    <!-- 左侧导航树 -->
-    <div class="w-72 bg-white border-r border-gray-200 flex flex-col shadow-sm">
-      <div class="p-4 border-b border-gray-200">
-        <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2 mb-3">🚀 Prompt Studio</h1>
-        <div class="flex gap-2">
-          <button @click="openCompanyModal()" class="flex-1 bg-teal-500 text-white text-xs px-2 py-1.5 rounded hover:bg-teal-600 transition">+ 新建公司</button>
-          <button @click="openProjectModal()" class="flex-1 bg-blue-500 text-white text-xs px-2 py-1.5 rounded hover:bg-blue-600 transition">+ 新建项目</button>
-        </div>
+    <!-- 侧边栏 -->
+    <div class="sidebar">
+      <div class="logo-area">
+        <img src="/public/logo.png" onerror="this.style.display='none'; document.getElementById('fallback').style.display='flex';" />
+        <div id="fallback" style="display:none; font-size: 18px; font-weight: bold; color: #303133;">Prompt Studio</div>
       </div>
-      
-      <div class="flex-1 overflow-y-auto p-2">
-        <div v-for="company in companies" :key="company.id" class="mb-2">
-          <div class="tree-node text-gray-700 font-semibold" @click="company.open = !company.open">
-            <div class="flex items-center gap-1"><span>{{ company.open ? '📂' : '📁' }}</span>{{ company.name }}</div>
-            <span class="edit-icon text-gray-400 hover:text-blue-500" @click.stop="openCompanyModal(company)">✏️</span>
-          </div>
-          <div v-show="company.open" class="pl-4 mt-1 border-l-2 border-gray-100 ml-3">
-            <div v-for="project in company.children" :key="project.id" 
-                 class="tree-node text-sm" :class="{ 'active': activeProject === project.id }"
-                 @click="selectProject(project.id, project.name)">
-              <div class="flex items-center gap-1"><span>🤖</span>{{ project.name }}</div>
-              <span class="edit-icon text-gray-400 hover:text-blue-500" @click.stop="openProjectModal(project)">✏️</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <button class="btn-new" onclick="openCreateModal('project')">
+        <svg width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+        开启新项目
+      </button>
+      <div class="tree-container" id="tree-container"></div>
     </div>
 
-    <!-- 右侧工作区 -->
-    <div class="flex-1 flex flex-col h-screen bg-gray-50 overflow-y-auto">
-      <header class="bg-white shadow-sm border-b border-gray-200 p-4 flex justify-between items-center sticky top-0 z-10">
-        <h2 class="text-lg font-semibold text-gray-700">当前项目：{{ activeProject ? activeProjectName : '请选择项目' }}</h2>
-        <div class="text-sm text-gray-500">本地开发模式</div>
-      </header>
+    <!-- 主内容区 -->
+    <div class="main-content">
+      <div class="header">
+        <div class="header-title">当前项目： <span id="current-name">请选择左侧项目</span></div>
+        <div class="header-right">
+          <span class="env-badge">本地开发环境</span>
+          <button type="button" class="icon-btn" id="api-key-btn" onclick="openApiKeyModal()" title="API Key 设置" aria-label="API Key 设置">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          </button>
+        </div>
+      </div>
 
-      <main class="p-6 flex-1" v-if="activeProject">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          
-          <!-- 提示词编辑与快照 -->
-          <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-md font-bold mb-4 flex items-center gap-2"><span>🧩</span> 提示词编辑与快照</h3>
-            <div class="space-y-3 mb-4">
-              <div><label class="block text-sm font-medium text-gray-700">L0 全局安全基座</label><textarea v-model="layersContent.L0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border text-sm" rows="2"></textarea></div>
-              <div><label class="block text-sm font-medium text-gray-700">L1 语音基座</label><textarea v-model="layersContent.L1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border text-sm" rows="2"></textarea></div>
-              <div><label class="block text-sm font-medium text-gray-700">L3 项目专属话术</label><textarea v-model="layersContent.L3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border text-sm" rows="2"></textarea></div>
+      <!-- 核心功能区 (默认隐藏，选中项目后显示) -->
+      <div class="content-area" id="main-content" style="display: none;">
+        
+        <!-- 卡片1：提示词编辑 -->
+        <div class="card">
+          <div class="card-header">📝 提示词编辑与快照</div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">L0 全局安全基座</label>
+              <div class="editor-wrap">
+                <div class="editor-mirror" id="mirror-L0" aria-hidden="true"></div>
+                <textarea id="val-L0" class="form-textarea editor-input" rows="2" spellcheck="false"></textarea>
+              </div>
             </div>
-            
-            <button @click="testSnapshot" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition">组装并生成快照 (强制执行评测)</button>
-            <pre v-if="snapshotResult" class="mt-4 bg-gray-900 text-indigo-300 p-3 rounded text-sm overflow-x-auto whitespace-pre-wrap">{{ snapshotResult }}</pre>
+            <div class="form-group">
+              <label class="form-label">L1 语音基座</label>
+              <div class="editor-wrap">
+                <div class="editor-mirror" id="mirror-L1" aria-hidden="true"></div>
+                <textarea id="val-L1" class="form-textarea editor-input" rows="2" spellcheck="false"></textarea>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">L3 项目专属话术</label>
+              <div class="editor-wrap">
+                <div class="editor-mirror" id="mirror-L3" aria-hidden="true"></div>
+                <textarea id="val-L3" class="form-textarea editor-input" rows="3" spellcheck="false"></textarea>
+              </div>
+            </div>
+            <div class="editor-stats" id="editor-stats">
+              <span>总字符数：<span class="stat-strong" id="stats-chars">0</span></span>
+              <span style="color:#dcdfe6;">|</span>
+              <span>预估 Token：<span class="stat-token" id="stats-tokens">0</span></span>
+              <span style="margin-left:auto; color:#c0c4cc; font-size:12px;">Token ≈ 字符数 × 0.6（向上取整）</span>
+            </div>
+            <div class="editor-actions">
+              <button class="btn btn-primary" id="generate-snapshot-btn" onclick="generateSnapshot()" style="flex: 1;">组装并生成快照</button>
+              <button class="btn btn-secondary" id="copy-prompt-btn" type="button" onclick="copyPromptAsText()">📋 复制为 NewLync Text</button>
+            </div>
           </div>
+        </div>
 
-          <!-- 知识库列表管理 -->
-          <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex justify-between items-center mb-4">
-              <h3 class="text-md font-bold flex items-center gap-2"><span>🗂️</span> 知识库列表</h3>
-              <button @click="loadKbList" class="text-sm text-blue-500 hover:underline">刷新列表</button>
-            </div>
-            
-            <div v-if="kbList.length === 0" class="text-gray-400 text-sm text-center py-4">暂无数据</div>
-            <ul v-else class="max-h-60 overflow-y-auto text-sm bg-gray-50 p-2 rounded border mb-3">
-              <li v-for="item in kbList" :key="item.id" class="mb-2 border-b pb-1 flex justify-between items-start">
-                <div class="flex-1 pr-2">
-                  <span class="font-semibold text-teal-700">Q: {{ item.question }}</span><br>
-                  <span class="text-gray-600">A: {{ item.answer }}</span>
-                </div>
-                <button @click="deleteKb(item.id)" class="text-red-500 text-xs hover:underline mt-1">删除</button>
-              </li>
-            </ul>
-            
-            <div class="mt-4 border-t pt-4">
-              <textarea v-model="kbText" placeholder="在此粘贴新知识文本..." class="w-full border border-gray-300 rounded p-2 text-sm mb-2" rows="2"></textarea>
-              <button @click="parseKb" class="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700 transition">解析文本</button>
-            </div>
-            <div v-if="kbPairs.length > 0" class="mt-2 border-t pt-2">
-              <h4 class="font-bold text-sm mb-2 text-gray-700">待确认 ({{ kbPairs.length }} 条)</h4>
-              <ul class="max-h-32 overflow-y-auto text-sm bg-gray-50 p-2 rounded border mb-2">
-                <li v-for="(pair, idx) in kbPairs" :key="idx" class="mb-1 border-b">
-                  <span class="font-semibold text-teal-700">Q: {{ pair.question }}</span><br><span class="text-gray-600">A: {{ pair.answer }}</span>
-                </li>
-              </ul>
-              <button @click="saveKb" class="bg-green-600 text-white px-4 py-1.5 rounded hover:bg-green-700 transition">确认入库</button>
-            </div>
-            <pre v-if="kbResult" class="mt-2 bg-gray-900 text-teal-300 p-2 rounded text-xs overflow-x-auto whitespace-pre-wrap">{{ kbResult }}</pre>
+        <!-- 语境配置卡片（模块二：公共基座与语境） -->
+        <div class="card">
+          <div class="card-header">
+            <span>🎯 语境配置</span>
+            <button class="btn btn-primary" id="ctx-extract-btn" type="button" onclick="aiExtractContext()" style="padding: 6px 14px; font-size: 13px;">
+              <span class="ctx-extract-label">✨ AI 智能提取</span>
+            </button>
           </div>
-
-          <!-- 智能体评测与导出 (用于生成快照时的数据参考) -->
-          <div class="bg-white rounded-lg shadow p-6 border-2 border-indigo-100">
-            <h3 class="text-md font-bold mb-4 flex items-center gap-2"><span>⚖️</span> 评测数据 (生成快照时将使用此数据)</h3>
-            <div class="space-y-2 mb-4">
-               <input v-model="evalData.user_query" placeholder="模拟用户提问" class="w-full border p-2 text-sm rounded">
-               <input v-model="evalData.standard_answer" placeholder="标准答案" class="w-full border p-2 text-sm rounded">
-               <textarea v-model="evalData.bot_reply" placeholder="机器人实际回复" class="w-full border p-2 text-sm rounded" rows="2"></textarea>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">行业 <span class="var-hint">{{industry}}</span></label>
+              <input id="ctx-industry" class="form-input" type="text" placeholder="例如：汽车服务 / 金融 / 电商零售" />
             </div>
-            <div class="flex gap-2">
-              <button @click="runEval" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 transition">单独测试评测</button>
+            <div class="form-group">
+              <label class="form-label">业务场景 <span class="var-hint">{{business_scene}}</span></label>
+              <div class="tag-input-wrap" id="ctx-scene-wrap">
+                <div class="tag-list" id="ctx-scene-tags"></div>
+                <input id="ctx-scene-input" class="tag-input" type="text" placeholder="输入后按回车添加，可添加多个" />
+              </div>
             </div>
-            <pre v-if="evalResult" class="mt-4 bg-gray-900 text-orange-300 p-3 rounded text-sm overflow-x-auto whitespace-pre-wrap">{{ evalResult }}</pre>
+            <div class="form-group">
+              <label class="form-label">核心目标 <span class="var-hint">{{core_goal}}</span></label>
+              <div class="tag-input-wrap" id="ctx-goal-wrap">
+                <div class="tag-list" id="ctx-goal-tags"></div>
+                <input id="ctx-goal-input" class="tag-input" type="text" placeholder="输入后按回车添加，可添加多个" />
+              </div>
+            </div>
+            <div style="font-size: 12px; color: #909399;">提示：生成快照时会用这些字段替换 L0/L1/L3 中的 <span style="color:#f59e0b; font-family: Consolas, Monaco, monospace;">{{变量}}</span> 并持久化到快照中。</div>
           </div>
+        </div>
 
-          <!-- 历史快照中心 -->
-          <div class="bg-white rounded-lg shadow p-6 lg:col-span-2">
-            <div class="flex justify-between items-center mb-4">
-              <h3 class="text-md font-bold flex items-center gap-2"><span>🕒</span> 历史快照中心</h3>
-              <button @click="loadSnapshots" class="text-sm text-blue-500 hover:underline">刷新列表</button>
+        <!-- 卡片2：知识库列表（模块三：搜索 / 冲突检测 / 批量导入 TXT） -->
+        <div class="card">
+          <div class="card-header">
+            <span>📚 知识库列表</span>
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <button class="btn-link" onclick="loadKbList()">刷新列表</button>
+              <button class="btn-link" id="kb-conflict-btn" onclick="detectKbConflicts()">⚠️ 冲突检测</button>
+              <button class="btn-link" id="kb-import-btn" onclick="document.getElementById('kb-import-files').click()">📥 批量导入 TXT</button>
             </div>
-            
-            <div v-if="snapshotList.length === 0" class="text-gray-400 text-sm text-center py-4">暂无历史快照</div>
-            <table v-else class="w-full text-sm text-left border">
-              <thead class="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+          </div>
+          <div class="card-body">
+            <div class="kb-toolbar">
+              <input id="kb-search" class="kb-search-input" type="text" placeholder="🔍 搜索知识库（问题或答案关键字）..." oninput="renderKbList()" />
+              <span class="kb-count" id="kb-count">共 0 条</span>
+              <span class="kb-import-status" id="kb-import-status"></span>
+            </div>
+            <input type="file" id="kb-import-files" accept=".txt,text/plain" multiple style="display: none;" onchange="handleKbImport(event.target.files)" />
+            <div class="kb-banner" id="kb-banner">
+              <span id="kb-banner-text"></span>
+              <button type="button" class="kb-banner-close" title="关闭" onclick="hideKbConflictBanner()">×</button>
+            </div>
+            <div id="kb-list-container" style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+              <div class="kb-empty">暂无数据</div>
+            </div>
+            <div style="border-top: 1px solid #ebeef5; padding-top: 16px;">
+              <textarea id="kb-text" class="form-textarea" rows="2" placeholder="在此粘贴 FAQ 文本..." style="margin-bottom: 10px;"></textarea>
+              <button class="btn btn-success" onclick="parseKb()">解析文本</button>
+              <button class="btn btn-primary" id="save-kb-btn" onclick="saveKb()" style="display: none;">确认入库</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 卡片3：多轮对话模拟器（模块四） -->
+        <div class="card">
+          <div class="card-header">
+            <span>🗣️ 多轮对话模拟器</span>
+            <button class="btn-link" id="chat-clear-btn" onclick="clearChat()">清空对话</button>
+          </div>
+          <div class="card-body">
+            <div class="chat-hint">使用当前 L0 / L1 / L3 与语境配置组装 System Prompt，每次发送都会请求 DeepSeek 生成回复。Enter 发送，Shift+Enter 换行（中文输入法组合态下回车不会误发送）。</div>
+            <div id="chat-messages" class="chat-messages">
+              <div class="chat-empty">暂无对话，输入消息开始多轮测试</div>
+            </div>
+            <div class="chat-input-row">
+              <textarea id="chat-input" class="chat-input" rows="2" placeholder="输入消息，Enter 发送（Shift+Enter 换行）..."></textarea>
+              <button class="btn btn-primary" id="chat-send-btn" type="button" onclick="sendChatMessage()">发送</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 卡片4：批处理回归测试（模块四） -->
+        <div class="card">
+          <div class="card-header">
+            <span>🧪 批处理回归测试</span>
+          </div>
+          <div class="card-body">
+            <div class="batch-hint">
+              JSON 格式：数组，元素包含 <code>user_query</code>、<code>standard_answer</code>，可选 <code>bot_reply</code>（缺省时先调用 /api/chat/reply 自动生成回复）。也兼容 <code>question/query</code>、<code>answer/expected</code>、<code>reply</code> 字段。
+            </div>
+            <div class="batch-toolbar">
+              <input type="file" id="batch-file" accept=".json,application/json" style="display: none;" onchange="handleBatchFile(event.target.files)" />
+              <button class="btn btn-warning" id="batch-select-btn" type="button" onclick="document.getElementById('batch-file').click()">📂 选择用例 JSON</button>
+              <button class="btn btn-primary" id="batch-run-btn" type="button" onclick="runBatchRegression()" disabled>▶ 开始回归测试</button>
+              <span class="batch-file-name" id="batch-file-name">尚未选择文件</span>
+            </div>
+            <div class="batch-progress" id="batch-progress">
+              <div class="batch-progress-track"><div class="batch-progress-fill" id="batch-progress-bar"></div></div>
+              <div class="batch-progress-text" id="batch-progress-text">已完成 0/0（0%）</div>
+            </div>
+            <div class="batch-report" id="batch-report"></div>
+          </div>
+        </div>
+
+        <!-- 卡片5：历史快照中心 -->
+        <div class="card">
+          <div class="card-header">
+            <span>🕒 历史快照中心</span>
+            <div class="card-header-actions">
+              <button class="btn-link" onclick="loadSnapshots()">刷新列表</button>
+              <button class="btn-link" id="export-zip-btn" onclick="exportProjectZip()">📦 批量导出 Zip</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <table class="table">
+              <thead>
                 <tr>
-                  <th class="px-4 py-2">快照 ID</th>
-                  <th class="px-4 py-2">生成时间</th>
-                  <th class="px-4 py-2">评测状态</th>
-                  <th class="px-4 py-2 text-right">操作</th>
+                  <th>快照 ID</th>
+                  <th>生成时间</th>
+                  <th>评测状态</th>
+                  <th style="text-align: right;">操作</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr v-for="snap in snapshotList" :key="snap.id" class="border-b hover:bg-gray-50">
-                  <td class="px-4 py-2 font-mono text-xs text-indigo-600">{{ snap.id }}</td>
-                  <td class="px-4 py-2 text-gray-500">{{ new Date(snap.created_at).toLocaleString() }}</td>
-                  <td class="px-4 py-2">
-                    <span v-if="snap.eval_pass === 1" class="text-green-600 font-bold">✅ 通过 ({{ snap.eval_score }}分)</span>
-                    <span v-else class="text-red-500 font-bold">❌ 未通过 ({{ snap.eval_score }}分)</span>
-                  </td>
-                  <td class="px-4 py-2 text-right">
-                    <button @click="downloadSpecificSnapshot(snap.id)" :disabled="snap.eval_pass !== 1" class="bg-gray-800 text-white px-3 py-1 rounded text-xs hover:bg-black transition disabled:opacity-30 disabled:cursor-not-allowed">下载 TXT</button>
-                  </td>
-                </tr>
+              <tbody id="snapshot-tbody">
+                <tr><td colspan="4" style="text-align: center; color: #909399;">暂无历史快照</td></tr>
               </tbody>
             </table>
           </div>
-
         </div>
-      </main>
 
-      <div v-else class="flex-1 flex flex-col items-center justify-center text-gray-400 bg-gray-50">
-        <div class="text-6xl mb-4">👈</div><p class="text-lg">请在左侧选择一个项目开始工作，或点击左上角新建</p>
+      </div>
+
+      <!-- 空状态 -->
+      <div class="content-area" id="empty-state" style="display: flex; align-items: center; justify-content: center; color: #909399;">
+        <p>请在左侧选择一个项目开始工作</p>
       </div>
     </div>
+  </div>
 
-    <!-- 新建/编辑 公司弹窗 -->
-    <div v-if="companyModal.show" class="modal-mask">
-      <div class="bg-white rounded-lg p-6 w-96 shadow-xl">
-        <h3 class="text-lg font-bold mb-4">{{ companyModal.isEdit ? '修改公司名称' : '新建公司' }}</h3>
-        <label class="block text-sm mb-1">公司/类型名称</label>
-        <input v-model="companyModal.name" type="text" class="w-full border rounded p-2 mb-4 text-sm" placeholder="例如：阿里旅游公司">
-        <div class="flex justify-end gap-2">
-          <button @click="companyModal.show = false" class="px-4 py-2 border rounded text-sm">取消</button>
-          <button @click="saveCompany" class="px-4 py-2 bg-teal-600 text-white rounded text-sm">保存</button>
+  <!-- 下拉菜单、弹窗、Toast 容器 -->
+  <div id="global-dropdown" class="custom-dropdown"></div>
+  <div id="global-modal" class="modal-mask">
+    <div class="modal-box">
+      <div class="modal-header" id="modal-title">标题</div>
+      <div class="modal-body">
+        <div id="modal-message" style="display: none; color: #606266; margin-bottom: 10px;"></div>
+        <div id="modal-company-select-container" style="display:none;">
+          <select id="modal-company-select" class="form-input"></select>
+        </div>
+        <div id="modal-input-container">
+          <input type="text" id="modal-input" class="form-input" placeholder="请输入名称...">
         </div>
       </div>
-    </div>
-
-    <!-- 新建/编辑 项目弹窗 -->
-    <div v-if="projectModal.show" class="modal-mask">
-      <div class="bg-white rounded-lg p-6 w-96 shadow-xl">
-        <h3 class="text-lg font-bold mb-4">{{ projectModal.isEdit ? '修改项目名称' : '新建项目' }}</h3>
-        <div v-if="!projectModal.isEdit">
-          <label class="block text-sm mb-1">所属公司</label>
-          <select v-model="projectModal.company_id" class="w-full border rounded p-2 mb-3 text-sm">
-            <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
-          </select>
-        </div>
-        <label class="block text-sm mb-1">项目名称</label>
-        <input v-model="projectModal.name" type="text" class="w-full border rounded p-2 mb-4 text-sm" placeholder="例如：GPT-v4接线员">
-        <div class="flex justify-end gap-2">
-          <button @click="projectModal.show = false" class="px-4 py-2 border rounded text-sm">取消</button>
-          <button @click="saveProject" class="px-4 py-2 bg-blue-600 text-white rounded text-sm">保存</button>
-        </div>
+      <div class="modal-footer">
+        <button class="btn btn-link" style="color:#606266;" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" id="modal-confirm-btn">确定</button>
       </div>
     </div>
   </div>
 
   <script>
-    const { createApp, ref, onMounted } = Vue;
+    const token = new URLSearchParams(window.location.search).get('token') || '';
+    let companies = [];
+    let activeProjectId = '';
+    let pinnedIds = JSON.parse(localStorage.getItem('pinnedIds') || '[]');
+    let currentDropdownTarget = null;
+    let currentKbPairs = []; // 暂存解析出来的问答对
 
-    createApp({
-      setup() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const token = urlParams.get('token') || '';
+    // --- 工具函数 ---
+    function showToast(msg) {
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.innerText = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.classList.add('show'), 10);
+      setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 2500);
+    }
 
-        const companies = ref([]);
-        const activeProject = ref('');
-        const activeProjectName = ref('');
-        const companyModal = ref({ show: false, isEdit: false, id: '', name: '' });
-        const projectModal = ref({ show: false, isEdit: false, id: '', company_id: '', name: '' });
+    // 安全 JSON 解析工具，防止后端返回 HTML 报错导致前端崩溃
+    async function safeFetchJson(url, options = {}) {
+      const res = await fetch(url, options);
+      const text = await res.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.error('接口返回非 JSON 格式，原始内容：', text);
+        throw new Error(`接口异常 (HTTP ${res.status})，请检查后端服务`);
+      }
+    }
 
-        const lastSnapshotId = ref(''); 
-        const snapshotList = ref([]);
-        
-        // 默认的提示词内容
-        const defaultLayers = { L0: '你是一个客服机器人，严禁使用 Markdown。', L1: '所有回复必须简短，播报电话号码时必须逐位播报。', L3: '用户问好时，请用 1. 2. 3. 列出回答，并称呼用户为老板。' };
-        const layersContent = ref({ ...defaultLayers });
+    // --- 数据获取与左侧渲染 ---
+    async function fetchData() {
+      try {
+        const cJson = await safeFetchJson(`/api/companies?token=${token}`);
+        const pJson = await safeFetchJson(`/api/projects?token=${token}`);
+        if (cJson.success && pJson.success) {
+          companies = cJson.data.map(c => ({ ...c, open: true, children: pJson.data.filter(p => p.company_id === c.id) }));
+          renderTree();
+        }
+      } catch (e) { console.error(e); }
+    }
 
-        const evalData = ref({ user_query: '停车怎么收费？', standard_answer: '首小时8元，全天封顶50元。', bot_reply: '<speak>老板您好，停车费首小时10元，封顶100元。</speak>' });
-        const evalResult = ref('');
-        
-        const kbText = ref(''); 
-        const kbPairs = ref([]); 
-        const kbResult = ref('');
-        const kbList = ref([]);
+    function renderTree() {
+      const container = document.getElementById('tree-container');
+      let html = '';
 
-        async function fetchData() {
+      // 渲染置顶区
+      let pinnedHtml = '';
+      companies.forEach(c => {
+        if (pinnedIds.includes(c.id)) pinnedHtml += createTreeItemHTML(c, 'company', true);
+        c.children.forEach(p => {
+          if (pinnedIds.includes(p.id)) pinnedHtml += createTreeItemHTML(p, 'project', true);
+        });
+      });
+      if (pinnedHtml) {
+        html += `<div style="padding: 8px 16px; font-size: 12px; color: #909399;">置顶</div>${pinnedHtml}<div style="height: 1px; background: #e4e7ed; margin: 8px 16px;"></div>`;
+      }
+
+      // 渲染全部
+      companies.forEach(c => {
+        html += `
+          <div class="menu-parent" onclick="toggleCompany('${c.id}')">
+            <div style="display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden;">
+              <span style="font-size: 12px; color: #909399; flex-shrink:0;">${c.open ? '▼' : '▶'}</span>
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
+            </div>
+            <div class="more-btn" onclick="showMenu(event, '${c.id}', 'company')">
+               <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+            </div>
+          </div>
+          <div style="display: ${c.open ? 'block' : 'none'};">
+            ${c.children.map(p => createTreeItemHTML(p, 'project', false)).join('')}
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function createTreeItemHTML(item, type, isPinned) {
+      let activeClass = activeProjectId === item.id ? 'active' : '';
+      let paddingStyle = isPinned ? 'margin-left: 16px; padding-left: 16px;' : '';
+      return `
+        <div class="menu-child ${activeClass}" style="${paddingStyle}" onclick="selectProject('${item.id}', '${item.name}')">
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex:1; padding-right:8px;">${item.name}</span>
+          <div class="more-btn" onclick="showMenu(event, '${item.id}', '${type}')">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleCompany(id) {
+      const c = companies.find(x => x.id === id);
+      if (c) { c.open = !c.open; renderTree(); }
+    }
+
+    function selectProject(id, name) {
+      activeProjectId = id;
+      document.getElementById('current-name').innerText = name;
+      document.getElementById('main-content').style.display = 'block';
+      document.getElementById('empty-state').style.display = 'none';
+      renderTree();
+      
+      // 选中项目后，清空旧数据并重新拉取该项目的知识库和快照
+      document.getElementById('kb-list-container').innerHTML = '<div class="kb-empty">加载中...</div>';
+      document.getElementById('snapshot-tbody').innerHTML = '<tr><td colspan="4" style="text-align: center; color: #909399;">加载中...</td></tr>';
+      // 模块三：清空搜索关键字 / 缓存 / 冲突横幅 / 导入进度
+      currentKbData = [];
+      const kbSearchEl = document.getElementById('kb-search');
+      if (kbSearchEl) kbSearchEl.value = '';
+      hideKbConflictBanner();
+      setKbImportStatus('');
+      // 模块四：重置多轮对话与批量回归状态（替换原单轮评测的 eval-result 重置）
+      resetChatState();
+      resetBatchState();
+      // 模块五：切换项目使在途的快照回滚失效，避免旧项目 layers 写入新项目编辑器
+      rollbackSeq++;
+      currentKbPairs = [];
+      document.getElementById('save-kb-btn').style.display = 'none';
+      document.getElementById('kb-text').value = '';
+
+      loadKbList();
+      loadSnapshots();
+
+      // 模块一：高亮层 / 高度 / Token 统计刷新（选中项目后主动刷新一次）
+      refreshAllEditorMirrors();
+      updateEditorStats();
+      // 模块二：加载该项目的语境配置（先 clearContext 清空，再异步回填）
+      loadProjectContext(id);
+    }
+
+    // --- 右侧功能区逻辑 ---
+
+    // 1. 生成快照（并发保护：生成中忽略重复触发，Ctrl+S 与按钮共用）
+    let snapshotPending = false;
+    async function generateSnapshot() {
+      if (!activeProjectId) {
+        showToast('请先选择一个项目');
+        return;
+      }
+      if (snapshotPending) {
+        showToast('正在生成快照，请稍候');
+        return;
+      }
+      snapshotPending = true;
+      const l0 = document.getElementById('val-L0').value;
+      const l1 = document.getElementById('val-L1').value;
+      const l3 = document.getElementById('val-L3').value;
+
+      try {
+        const d = await safeFetchJson(`/api/snapshots/create?token=${token}`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            project_id: activeProjectId,
+            layers: [
+              { layer: "L0", name: "全局安全", content: l0 },
+              { layer: "L1", name: "语音基座", content: l1 },
+              { layer: "L3", name: "项目话术", content: l3 }
+            ],
+            evalData: { user_query: '测试', standard_answer: '测试', bot_reply: '<speak>测试</speak>' },
+            context_data: getContextDataForSnapshot()
+          })
+        });
+        if (d.success) {
+          showToast(`快照生成成功！`);
+          loadSnapshots(); // 刷新表格
+        } else {
+          showToast('生成失败: ' + d.error);
+        }
+      } catch (e) { showToast('请求失败，请检查后端'); }
+      finally { snapshotPending = false; }
+    }
+
+    // 2. 知识库管理
+    // ---------- 模块三：知识库增强（搜索 / 冲突检测 / 批量导入） ----------
+    /** 通用 HTML 转义：所有拼接进 innerHTML 的 KB/报告文本必须先经过这里 */
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+    window.escapeHtml = escapeHtml;
+
+    let currentKbData = []; // 知识库缓存（搜索/冲突检测基于此渲染，避免重复请求）
+
+    async function loadKbList() {
+      if (!activeProjectId) return;
+      const projectIdAtFetch = activeProjectId;
+      const container = document.getElementById('kb-list-container');
+      container.innerHTML = '<div class="kb-empty">加载中...</div>';
+      try {
+        const d = await safeFetchJson(`/api/kb/list?token=${token}&project_id=${encodeURIComponent(projectIdAtFetch)}`);
+        // 项目守卫：响应回来前已切换项目则丢弃，避免旧项目 KB 覆盖新项目
+        if (activeProjectId !== projectIdAtFetch) return;
+        currentKbData = d && d.success && Array.isArray(d.data) ? d.data : [];
+        renderKbList();
+      } catch (e) {
+        if (activeProjectId !== projectIdAtFetch) return;
+        currentKbData = [];
+        container.innerHTML = `<div class="kb-error">${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    /** 按关键字过滤并渲染知识库列表（问题+答案，trim 后大小写不敏感），同时更新计数 */
+    function renderKbList() {
+      const container = document.getElementById('kb-list-container');
+      if (!container) return;
+      const searchEl = document.getElementById('kb-search');
+      const keyword = (searchEl ? searchEl.value : '').trim().toLowerCase();
+      const all = Array.isArray(currentKbData) ? currentKbData : [];
+      const matched = keyword
+        ? all.filter((item) => `${item.question || ''}\n${item.answer || ''}`.toLowerCase().includes(keyword))
+        : all;
+      const countEl = document.getElementById('kb-count');
+      if (countEl) {
+        countEl.innerHTML = keyword
+          ? `共 ${all.length} 条 / 匹配 <b>${matched.length}</b> 条`
+          : `共 <b>${all.length}</b> 条`;
+      }
+      if (all.length === 0) {
+        container.innerHTML = '<div class="kb-empty">暂无知识条目</div>';
+        return;
+      }
+      if (matched.length === 0) {
+        container.innerHTML = '<div class="kb-empty">无匹配条目</div>';
+        return;
+      }
+      container.innerHTML = matched.map((item) => `
+        <div class="kb-item">
+          <div style="flex:1;">
+            <div class="kb-q">Q: ${escapeHtml(item.question)}</div>
+            <div class="kb-a">A: ${escapeHtml(item.answer)}</div>
+          </div>
+          <button class="btn btn-link" style="color: var(--danger); margin-left:10px;" onclick='deleteKb(${escapeHtml(JSON.stringify(String(item.id)))})'>删除</button>
+        </div>`).join('');
+    }
+    window.renderKbList = renderKbList;
+
+    /** 规范化问题：trim + 空白折叠 + 去掉末尾 ? / ？ / 。 */
+    function normalizeKbQuestion(text) {
+      return String(text == null ? '' : text).trim().replace(/\s+/g, ' ').replace(/[?？。]+$/, '').trim();
+    }
+
+    /** 冲突检测算法：同规范化问题存在 >=2 个不同 answer（trim 后比较）即冲突 */
+    function findKbConflicts(data) {
+      const groups = new Map();
+      (Array.isArray(data) ? data : []).forEach((item) => {
+        const key = normalizeKbQuestion(item.question);
+        if (!key) return;
+        const answer = String(item.answer == null ? '' : item.answer).trim();
+        if (!groups.has(key)) groups.set(key, { question: String(item.question || '').trim(), answers: [] });
+        const group = groups.get(key);
+        if (group.answers.indexOf(answer) === -1) group.answers.push(answer);
+      });
+      const conflicts = [];
+      groups.forEach((group) => { if (group.answers.length >= 2) conflicts.push(group); });
+      return conflicts;
+    }
+
+    /** KB 卡片内红色冲突横幅（可关闭） */
+    function showKbConflictBanner(conflicts) {
+      const banner = document.getElementById('kb-banner');
+      const textEl = document.getElementById('kb-banner-text');
+      if (!banner || !textEl) return;
+      const names = conflicts.slice(0, 3).map((c) => `「${escapeHtml(c.question)}」`).join('、');
+      textEl.innerHTML = `⚠️ 检测到 <b>${conflicts.length}</b> 组知识冲突：${names}${conflicts.length > 3 ? ' 等' : ''}，请人工核对后删除/合并矛盾条目。`;
+      banner.style.display = 'block';
+    }
+    function hideKbConflictBanner() {
+      const banner = document.getElementById('kb-banner');
+      if (banner) banner.style.display = 'none';
+    }
+    window.hideKbConflictBanner = hideKbConflictBanner;
+
+    /** 用 #global-modal 弹出红色冲突警告（复用现有 modal，不破坏既有功能） */
+    function showKbConflictModal(conflicts) {
+      const modal = document.getElementById('global-modal');
+      const titleEl = document.getElementById('modal-title');
+      const messageEl = document.getElementById('modal-message');
+      titleEl.innerText = `⚠️ 检测到 ${conflicts.length} 组知识冲突`;
+      titleEl.style.color = 'var(--danger)';
+      messageEl.innerHTML = conflicts.map((c, i) => `
+        <div style="margin-bottom: 10px;">
+          <div style="font-weight: bold; color: #303133;">${i + 1}. ${escapeHtml(c.question)}</div>
+          ${c.answers.map((a) => `<div style="color: var(--danger); margin-top: 4px;">• ${escapeHtml(a) || '（空答案）'}</div>`).join('')}
+        </div>`).join('');
+      messageEl.style.display = 'block';
+      messageEl.style.maxHeight = '320px';
+      messageEl.style.overflowY = 'auto';
+      messageEl.style.textAlign = 'left';
+      document.getElementById('modal-input-container').style.display = 'none';
+      document.getElementById('modal-company-select-container').style.display = 'none';
+      const confirmBtn = document.getElementById('modal-confirm-btn');
+      confirmBtn.className = 'btn btn-primary';
+      confirmBtn.style.background = 'var(--danger)';
+      modalCallback = () => closeModal();
+      modal.style.display = 'flex';
+    }
+
+    /** ⚠️ 冲突检测：无数据先加载，无冲突 toast 提示，有冲突 modal 红警 + 内联横幅 */
+    async function detectKbConflicts() {
+      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
+      const projectIdAtCheck = activeProjectId;
+      if (!Array.isArray(currentKbData) || currentKbData.length === 0) {
+        await loadKbList(); // 当前项目无数据时先加载
+        if (activeProjectId !== projectIdAtCheck) return; // 加载期间已切项目：丢弃
+      }
+      if (!Array.isArray(currentKbData) || currentKbData.length === 0) {
+        hideKbConflictBanner();
+        showToast('暂无知识条目，无法检测冲突');
+        return;
+      }
+      const conflicts = findKbConflicts(currentKbData);
+      if (conflicts.length === 0) {
+        hideKbConflictBanner();
+        showToast('未发现冲突');
+        return;
+      }
+      showKbConflictBanner(conflicts);
+      showKbConflictModal(conflicts);
+    }
+    window.detectKbConflicts = detectKbConflicts;
+
+    function setKbImportStatus(text) {
+      const el = document.getElementById('kb-import-status');
+      if (el) el.innerText = text || '';
+    }
+
+    /** 📥 批量导入 TXT：串行 file.text() → /api/kb/parse → /api/kb/save（不用任何外部库）
+     *  竞态修复：开头捕获 projectIdAtImport，入库固定用该 id；每个 await 后校验项目未变，变则中止提示。 */
+    async function handleKbImport(fileList) {
+      const files = Array.from(fileList || []);
+      const input = document.getElementById('kb-import-files');
+      const btn = document.getElementById('kb-import-btn');
+      if (!activeProjectId) {
+        showToast('请先选择一个项目');
+        if (input) input.value = '';
+        return;
+      }
+      if (files.length === 0) return;
+      const projectIdAtImport = activeProjectId;
+      if (btn) { btn.disabled = true; btn.classList.add('loading'); }
+      let successFiles = 0;
+      let totalPairs = 0;
+      let failedFiles = 0;
+      let skippedFiles = 0;
+      let aborted = false;
+      try {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          setKbImportStatus(`正在解析 ${i + 1}/${files.length}：${file.name}`);
           try {
-            const [compRes, projRes] = await Promise.all([
-              fetch(`/api/companies?token=${token}`), fetch(`/api/projects?token=${token}`)
-            ]);
-            const compJson = await compRes.json(); const projJson = await projRes.json();
-            if (compJson.success && projJson.success) {
-              const projects = projJson.data;
-              companies.value = compJson.data.map(comp => ({ ...comp, open: true, children: projects.filter(p => p.company_id === comp.id) }));
-              if (activeProject.value) {
-                const current = projects.find(p => p.id === activeProject.value);
-                if (current) activeProjectName.value = current.name;
-                else { activeProject.value = ''; activeProjectName.value = ''; }
-              }
-            }
-          } catch (e) { console.error('拉取数据失败', e); }
-        }
-
-        async function selectProject(id, name) {
-          activeProject.value = id; 
-          activeProjectName.value = name;
-          snapshotResult.value = ''; evalResult.value = ''; lastSnapshotId.value = '';
-          kbPairs.value = []; kbResult.value = '';
-          layersContent.value = { ...defaultLayers }; // 先恢复默认
-          
-          // 1. 自动回填最新提示词
-          try {
-            const res = await fetch(`/api/snapshots/latest?token=${token}&project_id=${id}`);
-            const json = await res.json();
-            if (json.success && json.data) {
-              // 根据 layer 标识解析回填
-              json.data.forEach(item => {
-                if (item.layer === 'L0') layersContent.value.L0 = item.content;
-                if (item.layer === 'L1') layersContent.value.L1 = item.content;
-                if (item.layer === 'L3') layersContent.value.L3 = item.content;
-              });
-            }
-          } catch (e) { console.error('回填失败', e); }
-
-          // 2. 加载列表
-          loadSnapshots();
-          loadKbList();
-        }
-
-        // --- 公司管理 ---
-        function openCompanyModal(comp = null) {
-          if (comp) companyModal.value = { show: true, isEdit: true, id: comp.id, name: comp.name };
-          else companyModal.value = { show: true, isEdit: false, id: '', name: '' };
-        }
-        async function saveCompany() {
-          if (!companyModal.value.name) return alert('名称不能为空');
-          const url = companyModal.value.isEdit ? '/api/companies/update' : '/api/companies/create';
-          const body = companyModal.value.isEdit ? { id: companyModal.value.id, name: companyModal.value.name } : { name: companyModal.value.name };
-          try {
-            const res = await fetch(`${url}?token=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-            const json = await res.json();
-            if (json.success) { companyModal.value.show = false; await fetchData(); } else alert(json.error);
-          } catch (e) { alert('网络错误'); }
-        }
-
-        // --- 项目管理 ---
-        function openProjectModal(proj = null) {
-          if (proj) projectModal.value = { show: true, isEdit: true, id: proj.id, company_id: '', name: proj.name };
-          else {
-            if (companies.value.length === 0) return alert('请先新建至少一个公司');
-            projectModal.value = { show: true, isEdit: false, id: '', company_id: companies.value[0].id, name: '' };
+            const text = await file.text();
+            if (activeProjectId !== projectIdAtImport) { aborted = true; break; }
+            if (!text || !text.trim()) { skippedFiles++; continue; } // 空文件跳过
+            const parsed = await safeFetchJson(`/api/kb/parse?token=${token}`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ raw_text: text })
+            });
+            if (activeProjectId !== projectIdAtImport) { aborted = true; break; }
+            const pairs = parsed && parsed.success && Array.isArray(parsed.data) ? parsed.data : [];
+            if (pairs.length === 0) { failedFiles++; continue; }
+            const saved = await safeFetchJson(`/api/kb/save?token=${token}`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ project_id: projectIdAtImport, pairs }) // 固定写入发起导入时的项目
+            });
+            if (activeProjectId !== projectIdAtImport) { aborted = true; break; }
+            if (saved && saved.success) { successFiles++; totalPairs += pairs.length; } else { failedFiles++; }
+          } catch (e) {
+            failedFiles++;
           }
         }
-        async function saveProject() {
-          if (!projectModal.value.name) return alert('项目名称不能为空');
-          const url = projectModal.value.isEdit ? '/api/projects/update' : '/api/projects/create';
-          const body = projectModal.value.isEdit ? { id: projectModal.value.id, name: projectModal.value.name } : { company_id: projectModal.value.company_id, name: projectModal.value.name };
-          try {
-            const res = await fetch(`${url}?token=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-            const json = await res.json();
-            if (json.success) {
-              projectModal.value.show = false; await fetchData();
-              if (!projectModal.value.isEdit) selectProject(json.id, projectModal.value.name);
-            } else alert(json.error);
-          } catch (e) { alert('网络错误'); }
-        }
+      } finally {
+        setKbImportStatus('');
+        if (btn) { btn.disabled = false; btn.classList.remove('loading'); }
+        if (input) input.value = ''; // 允许再次选择同名文件
+      }
+      if (aborted) {
+        showToast('已切换项目，导入已中止');
+        return; // 新项目的列表已由 selectProject 自行加载，这里不再刷新
+      }
+      let msg = `导入完成：成功 ${successFiles} 文件 / 入库 ${totalPairs} 条`;
+      if (failedFiles > 0) msg += `，失败 ${failedFiles} 个`;
+      if (skippedFiles > 0) msg += `，跳过空文件 ${skippedFiles} 个`;
+      showToast(msg);
+      loadKbList();
+    }
+    window.handleKbImport = handleKbImport;
 
-        // --- 业务：快照与评测强绑定 ---
-        const snapshotResult = ref('');
-        async function testSnapshot() {
-          snapshotResult.value = "正在组装并强制执行评测，请稍候...";
-          try {
-            const res = await fetch(`/api/snapshots/create?token=${token}`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                project_id: activeProject.value, 
-                layers: [
-                  { layer: "L0", name: "全局安全", content: layersContent.value.L0 },
-                  { layer: "L1", name: "语音基座", content: layersContent.value.L1 },
-                  { layer: "L3", name: "项目话术", content: layersContent.value.L3 }
-                ],
-                evalData: evalData.value
-              })
-            });
-            const data = await res.json();
-            snapshotResult.value = JSON.stringify(data, null, 2);
-            if (data.success) {
-              lastSnapshotId.value = data.snapshot_id;
-              loadSnapshots(); // 刷新表格
-            }
-          } catch (e) { snapshotResult.value = "请求失败: " + e.message; }
-        }
+    /** 删除单条知识（复用 #global-modal 确认弹窗，替代原生 confirm；刷新列表时保留搜索关键字） */
+    function deleteKb(id) {
+      const modal = document.getElementById('global-modal');
+      const titleEl = document.getElementById('modal-title');
+      const messageEl = document.getElementById('modal-message');
+      titleEl.innerText = '删除知识确认';
+      titleEl.style.color = '#303133';
+      messageEl.innerText = '确定要删除这条知识吗？删除后不可恢复。';
+      messageEl.style.display = 'block';
+      messageEl.style.maxHeight = '';
+      messageEl.style.overflowY = '';
+      messageEl.style.textAlign = '';
+      document.getElementById('modal-input-container').style.display = 'none';
+      document.getElementById('modal-company-select-container').style.display = 'none';
+      const confirmBtn = document.getElementById('modal-confirm-btn');
+      confirmBtn.className = 'btn btn-primary';
+      confirmBtn.style.background = 'var(--danger)';
+      modal.style.display = 'flex';
+      modalCallback = async () => {
+        try {
+          const d = await safeFetchJson(`/api/kb/delete?token=${token}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id })
+          });
+          if (d && d.success) {
+            showToast('删除成功');
+            closeModal();
+            loadKbList(); // renderKbList 读取当前搜索框值，关键字自然保留
+          } else {
+            showToast((d && d.error) || '删除失败');
+          }
+        } catch (e) { showToast(e.message); }
+      };
+    }
 
-        async function loadSnapshots() {
-          if (!activeProject.value) return;
-          try {
-            const res = await fetch(`/api/snapshots/list?token=${token}&project_id=${activeProject.value}`);
-            const data = await res.json();
-            if (data.success) snapshotList.value = data.data;
-          } catch (e) { console.error('加载失败', e); }
-        }
+    async function parseKb() {
+      const text = document.getElementById('kb-text').value;
+      if (!text) return showToast('请先输入文本');
+      const btn = event.target;
+      btn.innerText = '解析中...'; btn.disabled = true;
 
-        function downloadSpecificSnapshot(snapId) {
-          if (!snapId) return;
-          window.open(`/api/gate/export?token=${token}&snapshot_id=${snapId}`);
-        }
+      try {
+        const d = await safeFetchJson(`/api/kb/parse?token=${token}`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ raw_text: text })
+        });
+        if (d.success) {
+          currentKbPairs = d.data;
+          showToast(`解析成功！共提取 ${d.data.length} 条问答对`);
+          document.getElementById('save-kb-btn').style.display = 'inline-block';
+          document.getElementById('save-kb-btn').innerText = `确认入库 (${d.data.length} 条)`;
+        } else { showToast('解析失败: ' + d.error); }
+      } catch (e) { showToast(e.message); }
+      btn.innerText = '解析文本'; btn.disabled = false;
+    }
 
-        // --- 业务：单独评测测试 ---
-        async function runEval() {
-          evalResult.value = "正在调用 DeepSeek 进行裁判...";
-          try {
-            const res = await fetch(`/api/eval/run?token=${token}`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(evalData.value)
-            });
-            evalResult.value = JSON.stringify(await res.json(), null, 2);
-          } catch (e) { evalResult.value = "请求失败: " + e.message; }
-        }
+    async function saveKb() {
+      if (currentKbPairs.length === 0) return;
+      const btn = document.getElementById('save-kb-btn');
+      btn.innerText = '入库中...'; btn.disabled = true;
 
-        // --- 业务：知识库管理 ---
-        async function loadKbList() {
-          if (!activeProject.value) return;
-          try {
-            const res = await fetch(`/api/kb/list?token=${token}&project_id=${activeProject.value}`);
-            const data = await res.json();
-            if (data.success) kbList.value = data.data;
-          } catch (e) { console.error(e); }
-        }
+      try {
+        const d = await safeFetchJson(`/api/kb/save?token=${token}`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, 
+          body: JSON.stringify({ project_id: activeProjectId, pairs: currentKbPairs })
+        });
+        if (d.success) {
+          showToast('入库成功');
+          document.getElementById('kb-text').value = '';
+          currentKbPairs = [];
+          btn.style.display = 'none';
+          loadKbList();
+        } else { showToast('入库失败: ' + d.error); }
+      } catch (e) { showToast(e.message); }
+      btn.innerText = '确认入库'; btn.disabled = false;
+    }
 
-        async function deleteKb(id) {
-          if (!confirm('确认删除这条知识吗？')) return;
-          try {
-            const res = await fetch(`/api/kb/delete?token=${token}`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id })
-            });
-            const data = await res.json();
-            if (data.success) loadKbList();
-            else alert(data.error);
-          } catch (e) { alert('网络错误'); }
-        }
+    // ---------- 模块四：多轮对话模拟器 ----------
+    let chatHistory = []; // 只存 {role:'user'|'assistant', content}，作为 /api/chat/reply 的 messages
+    let chatDisplay = []; // 渲染用（额外允许 error 气泡），与 chatHistory 分开以免污染上下文
+    let chatPending = false;
+    let chatSeq = 0; // 请求序号：切项目 / 重置时递增，用于丢弃在途响应，防跨项目污染
 
-        async function parseKb() {
-          if (!kbText.value) return alert('请先输入文本');
-          kbResult.value = "正在调用大模型解析...";
-          try {
-            const res = await fetch(`/api/kb/parse?token=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw_text: kbText.value }) });
-            const data = await res.json();
-            if (data.success) { kbPairs.value = data.data; kbResult.value = `解析成功！共提取 ${data.data.length} 条。`; }
-            else { kbResult.value = "解析失败: " + data.error; }
-          } catch (e) { kbResult.value = "请求失败: " + e.message; }
-        }
-        async function saveKb() {
-          if (kbPairs.value.length === 0) return;
-          kbResult.value = "正在入库...";
-          try {
-            const res = await fetch(`/api/kb/save?token=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: activeProject.value, pairs: kbPairs.value }) });
-            const data = await res.json();
-            if (data.success) { 
-              kbResult.value = data.message; kbPairs.value = []; kbText.value = ''; 
-              loadKbList(); // 刷新列表
-            }
-            else { kbResult.value = "入库失败: " + data.error; }
-          } catch (e) { kbResult.value = "请求失败: " + e.message; }
-        }
+    /** 当前 L0/L1/L3 层数据（与生成快照的 layers 结构一致） */
+    function getCurrentLayers() {
+      return [
+        { layer: 'L0', name: '全局安全', content: document.getElementById('val-L0').value },
+        { layer: 'L1', name: '语音基座', content: document.getElementById('val-L1').value },
+        { layer: 'L3', name: '项目话术', content: document.getElementById('val-L3').value }
+      ];
+    }
 
-        onMounted(() => { fetchData(); });
+    /** 重绘气泡区（全部用 textContent 渲染，防注入）；chatPending 时追加"正在思考…"占位 */
+    function renderChatBubbles() {
+      const container = document.getElementById('chat-messages');
+      if (!container) return;
+      container.innerHTML = '';
+      if (chatDisplay.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'chat-empty';
+        empty.textContent = '暂无对话，输入消息开始多轮测试';
+        container.appendChild(empty);
+        return;
+      }
+      chatDisplay.forEach((msg) => {
+        const bubble = document.createElement('div');
+        const roleClass = msg.role === 'user' ? 'user' : (msg.role === 'error' ? 'error' : 'assistant');
+        bubble.className = 'chat-bubble ' + roleClass;
+        bubble.textContent = msg.content;
+        container.appendChild(bubble);
+      });
+      if (chatPending) {
+        const thinking = document.createElement('div');
+        thinking.className = 'chat-bubble thinking';
+        thinking.textContent = '正在思考…';
+        container.appendChild(thinking);
+      }
+      container.scrollTop = container.scrollHeight;
+    }
 
-        return {
-          companies, activeProject, activeProjectName, selectProject,
-          companyModal, openCompanyModal, saveCompany,
-          projectModal, openProjectModal, saveProject,
-          layersContent, snapshotResult, testSnapshot,
-          evalData, evalResult, runEval, downloadSpecificSnapshot,
-          snapshotList, loadSnapshots,
-          kbText, kbPairs, kbResult, parseKb, saveKb, kbList, loadKbList, deleteKb
+    function resetChatState() {
+      chatSeq++; // 使在途请求失效：旧项目的响应回来后一律丢弃
+      chatHistory = [];
+      chatDisplay = [];
+      chatPending = false;
+      const input = document.getElementById('chat-input');
+      if (input) input.value = '';
+      const btn = document.getElementById('chat-send-btn');
+      if (btn) { btn.disabled = false; btn.classList.remove('loading'); }
+      renderChatBubbles();
+    }
+    window.resetChatState = resetChatState;
+
+    function clearChat() {
+      if (chatPending) { showToast('正在等待助手回复，请稍候'); return; }
+      resetChatState();
+      showToast('对话已清空');
+    }
+    window.clearChat = clearChat;
+
+    /** 发送一条消息：组装当前 L0/L1/L3 + 语境 + 历史 → POST /api/chat/reply
+     *  竞态修复：chatSeq + projectId 双守卫，切项目/重置后在途响应一律丢弃。 */
+    async function sendChatMessage() {
+      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
+      const input = document.getElementById('chat-input');
+      const btn = document.getElementById('chat-send-btn');
+      const content = (input ? input.value : '').trim();
+      if (!content || chatPending) return;
+      const seq = ++chatSeq;
+      const projectIdAtSend = activeProjectId;
+      chatPending = true;
+      chatHistory.push({ role: 'user', content });
+      chatDisplay.push({ role: 'user', content });
+      if (input) input.value = '';
+      if (btn) { btn.disabled = true; btn.classList.add('loading'); }
+      renderChatBubbles();
+      try {
+        const d = await safeFetchJson(`/api/chat/reply?token=${token}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_id: projectIdAtSend,
+            layers: getCurrentLayers(),
+            context_data: getContextDataForSnapshot(),
+            messages: chatHistory.map((m) => ({ role: m.role, content: m.content }))
+          })
+        });
+        // 在途期间已切换项目 / 已重置：丢弃响应，避免旧助手气泡出现在新项目
+        if (seq !== chatSeq || activeProjectId !== projectIdAtSend) return;
+        if (d && d.success && typeof d.reply === 'string') {
+          const reply = d.reply.trim();
+          if (!reply) {
+            chatDisplay.push({ role: 'error', content: 'AI 返回为空' });
+            showToast('AI 返回为空');
+          } else {
+            chatHistory.push({ role: 'assistant', content: reply });
+            chatDisplay.push({ role: 'assistant', content: reply });
+          }
+        } else {
+          const msg = (d && (d.error || d.message)) || '对话接口返回异常';
+          chatDisplay.push({ role: 'error', content: msg });
+          showToast(msg);
+        }
+      } catch (e) {
+        if (seq !== chatSeq || activeProjectId !== projectIdAtSend) return;
+        const msg = (e && e.message) || '对话请求失败';
+        chatDisplay.push({ role: 'error', content: msg });
+        showToast(msg);
+      } finally {
+        // 只有最新请求才能恢复 pending / 按钮，旧请求不得覆盖新状态
+        if (seq === chatSeq) {
+          chatPending = false;
+          if (btn) { btn.disabled = false; btn.classList.remove('loading'); }
+          renderChatBubbles();
         }
       }
-    }).mount('#app')
+    }
+    window.sendChatMessage = sendChatMessage;
+
+    // ---------- 模块四：批处理回归测试 ----------
+    let batchCases = [];
+    let batchRunning = false;
+    let batchLastReport = null;
+    let batchRunSeq = 0; // 运行序号：resetBatchState 递增，使在途旧循环立即失效
+
+    /** 重置批量测试状态与报告（切换项目 / 重新选文件时调用） */
+    function resetBatchState() {
+      batchRunSeq++; // 使在途的批量运行失效（运行中切项目 / 重新选文件时调用）
+      batchCases = [];
+      batchRunning = false;
+      batchLastReport = null;
+      const fileInput = document.getElementById('batch-file');
+      if (fileInput) fileInput.value = '';
+      const nameEl = document.getElementById('batch-file-name');
+      if (nameEl) nameEl.innerText = '尚未选择文件';
+      const runBtn = document.getElementById('batch-run-btn');
+      if (runBtn) { runBtn.disabled = true; runBtn.innerText = '▶ 开始回归测试'; }
+      const selectBtn = document.getElementById('batch-select-btn');
+      if (selectBtn) selectBtn.disabled = false;
+      const prog = document.getElementById('batch-progress');
+      if (prog) prog.style.display = 'none';
+      const fill = document.getElementById('batch-progress-bar');
+      if (fill) fill.style.width = '0%';
+      const txt = document.getElementById('batch-progress-text');
+      if (txt) txt.innerText = '已完成 0/0（0%）';
+      const report = document.getElementById('batch-report');
+      if (report) { report.style.display = 'none'; report.innerHTML = ''; }
+    }
+    window.resetBatchState = resetBatchState;
+
+    /** 兼容多种字段名解析单条用例；非法返回 null */
+    function normalizeBatchCase(raw) {
+      if (!raw || typeof raw !== 'object') return null;
+      const query = raw.user_query != null ? raw.user_query : (raw.question != null ? raw.question : raw.query);
+      const standard = raw.standard_answer != null ? raw.standard_answer : (raw.answer != null ? raw.answer : raw.expected);
+      const reply = raw.bot_reply != null ? raw.bot_reply : (raw.reply != null ? raw.reply : '');
+      if (typeof query !== 'string' || !query.trim()) return null;
+      if (typeof standard !== 'string' || !standard.trim()) return null;
+      return {
+        no: 1,
+        user_query: query.trim(),
+        standard_answer: standard.trim(),
+        bot_reply: typeof reply === 'string' ? reply.trim() : ''
+      };
+    }
+
+    /** 选择 JSON 用例文件：解析 → 校验数组 → 跳过非法条目 → 启用开始按钮 */
+    async function handleBatchFile(fileList) {
+      const files = Array.from(fileList || []);
+      const file = files[0];
+      const fileInput = document.getElementById('batch-file');
+      if (!file) return;
+      if (batchRunning) {
+        // 运行中禁止重选文件：清空本次选择并提示
+        if (fileInput) fileInput.value = '';
+        showToast('批量测试运行中，请等待结束后再选择文件');
+        return;
+      }
+      resetBatchState();
+      try {
+        const text = await file.text();
+        let parsed;
+        try { parsed = JSON.parse(text); } catch (e) { throw new Error('JSON 解析失败：' + e.message); }
+        if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('JSON 必须是非空数组');
+        const cases = [];
+        let skipped = 0;
+        parsed.forEach((item) => {
+          const c = normalizeBatchCase(item);
+          if (c) { c.no = cases.length + 1; cases.push(c); } else { skipped++; }
+        });
+        if (cases.length === 0) throw new Error('没有合法用例（需包含 user_query 与 standard_answer）');
+        batchCases = cases;
+        batchLastReport = null;
+        const nameEl = document.getElementById('batch-file-name');
+        if (nameEl) nameEl.innerText = `${file.name} · ${cases.length} 条用例` + (skipped ? `（跳过 ${skipped} 条非法）` : '');
+        const runBtn = document.getElementById('batch-run-btn');
+        if (runBtn) runBtn.disabled = false;
+        showToast(`已加载 ${cases.length} 条用例` + (skipped ? `，跳过 ${skipped} 条非法条目` : ''));
+      } catch (e) {
+        if (fileInput) fileInput.value = '';
+        resetBatchState();
+        showToast('加载失败：' + ((e && e.message) || e));
+      }
+    }
+    window.handleBatchFile = handleBatchFile;
+
+    /** 渲染批量回归报告（通过率 + 失败用例明细，全部 HTML 转义） */
+    function renderBatchReport(report) {
+      const el = document.getElementById('batch-report');
+      if (!el || !report) return;
+      const total = report.total || 0;
+      const passed = report.passed || 0;
+      const failed = report.failed || 0;
+      const rate = total ? Math.round((passed / total) * 100) : 0;
+      let html = `<div class="batch-rate ${failed === 0 ? 'pass' : 'fail'}">通过率：${passed}/${total}（${rate}%）</div>`;
+      if (failed === 0) {
+        html += '<div class="batch-all-pass">🎉 全部用例通过！</div>';
+      } else {
+        html += (report.failures || []).map((f) => {
+          const reasons = [];
+          if (f.error) reasons.push(`接口错误：${escapeHtml(f.error)}`);
+          if (f.l1_errors && f.l1_errors.length) reasons.push(`L1 违规：${escapeHtml(f.l1_errors.join('；'))}`);
+          if (f.l2_violations && f.l2_violations.length) reasons.push(`L2 违规：${escapeHtml(f.l2_violations.join('；'))}`);
+          if (f.l2_comment) reasons.push(`点评：${escapeHtml(f.l2_comment)}`);
+          if (reasons.length === 0) reasons.push('综合得分未达 4 分或未通过判定');
+          return `<div class="batch-fail-item">
+            <div class="batch-fail-title">#${Number(f.no) || 0} 未通过（score: ${Number.isFinite(Number(f.score)) ? Number(f.score) : 0}）</div>
+            <div><span class="batch-k">问题：</span>${escapeHtml(f.user_query)}</div>
+            <div><span class="batch-k">标准答案：</span>${escapeHtml(f.standard_answer)}</div>
+            <div><span class="batch-k">实际回复：</span>${escapeHtml(f.bot_reply)}</div>
+            <div><span class="batch-k">扣分原因：</span>${reasons.join('<br>')}</div>
+          </div>`;
+        }).join('');
+      }
+      el.innerHTML = html;
+      el.style.display = 'block';
+    }
+    window.renderBatchReport = renderBatchReport;
+
+    /** 🧪 批处理回归：手动 for 顺序循环（禁止外部测试库/并发框架），逐条更新进度条
+     *  竞态修复：运行时 cases 快照 + runId 失效机制 + 整段 try/finally 收尾 + 运行中禁用选择文件。 */
+    async function runBatchRegression() {
+      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
+      if (!Array.isArray(batchCases) || batchCases.length === 0) { showToast('请先选择用例 JSON 文件'); return; }
+      if (batchRunning) return;
+      const projectIdAtRun = activeProjectId;
+      const cases = batchCases.slice(); // 运行时快照：运行中 resetBatchState 清空 batchCases 也不影响本次循环
+      const total = cases.length;
+      const runId = ++batchRunSeq;
+      batchRunning = true;
+      const runBtn = document.getElementById('batch-run-btn');
+      const selectBtn = document.getElementById('batch-select-btn');
+      const prog = document.getElementById('batch-progress');
+      const fill = document.getElementById('batch-progress-bar');
+      const progressText = document.getElementById('batch-progress-text');
+      const reportEl = document.getElementById('batch-report');
+      if (runBtn) { runBtn.disabled = true; runBtn.innerText = '测试中...'; }
+      if (selectBtn) selectBtn.disabled = true; // 运行中禁止重选文件
+      if (prog) prog.style.display = 'block';
+      if (fill) fill.style.width = '0%';
+      if (progressText) progressText.innerText = `已完成 0/${total}（0%）`;
+      if (reportEl) { reportEl.style.display = 'none'; reportEl.innerHTML = ''; }
+
+      let passed = 0;
+      const failures = [];
+      const layers = getCurrentLayers();
+      const contextData = getContextDataForSnapshot();
+      let aborted = false;
+      let reportData = null;
+
+      try {
+        for (let i = 0; i < total; i++) {
+          // 每轮开头校验：运行中切换项目 / 被重置 → 立即中止，避免 item undefined
+          if (runId !== batchRunSeq || activeProjectId !== projectIdAtRun) { aborted = true; break; }
+          const item = cases[i];
+          if (!item) break;
+          let botReply = '';
+          let evalResult = null;
+          let errorMsg = '';
+          try {
+            botReply = item.bot_reply || '';
+            // 1) 缺省 bot_reply 时先调对话接口自动生成回复
+            if (!botReply) {
+              const chat = await safeFetchJson(`/api/chat/reply?token=${token}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  project_id: projectIdAtRun,
+                  layers,
+                  context_data: contextData,
+                  messages: [{ role: 'user', content: item.user_query }]
+                })
+              });
+              if (runId !== batchRunSeq || activeProjectId !== projectIdAtRun) { aborted = true; break; }
+              if (chat && chat.success && typeof chat.reply === 'string') botReply = chat.reply;
+              else throw new Error((chat && (chat.error || chat.message)) || '自动生成回复失败');
+            }
+            // 2) 调评测接口
+            const d = await safeFetchJson(`/api/eval/run?token=${token}`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ user_query: item.user_query, standard_answer: item.standard_answer, bot_reply: botReply })
+            });
+            if (runId !== batchRunSeq || activeProjectId !== projectIdAtRun) { aborted = true; break; }
+            if (!d || !d.success) throw new Error((d && (d.error || d.message)) || '评测接口返回失败');
+            evalResult = d;
+          } catch (e) {
+            if (aborted) break;
+            errorMsg = (e && e.message) || String(e); // 单条异常计入 failures，不中断循环
+          }
+          if (aborted || runId !== batchRunSeq || activeProjectId !== projectIdAtRun) { aborted = true; break; }
+
+          const l1 = evalResult && evalResult.l1 ? evalResult.l1 : null;
+          const l2 = evalResult && evalResult.l2 ? evalResult.l2 : null;
+          const score = l2 && l2.score != null ? Number(l2.score) : 0;
+          // 3) 判定：L1 通过 && L2 通过 && 得分 >= 4
+          const isPass = !!(l1 && l1.pass === true && l2 && l2.pass === true && score >= 4);
+          if (isPass) {
+            passed++;
+          } else {
+            failures.push({
+              no: item.no,
+              user_query: item.user_query,
+              standard_answer: item.standard_answer,
+              bot_reply: botReply,
+              score: Number.isFinite(score) ? score : 0,
+              l1_errors: l1 && Array.isArray(l1.errors) ? l1.errors : [],
+              l2_violations: l2 && Array.isArray(l2.violations) ? l2.violations : [],
+              l2_comment: (l2 && l2.comment) || '',
+              error: errorMsg
+            });
+          }
+
+          // 4) 更新进度
+          const done = i + 1;
+          const pct = Math.round((done / total) * 100);
+          if (fill) fill.style.width = pct + '%';
+          if (progressText) progressText.innerText = `已完成 ${done}/${total}（${pct}%）`;
+          await new Promise((r) => setTimeout(r, 0)); // 让出主线程，确保进度条与文案渲染
+        }
+        if (!aborted && runId === batchRunSeq && activeProjectId === projectIdAtRun) {
+          reportData = { total, passed, failed: failures.length, failures, allPass: failures.length === 0 };
+        }
+      } finally {
+        // 正常结束 / 中止 / 异常都收尾；仅当本次运行仍是最新运行时才恢复按钮与写报告，
+        // 避免旧循环把新项目（已被 resetBatchState 重置）的 UI 状态改坏
+        if (runId === batchRunSeq) {
+          batchRunning = false;
+          if (runBtn) { runBtn.disabled = false; runBtn.innerText = '▶ 开始回归测试'; }
+          if (selectBtn) selectBtn.disabled = false;
+          if (reportData) {
+            batchLastReport = reportData;
+            renderBatchReport(reportData);
+          }
+        }
+      }
+      if (aborted || runId !== batchRunSeq) {
+        showToast('批量测试已中止（项目已切换或状态已重置）');
+        return;
+      }
+      showToast(`回归测试完成：通过 ${passed}/${total}`);
+    }
+    window.runBatchRegression = runBatchRegression;
+
+    // 4. 历史快照
+    async function loadSnapshots() {
+      if (!activeProjectId) return;
+      const tbody = document.getElementById('snapshot-tbody');
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #909399;">加载中...</td></tr>';
+      
+      try {
+        const d = await safeFetchJson(`/api/snapshots/list?token=${token}&project_id=${activeProjectId}`);
+        
+        if (d.success && d.data.length > 0) {
+          tbody.innerHTML = d.data.map(snap => {
+            const isPass = snap.eval_pass === 1;
+            const tagClass = isPass ? 'tag-success' : 'tag-danger';
+            const statusText = isPass ? `✅ 通过 (${snap.eval_score}分)` : `❌ 未通过 (${snap.eval_score}分)`;
+            const disabled = isPass ? '' : 'disabled style="opacity:0.5; cursor:not-allowed;"';
+            
+            return `
+              <tr>
+                <td style="font-family: var(--font-mono); color: var(--primary);">${snap.id}</td>
+                <td>${new Date(snap.created_at).toLocaleString()}</td>
+                <td><span class="tag ${tagClass}">${statusText}</span></td>
+                <td style="text-align: right; white-space: nowrap;">
+                  <button class="btn btn-link" ${disabled} onclick="downloadSnapshot('${snap.id}')">下载 TXT</button>
+                  <button class="btn btn-link" style="margin-left: 12px;" onclick="rollbackSnapshot('${snap.id}')">回滚</button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #909399;">暂无历史快照</td></tr>';
+        }
+      } catch (e) { 
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger);">${e.message}</td></tr>`;
+      }
+    }
+
+    function downloadSnapshot(id) {
+      // 生产级下载：优先 <a download>（避免 window.open 被弹窗拦截导致下载失败），异常降级 window.open
+      const url = `/api/gate/export?token=${token}&snapshot_id=${id}`;
+      try {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${id}.txt`;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } catch (e) {
+        window.open(url);
+      }
+    }
+
+    /** 历史快照回滚：拉 detail 的 layers 写回 L0/L1/L3，并刷新镜像层与 Token 统计
+     *  竞态修复：rollbackSeq + projectIdAtRollback 双守卫；切项目 / 连点多个快照时只允许最新一次生效。 */
+    let rollbackSeq = 0;
+    async function rollbackSnapshot(id) {
+      if (!id) { showToast('快照 ID 无效'); return; }
+      const projectIdAtRollback = activeProjectId;
+      if (!projectIdAtRollback) { showToast('请先选择一个项目'); return; }
+      const seq = ++rollbackSeq;
+      try {
+        const d = await safeFetchJson(`/api/snapshots/detail?token=${token}&id=${encodeURIComponent(id)}`);
+        // 双守卫：已有更新的回滚 / 已切换项目 → 丢弃在途响应，绝不再写编辑器
+        if (seq !== rollbackSeq || activeProjectId !== projectIdAtRollback) return;
+        if (!d || !d.success || !d.data) {
+          showToast((d && (d.error || d.message)) || '快照详情获取失败');
+          return;
+        }
+        // 归属校验：后端返回 project_id 时，快照必须属于当前项目
+        if (d.data.project_id != null && String(d.data.project_id) !== String(activeProjectId)) {
+          showToast('该快照不属于当前项目，已取消回滚');
+          return;
+        }
+        const layers = d.data.layers;
+        if (!Array.isArray(layers) || layers.length === 0) {
+          showToast('该快照没有可回滚的层内容');
+          return;
+        }
+        const byLayer = {};
+        layers.forEach((item) => {
+          if (item && item.layer) byLayer[String(item.layer).toUpperCase()] = item.content;
+        });
+        const setEditorValue = (elId, content) => {
+          const el = document.getElementById(elId);
+          if (!el) return;
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+          setter.call(el, content == null ? '' : String(content));
+          // 触发 input 事件：同步更新镜像高亮层、自动撑高与 Token 统计（50ms 防抖）
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+        setEditorValue('val-L0', byLayer.L0);
+        setEditorValue('val-L1', byLayer.L1);
+        setEditorValue('val-L3', byLayer.L3);
+        // 再主动全量刷新一次，确保初始化/赋值后的镜像与统计一定是最新的
+        if (typeof window.refreshAllEditorMirrors === 'function') window.refreshAllEditorMirrors();
+        if (typeof window.updateEditorStats === 'function') window.updateEditorStats();
+        showToast(`已回滚到快照 ${id}（尚未生成新快照，请确认后重新生成）`);
+        const l0El = document.getElementById('val-L0');
+        if (l0El && typeof l0El.scrollIntoView === 'function') l0El.scrollIntoView({ block: 'center' });
+      } catch (e) {
+        if (seq !== rollbackSeq || activeProjectId !== projectIdAtRollback) return; // 失效请求异常静默
+        showToast((e && e.message) || '回滚失败，请稍后重试');
+      }
+    }
+    window.rollbackSnapshot = rollbackSnapshot;
+
+    // --- 左侧菜单交互 (保持不变) ---
+    function showMenu(e, id, type) {
+      e.stopPropagation();
+      const dropdown = document.getElementById('global-dropdown');
+      if (currentDropdownTarget === id && dropdown.style.display === 'block') { closeMenu(); return; }
+
+      let targetItem = null;
+      companies.forEach(c => {
+        if (c.id === id) targetItem = c;
+        c.children.forEach(p => { if (p.id === id) targetItem = p; });
+      });
+      if (!targetItem) return;
+
+      const isPinned = pinnedIds.includes(id);
+      let menuHtml = '';
+
+      if (type === 'company') {
+        menuHtml = `
+          <div class="dropdown-item" onclick="openCreateModal('project', '${id}')">➕ 新项目</div>
+          <div class="dropdown-item" onclick="togglePin('${id}')">📌 ${isPinned ? '取消置顶' : '置顶'}</div>
+          <div class="dropdown-item" onclick="showToast('多选模式已激活')">☑️ 多选</div>
+          <div class="dropdown-item" onclick="openEditModal('company', '${id}', '${targetItem.name}')">✏️ 重命名</div>
+          <div class="dropdown-divider"></div>
+          <div class="dropdown-item danger" onclick="deleteItem('${id}', 'companies', '${targetItem.name}')">🗑️ 删除</div>
+        `;
+      } else {
+        menuHtml = `
+          <div class="dropdown-item" onclick="togglePin('${id}')">📌 ${isPinned ? '取消置顶' : '置顶'}</div>
+          <div class="dropdown-item" onclick="showToast('多选模式已激活')">☑️ 多选</div>
+          <div class="dropdown-item" onclick="openEditModal('project', '${id}', '${targetItem.name}')">✏️ 重命名</div>
+          <div class="dropdown-divider"></div>
+          <div class="dropdown-item danger" onclick="deleteItem('${id}', 'projects', '${targetItem.name}')">🗑️ 删除</div>
+        `;
+      }
+
+      dropdown.innerHTML = menuHtml;
+      const rect = e.currentTarget.getBoundingClientRect();
+      dropdown.style.display = 'block';
+      let topPos = rect.bottom + 4;
+      if (topPos + dropdown.offsetHeight > window.innerHeight) topPos = rect.top - dropdown.offsetHeight - 4;
+      dropdown.style.top = topPos + 'px';
+      dropdown.style.left = (rect.right - dropdown.offsetWidth) + 'px';
+      currentDropdownTarget = id;
+    }
+
+    function closeMenu() {
+      document.getElementById('global-dropdown').style.display = 'none';
+      currentDropdownTarget = null;
+    }
+    document.addEventListener('click', (e) => { if (!e.target.closest('.more-btn') && !e.target.closest('.custom-dropdown')) closeMenu(); });
+
+    let modalCallback = null;
+    function openCreateModal(type, companyId = '') {
+      closeMenu();
+      const modal = document.getElementById('global-modal');
+      document.getElementById('modal-title').innerText = type === 'company' ? '新建公司/分组' : '新建项目';
+      document.getElementById('modal-title').style.color = '#303133';
+      const createMsgEl = document.getElementById('modal-message');
+      createMsgEl.style.display = 'none';
+      createMsgEl.style.maxHeight = '';
+      createMsgEl.style.overflowY = '';
+      createMsgEl.style.textAlign = '';
+      document.getElementById('modal-input-container').style.display = 'block';
+      const createInputEl = document.getElementById('modal-input');
+      createInputEl.type = 'text'; // 防止被 API Key 密码框样式污染
+      createInputEl.placeholder = '请输入名称...';
+      createInputEl.value = '';
+      
+      const companyContainer = document.getElementById('modal-company-select-container');
+      const companySelect = document.getElementById('modal-company-select');
+      if (type === 'project') {
+        companyContainer.style.display = 'block';
+        companySelect.innerHTML = companies.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        if (companyId) companySelect.value = companyId;
+      } else {
+        companyContainer.style.display = 'none';
+      }
+      document.getElementById('modal-confirm-btn').className = 'btn btn-primary';
+      modal.style.display = 'flex';
+      document.getElementById('modal-input').focus();
+
+      modalCallback = async () => {
+        const name = document.getElementById('modal-input').value.trim();
+        if (!name) return showToast('名称不能为空');
+        const url = type === 'company' ? '/api/companies/create' : '/api/projects/create';
+        const body = type === 'company' ? { name } : { company_id: companySelect.value, name };
+        try {
+          const d = await safeFetchJson(`${url}?token=${token}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+          if (d.success) { showToast('创建成功'); closeModal(); fetchData(); } else { showToast(d.error); }
+        } catch (e) { showToast(e.message); }
+      };
+    }
+
+    function openEditModal(type, id, currentName) {
+      closeMenu();
+      const modal = document.getElementById('global-modal');
+      document.getElementById('modal-title').innerText = '修改名称';
+      document.getElementById('modal-title').style.color = '#303133';
+      const editMsgEl = document.getElementById('modal-message');
+      editMsgEl.style.display = 'none';
+      editMsgEl.style.maxHeight = '';
+      editMsgEl.style.overflowY = '';
+      editMsgEl.style.textAlign = '';
+      document.getElementById('modal-input-container').style.display = 'block';
+      const editInputEl = document.getElementById('modal-input');
+      editInputEl.type = 'text'; // 防止被 API Key 密码框样式污染
+      editInputEl.placeholder = '请输入名称...';
+      editInputEl.value = currentName;
+      document.getElementById('modal-company-select-container').style.display = 'none';
+      document.getElementById('modal-confirm-btn').className = 'btn btn-primary';
+      modal.style.display = 'flex';
+      document.getElementById('modal-input').focus();
+
+      modalCallback = async () => {
+        const name = document.getElementById('modal-input').value.trim();
+        if (!name || name === currentName) return closeModal();
+        const url = type === 'company' ? '/api/companies/update' : '/api/projects/update';
+        try {
+          const d = await safeFetchJson(`${url}?token=${token}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id, name }) });
+          if (d.success) {
+            showToast('修改成功'); closeModal();
+            if (activeProjectId === id) document.getElementById('current-name').innerText = name;
+            fetchData();
+          } else { showToast(d.error); }
+        } catch (e) { showToast(e.message); }
+      };
+    }
+
+    function deleteItem(id, apiPath, name) {
+      closeMenu();
+      const modal = document.getElementById('global-modal');
+      document.getElementById('modal-title').innerText = '删除确认';
+      document.getElementById('modal-title').style.color = '#303133';
+      const deleteMsgEl = document.getElementById('modal-message');
+      deleteMsgEl.innerText = `确定要永久删除【${name}】吗？`;
+      deleteMsgEl.style.display = 'block';
+      deleteMsgEl.style.maxHeight = '';
+      deleteMsgEl.style.overflowY = '';
+      deleteMsgEl.style.textAlign = '';
+      document.getElementById('modal-input-container').style.display = 'none';
+      document.getElementById('modal-company-select-container').style.display = 'none';
+      const confirmBtn = document.getElementById('modal-confirm-btn');
+      confirmBtn.className = 'btn btn-primary'; confirmBtn.style.background = 'var(--danger)';
+      modal.style.display = 'flex';
+
+      modalCallback = async () => {
+        try {
+          const d = await safeFetchJson(`/api/${apiPath}/delete?token=${token}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id}) });
+          if (d.success) { 
+            showToast('删除成功'); closeModal();
+            if (activeProjectId === id) {
+              activeProjectId = ''; 
+              document.getElementById('current-name').innerText = '请选择左侧项目';
+              document.getElementById('main-content').style.display = 'none';
+              document.getElementById('empty-state').style.display = 'flex';
+            }
+            fetchData(); 
+          } else { showToast(d.error); }
+        } catch (e) { 
+          // 幽灵删除兜底
+          showToast('已在视图中移除（后端未同步）'); closeModal();
+          companies.forEach(c => { if (c.id === id) c._deleted = true; c.children = c.children.filter(p => p.id !== id); });
+          companies = companies.filter(c => !c._deleted);
+          if (activeProjectId === id) {
+            activeProjectId = ''; 
+            document.getElementById('current-name').innerText = '请选择左侧项目';
+            document.getElementById('main-content').style.display = 'none';
+            document.getElementById('empty-state').style.display = 'flex';
+          }
+          renderTree();
+        }
+      };
+    }
+
+    function togglePin(id) {
+      closeMenu();
+      const idx = pinnedIds.indexOf(id);
+      if (idx > -1) pinnedIds.splice(idx, 1); else pinnedIds.push(id);
+      localStorage.setItem('pinnedIds', JSON.stringify(pinnedIds));
+      renderTree();
+    }
+
+    function closeModal() {
+      document.getElementById('global-modal').style.display = 'none';
+      modalCallback = null;
+      const confirmBtn = document.getElementById('modal-confirm-btn');
+      confirmBtn.style.background = 'var(--primary)';
+      confirmBtn.disabled = false;
+      confirmBtn.classList.remove('loading');
+      // API Key 弹窗把 #modal-input 设为 password，关闭时恢复给其它 modal（新建/重命名）使用
+      const modalInput = document.getElementById('modal-input');
+      modalInput.type = 'text';
+      modalInput.placeholder = '请输入名称...';
+      modalInput.value = '';
+      // 冲突告警等复用 modal 后恢复默认样式，避免污染既有 modal 功能
+      document.getElementById('modal-title').style.color = '#303133';
+      const messageEl = document.getElementById('modal-message');
+      messageEl.style.maxHeight = '';
+      messageEl.style.overflowY = '';
+      messageEl.style.textAlign = '';
+    }
+
+    document.getElementById('modal-confirm-btn').onclick = () => { if (modalCallback) modalCallback(); };
+    document.getElementById('modal-input').onkeydown = (e) => { if (e.key === 'Enter') { if (modalCallback) modalCallback(); } };
+
+    // ==================== 模块五：API Key 设置（Header 齿轮） ====================
+    /** 打开 API Key 设置弹窗：GET 当前 masked 配置 → 输入新 Key → POST 保存（空值保持原值） */
+    let apiKeySaving = false;
+    async function openApiKeyModal() {
+      closeMenu();
+      const modal = document.getElementById('global-modal');
+      const titleEl = document.getElementById('modal-title');
+      const messageEl = document.getElementById('modal-message');
+      const inputEl = document.getElementById('modal-input');
+      const inputContainer = document.getElementById('modal-input-container');
+      const confirmBtn = document.getElementById('modal-confirm-btn');
+      titleEl.innerText = '⚙️ API Key 设置';
+      titleEl.style.color = '#303133';
+      messageEl.style.display = 'block';
+      messageEl.style.maxHeight = '';
+      messageEl.style.overflowY = '';
+      messageEl.style.textAlign = 'left';
+      messageEl.innerHTML = '<span style="color: #6b7280;">正在读取当前配置…</span>';
+      document.getElementById('modal-company-select-container').style.display = 'none';
+      inputContainer.style.display = 'block';
+      // 复用 #modal-input：密码框，绝不回显完整 Key
+      inputEl.type = 'password';
+      inputEl.value = '';
+      inputEl.placeholder = '输入新的 DeepSeek API Key（留空则保持不变）';
+      confirmBtn.className = 'btn btn-primary';
+      confirmBtn.style.background = '';
+      confirmBtn.disabled = false;
+      confirmBtn.innerText = '确定';
+      modal.style.display = 'flex';
+
+      let info = null;
+      try {
+        const res = await safeFetchJson(`/api/settings/api-key?token=${token}`);
+        info = res && res.success ? res.data : null;
+      } catch (e) {
+        info = null;
+      }
+      if (getComputedStyle(modal).display === 'none') return; // 读取期间用户已关闭弹窗
+      const hasKey = !!(info && info.has_key);
+      const masked = info && info.masked ? escapeHtml(String(info.masked)) : '';
+      const source = info && info.source ? `（来源：${escapeHtml(String(info.source))}）` : '';
+      messageEl.innerHTML = `当前 Key：<b>${hasKey ? (masked || '已配置') : '未配置'}</b>　${hasKey ? '✅ 已配置' : '⚠️ 未配置'}${source}<br>`
+        + '<span style="color: #6b7280; font-size: 12px;">留空保存表示保持不变；保存后立即生效，无需重启。完整 Key 不会展示，请直接输入新的值。</span>';
+      inputEl.focus();
+
+      modalCallback = async () => {
+        if (apiKeySaving) return;
+        const value = inputEl.value.trim();
+        apiKeySaving = true;
+        const originalText = confirmBtn.innerText || '确定';
+        confirmBtn.disabled = true;
+        confirmBtn.classList.add('loading');
+        confirmBtn.innerText = '保存中...';
+        try {
+          const d = await safeFetchJson(`/api/settings/api-key?token=${token}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ api_key: value })
+          });
+          if (d && d.success) {
+            showToast(d.message || (d.updated ? 'API Key 已更新，立即生效' : 'API Key 未变更（留空保持）'));
+            closeModal();
+          } else {
+            showToast((d && (d.error || d.message)) || '保存失败，请检查 Key 格式');
+          }
+        } catch (e) {
+          showToast((e && e.message) || '保存失败，请检查 Key 格式');
+        } finally {
+          apiKeySaving = false;
+          confirmBtn.disabled = false;
+          confirmBtn.classList.remove('loading');
+          confirmBtn.innerText = originalText;
+        }
+      };
+    }
+    window.openApiKeyModal = openApiKeyModal;
+
+    // ==================== 模块六：复制 NewLync Text / Zip 导出 / Ctrl+S ====================
+    /** 剪贴板写入：优先 navigator.clipboard，失败降级 execCommand('copy')（纯原生实现） */
+    async function copyTextToClipboard(text) {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch (e) { /* 降级到 execCommand */ }
+      }
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', 'readonly');
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        ta.style.left = '-1000px';
+        document.body.appendChild(ta);
+        ta.select();
+        if (typeof ta.setSelectionRange === 'function') ta.setSelectionRange(0, ta.value.length);
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return !!ok;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    /** 📋 复制为 NewLync Text：POST /api/prompt/assemble（不写库）→ 剪贴板 */
+    async function copyPromptAsText() {
+      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
+      const btn = document.getElementById('copy-prompt-btn');
+      const originalText = btn ? btn.innerText : '';
+      if (btn) { btn.disabled = true; btn.innerText = '组装中...'; }
+      try {
+        const d = await safeFetchJson(`/api/prompt/assemble?token=${token}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_id: activeProjectId,
+            layers: getCurrentLayers(),
+            context_data: getContextDataForSnapshot()
+          })
+        });
+        // CQO 纯净度要求：复制到剪贴板的文本不得带首尾冗余空白（内部 ### 层级结构保留）
+        const finalPrompt = d && d.success && typeof d.final_prompt === 'string' ? d.final_prompt.trim() : '';
+        if (!finalPrompt) {
+          showToast((d && (d.error || d.message)) || '组装失败，无法复制');
+          return;
+        }
+        const ok = await copyTextToClipboard(finalPrompt);
+        if (ok) showToast(`已复制到剪贴板（${finalPrompt.length} 字符）`);
+        else showToast('复制失败，请检查浏览器剪贴板权限');
+      } catch (e) {
+        showToast((e && e.message) || '复制失败，请稍后重试');
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerText = originalText || '📋 复制为 NewLync Text'; }
+      }
+    }
+    window.copyPromptAsText = copyPromptAsText;
+
+    /** 📦 批量导出 Zip：先查快照非空，再用 <a download> 触发下载（不弹新窗口） */
+    async function exportProjectZip() {
+      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
+      const btn = document.getElementById('export-zip-btn');
+      const originalText = btn ? btn.innerText : '';
+      if (btn) { btn.disabled = true; btn.innerText = '检查中...'; }
+      try {
+        const d = await safeFetchJson(`/api/snapshots/list?token=${token}&project_id=${encodeURIComponent(activeProjectId)}`);
+        const list = d && d.success && Array.isArray(d.data) ? d.data : [];
+        if (list.length === 0) {
+          showToast('暂无快照可导出');
+          return;
+        }
+        const url = `/api/projects/export_zip?token=${encodeURIComponent(token)}&project_id=${encodeURIComponent(activeProjectId)}`;
+        const a = document.createElement('a');
+        a.href = url;
+        a.setAttribute('download', '');
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showToast('正在导出项目快照 Zip…');
+      } catch (e) {
+        showToast((e && e.message) || '导出失败，请稍后重试');
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerText = originalText || '📦 批量导出 Zip'; }
+      }
+    }
+    window.exportProjectZip = exportProjectZip;
+
+    /** Ctrl/Cmd + S → 生成快照（阻止浏览器另存为；弹窗打开/无项目时不触发；输入法组合态放行） */
+    function initShortcuts() {
+      document.addEventListener('keydown', (e) => {
+        if (e.isComposing || e.keyCode === 229) return; // 输入法组合中：不拦截
+        const isSaveKey = (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S');
+        if (!isSaveKey) return;
+        e.preventDefault(); // 阻止浏览器“另存为”
+        const modalEl = document.getElementById('global-modal');
+        if (modalEl && getComputedStyle(modalEl).display !== 'none') return; // 弹窗打开时不触发
+        if (!activeProjectId) { showToast('请先选择一个项目'); return; }
+        generateSnapshot();
+      });
+    }
+    window.initShortcuts = initShortcuts;
+
+    // ==================== 模块一：Token 实时预估 ====================
+    const EDITOR_LAYERS = ['L0', 'L1', 'L3'];
+    let editorStatsTimer = null;
+
+    /** 50ms 防抖后刷新统计（连续输入时先 clearTimeout 旧计时器，只算最后一次） */
+    function scheduleEditorStats() {
+      if (editorStatsTimer) clearTimeout(editorStatsTimer);
+      editorStatsTimer = setTimeout(() => {
+        editorStatsTimer = null;
+        updateEditorStats();
+      }, 50);
+    }
+
+    /** 立即刷新：总字符数 + Math.ceil(总字符数 * 0.6) 的 Token 预估。导出 window.updateEditorStats 供其他逻辑调用 */
+    function updateEditorStats() {
+      let totalChars = 0;
+      EDITOR_LAYERS.forEach(layer => {
+        const el = document.getElementById('val-' + layer);
+        if (el) totalChars += (el.value || '').length;
+      });
+      const totalTokens = Math.ceil(totalChars * 0.6);
+      const charsEl = document.getElementById('stats-chars');
+      const tokensEl = document.getElementById('stats-tokens');
+      if (charsEl) charsEl.innerText = String(totalChars);
+      if (tokensEl) tokensEl.innerText = String(totalTokens);
+    }
+    window.updateEditorStats = updateEditorStats;
+    window.scheduleEditorStats = scheduleEditorStats;
+
+    // ==================== 模块一：{{变量}} 橙色高亮（镜像 div + 透明 textarea） ====================
+    // 绝不使用 contenteditable：保留原生 textarea（generateSnapshot 等依赖 .value），
+    // 底层 mirror div 只负责着色渲染，上层 textarea 透明文字负责输入，两层像素级对齐。
+    let editorResizeTimer = null;
+
+    function getEditorMirror(textarea) {
+      if (!textarea) return null;
+      return document.getElementById('mirror-' + textarea.id.replace('val-', ''));
+    }
+
+    /** HTML 转义：必须先把 & 转义再转 <、>，避免二次转义 */
+    function escapeEditorHtml(str) {
+      return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    /** 镜像层渲染：转义 → \n 换 <br>、空格换 &nbsp; → {{xxx}} 包橙色 span → 末尾换行补 <br> 防错位 */
+    function renderEditorMirror(textarea) {
+      const mirror = getEditorMirror(textarea);
+      if (!textarea || !mirror) return;
+      const value = textarea.value || '';
+      let html = escapeEditorHtml(value);
+      html = html.replace(/\n/g, '<br>').replace(/ /g, '&nbsp;');
+      html = html.replace(/{{[\s\S]*?}}/g, '<span style="color:#f59e0b;">$&</span>');
+      // value 以 \n 结尾时，末尾换行会丢掉占位高度导致两层错位，补一个 <br> 撑住
+      if (value.slice(-1) === '\n') html += '<br>';
+      mirror.innerHTML = html; // 单次赋值，5000+ 字符 / 数百行也不卡
+      syncEditorScroll(textarea);
+    }
+
+    /** 滚动严格同步：textarea 隐藏滚动条但仍可编程滚动，mirror 跟随 scrollTop / scrollLeft */
+    function syncEditorScroll(textarea) {
+      const mirror = getEditorMirror(textarea);
+      if (!textarea || !mirror) return;
+      mirror.scrollTop = textarea.scrollTop;
+      mirror.scrollLeft = textarea.scrollLeft;
+    }
+
+    /** 防塌陷 + 高度同步：height='auto' 后取 scrollHeight（加回 border），两层设同一个高度 */
+    function syncEditorHeight(textarea) {
+      const mirror = getEditorMirror(textarea);
+      if (!textarea) return;
+      if (!textarea.offsetWidth && !textarea.offsetHeight) {
+        // 卡片还处于 display:none 时 scrollHeight 为 0，先交给 CSS/rows，等可见后再量
+        textarea.style.height = '';
+        if (mirror) mirror.style.height = '';
+        return;
+      }
+      textarea.style.height = 'auto';
+      const borderY = Math.max(textarea.offsetHeight - textarea.clientHeight, 0);
+      const nextHeight = textarea.scrollHeight + borderY;
+      textarea.style.height = nextHeight + 'px';
+      if (mirror) mirror.style.height = nextHeight + 'px';
+    }
+
+    /** 输入 / 赋值后的统一刷新：渲染高亮 + 撑高 + 滚动对齐（withStats 时统计走 50ms 防抖） */
+    function refreshEditor(textarea, withStats) {
+      if (!textarea) return;
+      renderEditorMirror(textarea);
+      syncEditorHeight(textarea);
+      syncEditorScroll(textarea);
+      if (withStats) scheduleEditorStats();
+    }
+
+    /** 三个编辑框全量刷新（选中项目 / 窗口尺寸变化 / 程序赋值后调用） */
+    function refreshAllEditorMirrors() {
+      EDITOR_LAYERS.forEach(layer => {
+        const el = document.getElementById('val-' + layer);
+        if (el) refreshEditor(el, false);
+      });
+    }
+    window.refreshAllEditorMirrors = refreshAllEditorMirrors;
+
+    /** 绑定三个编辑框的 input / scroll / 输入法结束事件 */
+    function initEditorMirrors() {
+      EDITOR_LAYERS.forEach(layer => {
+        const textarea = document.getElementById('val-' + layer);
+        if (!textarea) return;
+        textarea.addEventListener('input', () => refreshEditor(textarea, true));
+        textarea.addEventListener('scroll', () => syncEditorScroll(textarea));
+        textarea.addEventListener('compositionend', () => refreshEditor(textarea, true));
+        refreshEditor(textarea, false);
+      });
+      window.addEventListener('resize', () => {
+        if (editorResizeTimer) clearTimeout(editorResizeTimer);
+        editorResizeTimer = setTimeout(() => {
+          editorResizeTimer = null;
+          refreshAllEditorMirrors();
+        }, 150);
+      });
+      updateEditorStats();
+    }
+
+    // ==================== 模块二：语境配置（行业 / 业务场景 / 核心目标） ====================
+    // state 结构：{ industry: '', business_scene: [], core_goal: [] }
+    const state = {
+      industry: '',
+      business_scene: [],
+      core_goal: []
+    };
+    const CONTEXT_TAG_CONFIG = {
+      business_scene: { tagsId: 'ctx-scene-tags', inputId: 'ctx-scene-input', wrapId: 'ctx-scene-wrap' },
+      core_goal: { tagsId: 'ctx-goal-tags', inputId: 'ctx-goal-input', wrapId: 'ctx-goal-wrap' }
+    };
+    let extractAbortController = null; // AI 提取请求的 AbortController（防竞态串号）
+    let contextSaveTimer = null;
+
+    /** 清空语境：state 置空 + 输入框清空 + 标签 DOM 清空（切换项目时先调用） */
+    function clearContext() {
+      state.industry = '';
+      state.business_scene = [];
+      state.core_goal = [];
+      const industryEl = document.getElementById('ctx-industry');
+      if (industryEl) industryEl.value = '';
+      Object.keys(CONTEXT_TAG_CONFIG).forEach(kind => {
+        const cfg = CONTEXT_TAG_CONFIG[kind];
+        const inputEl = document.getElementById(cfg.inputId);
+        if (inputEl) inputEl.value = '';
+        renderTagList(kind);
+      });
+    }
+
+    /** 渲染某个字段的 Tag chips：文案用 textContent，× 用 DOM 事件绑定，避免标签文本注入 HTML */
+    function renderTagList(kind) {
+      const cfg = CONTEXT_TAG_CONFIG[kind];
+      if (!cfg) return;
+      const container = document.getElementById(cfg.tagsId);
+      if (!container) return;
+      container.innerHTML = '';
+      const list = Array.isArray(state[kind]) ? state[kind] : [];
+      list.forEach((text, index) => {
+        const chip = document.createElement('span');
+        chip.className = 'tag-chip';
+        const label = document.createElement('span');
+        label.className = 'tag-chip-label';
+        label.textContent = text;
+        label.title = text;
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'tag-chip-del';
+        del.title = '删除该标签';
+        del.textContent = '\u00d7';
+        del.addEventListener('click', (e) => {
+          e.stopPropagation();
+          removeContextTag(kind, index);
+        });
+        chip.appendChild(label);
+        chip.appendChild(del);
+        container.appendChild(chip);
+      });
+    }
+
+    /** 添加标签：先 trim、空字符串过滤、同数组去重后才 add（成功返回 true） */
+    function addContextTag(kind, rawValue) {
+      const value = String(rawValue == null ? '' : rawValue).trim();
+      if (!value) return false;
+      if (!Array.isArray(state[kind])) state[kind] = [];
+      if (state[kind].indexOf(value) > -1) return false;
+      state[kind].push(value);
+      renderTagList(kind);
+      scheduleContextSave();
+      return true;
+    }
+
+    function removeContextTag(kind, index) {
+      if (!Array.isArray(state[kind])) return;
+      if (index < 0 || index >= state[kind].length) return;
+      state[kind].splice(index, 1);
+      renderTagList(kind);
+      scheduleContextSave();
+    }
+
+    /** 绑定 Tag 输入框：回车添加、退格删除末尾标签；中文输入法组合中 Enter 必须直接 return */
+    function bindContextTagInput(kind) {
+      const cfg = CONTEXT_TAG_CONFIG[kind];
+      if (!cfg) return;
+      const input = document.getElementById(cfg.inputId);
+      const wrap = document.getElementById(cfg.wrapId);
+      if (!input) return;
+      if (wrap) {
+        wrap.addEventListener('click', (e) => {
+          if (e.target && e.target.closest && e.target.closest('.tag-chip-del')) return;
+          input.focus();
+        });
+      }
+      input.addEventListener('keydown', (e) => {
+        // ⚠️ 中文输入法坑：Enter/空格用于候选上屏，组合状态（keyCode 229）必须直接 return
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          addContextTag(kind, input.value);
+          input.value = ''; // 添加后清空输入框并保持焦点
+          input.focus();
+          return;
+        }
+        if (e.key === 'Backspace' && input.value === '') {
+          const list = Array.isArray(state[kind]) ? state[kind] : [];
+          if (list.length > 0) {
+            e.preventDefault();
+            removeContextTag(kind, list.length - 1);
+          }
+        }
+      });
+    }
+
+    /** 组装快照时传给后端的 context_data（industry 以输入框当前值 trim 为准） */
+    function getContextDataForSnapshot() {
+      const industryEl = document.getElementById('ctx-industry');
+      return {
+        industry: String(industryEl ? industryEl.value : state.industry || '').trim(),
+        business_scene: Array.isArray(state.business_scene) ? state.business_scene.slice() : [],
+        core_goal: Array.isArray(state.core_goal) ? state.core_goal.slice() : []
+      };
+    }
+    window.getContextDataForSnapshot = getContextDataForSnapshot;
+
+    /** 静默保存语境（POST /api/context/save 为可选调用，失败不打扰用户，也不影响主流程） */
+    // 竞态修复：调度时就把 payload 深拷贝 + projectId 捕获进 timer 闭包，回调内不再读 DOM；
+    // 避免 A→B→A 快速切换时，旧 timer 在 DOM 已被清空后读值把空语境覆盖到已存语境上。
+    function scheduleContextSave() {
+      if (contextSaveTimer) clearTimeout(contextSaveTimer);
+      const projectIdAtSave = activeProjectId;
+      if (!projectIdAtSave) return;
+      const payload = JSON.parse(JSON.stringify(getContextDataForSnapshot()));
+      contextSaveTimer = setTimeout(() => {
+        contextSaveTimer = null;
+        // 只校验项目未变，payload 一律用调度时的快照，绝不在回调内读 DOM
+        if (!projectIdAtSave || projectIdAtSave !== activeProjectId) return;
+        saveContextSilently(projectIdAtSave, payload);
+      }, 800);
+    }
+
+    async function saveContextSilently(projectId, payload) {
+      try {
+        await safeFetchJson(`/api/context/save?token=${token}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: projectId, context_data: payload })
+        });
+      } catch (e) {
+        // 接口可选 / 未就绪：静默降级
+      }
+    }
+
+    /** 拉取并回填项目语境（异常/旧数据一律降级为空值，不报错、不阻塞页面） */
+    async function loadProjectContext(projectId) {
+      if (!projectId) return;
+      // 先丢弃上一个项目待执行的自动保存任务，避免其闭包 payload 串写到当前项目
+      if (contextSaveTimer) {
+        clearTimeout(contextSaveTimer);
+        contextSaveTimer = null;
+      }
+      abortExtractRequest();
+      clearContext();
+      try {
+        const d = await safeFetchJson(`/api/context/get?token=${token}&project_id=${encodeURIComponent(projectId)}`);
+        if (activeProjectId !== projectId) return; // 竞态：响应回来前用户已切到别的项目
+        if (!d || !d.success || !d.data || typeof d.data !== 'object') return;
+        const data = d.data;
+        const industry = typeof data.industry === 'string' ? data.industry : '';
+        const scenes = Array.isArray(data.business_scene)
+          ? data.business_scene.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim())
+          : [];
+        const goals = Array.isArray(data.core_goal)
+          ? data.core_goal.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim())
+          : [];
+        const industryEl = document.getElementById('ctx-industry');
+        state.industry = industry;
+        if (industryEl) industryEl.value = industry;
+        state.business_scene = scenes;
+        state.core_goal = goals;
+        renderTagList('business_scene');
+        renderTagList('core_goal');
+      } catch (e) {
+        // 接口未实现 / 返回非 JSON 时保持空语境，控制台留痕即可
+        console.warn('[context] 语境加载失败，已降级为空值：', e && e.message ? e.message : e);
+      }
+    }
+    window.loadProjectContext = loadProjectContext;
+
+    /** 中断进行中的 AI 提取请求（切项目 / 重复触发时防竞态串号） */
+    function abortExtractRequest() {
+      if (extractAbortController) {
+        try { extractAbortController.abort(); } catch (e) { /* 忽略 */ }
+        extractAbortController = null;
+      }
+    }
+
+    function setExtractBtnLoading(loading) {
+      const btn = document.getElementById('ctx-extract-btn');
+      if (!btn) return;
+      btn.disabled = !!loading;
+      btn.classList.toggle('loading', !!loading);
+      const label = btn.querySelector('.ctx-extract-label');
+      if (label) label.innerText = loading ? 'AI 提取中...' : '✨ AI 智能提取';
+    }
+
+    /** ✨ AI 智能提取：无项目先提示 → 先查知识库非空 → AbortController 请求 → 校验项目未切换后回填 */
+    async function aiExtractContext() {
+      if (!activeProjectId) {
+        showToast('请先选择一个项目');
+        return;
+      }
+      const btn = document.getElementById('ctx-extract-btn');
+      if (btn && btn.disabled) return; // 进行中不重复触发
+      const projectIdAtRequest = activeProjectId;
+
+      abortExtractRequest();
+      const controller = new AbortController();
+      extractAbortController = controller;
+      setExtractBtnLoading(true);
+
+      try {
+        // 1. 先拉知识库列表，空库直接提示并 return，不调用 extract
+        const kbJson = await safeFetchJson(`/api/kb/list?token=${token}&project_id=${encodeURIComponent(projectIdAtRequest)}`, { signal: controller.signal });
+        if (activeProjectId !== projectIdAtRequest) return;
+        const kbList = kbJson && kbJson.success && Array.isArray(kbJson.data) ? kbJson.data : [];
+        if (kbList.length === 0) {
+          showToast('知识库为空，请先导入知识内容再进行 AI 提取');
+          return;
+        }
+
+        // 2. 调 AI 提取接口（带 signal，切项目可中断）
+        const d = await safeFetchJson(`/api/context/extract?token=${token}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: projectIdAtRequest }),
+          signal: controller.signal
+        });
+        if (activeProjectId !== projectIdAtRequest) return; // 响应回来时项目已切换：丢弃
+
+        if (d && d.success && d.data && typeof d.data === 'object') {
+          const data = d.data;
+          if (typeof data.industry === 'string') {
+            state.industry = data.industry.trim();
+            const industryEl = document.getElementById('ctx-industry');
+            if (industryEl) industryEl.value = state.industry;
+          }
+          state.business_scene = Array.isArray(data.business_scene)
+            ? data.business_scene.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim())
+            : [];
+          state.core_goal = Array.isArray(data.core_goal)
+            ? data.core_goal.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim())
+            : [];
+          renderTagList('business_scene');
+          renderTagList('core_goal');
+          scheduleContextSave(); // 提取结果静默落库，避免未生成快照就切项目丢失
+          showToast('AI 提取完成，请确认后生成快照');
+        } else {
+          showToast((d && (d.message || d.error)) || 'AI 提取失败，请稍后重试');
+        }
+      } catch (e) {
+        if (e && e.name === 'AbortError') return; // 主动中断：静默
+        showToast((e && e.message) || 'AI 提取请求失败');
+      } finally {
+        // 只有当前请求（或已无请求）才能恢复按钮状态，避免旧请求覆盖新请求的 loading
+        if (extractAbortController === controller || extractAbortController === null) {
+          if (extractAbortController === controller) extractAbortController = null;
+          setExtractBtnLoading(false);
+        }
+      }
+    }
+    window.aiExtractContext = aiExtractContext;
+
+    /** 语境配置 UI 初始化：行业输入绑定 + 两个 Tag 输入绑定 + 空标签渲染 */
+    function initContextUI() {
+      const industryEl = document.getElementById('ctx-industry');
+      if (industryEl) {
+        industryEl.addEventListener('input', () => {
+          state.industry = industryEl.value;
+          scheduleContextSave();
+        });
+      }
+      bindContextTagInput('business_scene');
+      bindContextTagInput('core_goal');
+      renderTagList('business_scene');
+      renderTagList('core_goal');
+    }
+
+    /** 模块三 UI 初始化：知识库列表首次渲染（搜索/冲突/导入按钮均为 inline onclick） */
+    function initKbUI() {
+      renderKbList();
+    }
+
+    /** 模块四 UI 初始化：聊天输入框 Enter 发送（中文输入法组合态必须放行给输入法上屏） */
+    function initChatUI() {
+      const input = document.getElementById('chat-input');
+      if (input) {
+        input.addEventListener('keydown', (e) => {
+          if (e.isComposing || e.keyCode === 229) return; // IME 组合中：不发送
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendChatMessage();
+          }
+        });
+      }
+      renderChatBubbles();
+    }
+
+    // 页面初始化（脚本在 body 末尾，DOM 已就绪）
+    initEditorMirrors();
+    initContextUI();
+    initKbUI();
+    initChatUI();
+    resetBatchState();
+    initShortcuts(); // 模块六：Ctrl/Cmd + S 快捷键
+
+    window.onload = fetchData;
   </script>
 </body>
 </html>

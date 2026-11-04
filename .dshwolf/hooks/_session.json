@@ -1,0 +1,1203 @@
+{
+  "session_id": "",
+  "started": "",
+  "files_read": {
+    "D:/prompt-studio/HARNESS.md": {
+      "count": 6,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:23:40.727Z"
+    },
+    "D:/prompt-studio/requirements.md": {
+      "count": 17,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:23:40.742Z"
+    },
+    "D:/prompt-studio/public/index.html": {
+      "count": 277,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:23:50.128Z"
+    },
+    "D:/prompt-studio/.dshwolf/STATUS.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:23:56.990Z"
+    },
+    "D:/prompt-studio/plugins/project-snapshot/index.js": {
+      "count": 31,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:24:15.172Z"
+    },
+    "D:/prompt-studio/plugins/model-gateway/gateway.js": {
+      "count": 9,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:24:15.178Z"
+    },
+    "D:/prompt-studio/plugins/model-gateway/index.js": {
+      "count": 7,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:24:16.627Z"
+    },
+    "D:/prompt-studio/plugins/kb-manager/index.js": {
+      "count": 16,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:24:16.639Z"
+    },
+    "D:/prompt-studio/plugins/db.js": {
+      "count": 7,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:25:20.540Z"
+    },
+    "D:/prompt-studio/.dshwolf/memory.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:25:32.793Z"
+    },
+    "D:/prompt-studio/server-ui.js": {
+      "count": 4,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:25:39.671Z"
+    },
+    "D:/prompt-studio/start.cjs": {
+      "count": 4,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:25:39.675Z"
+    },
+    "D:/prompt-studio/cordis.patch.yml": {
+      "count": 6,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:25:40.448Z"
+    },
+    "D:/prompt-studio/plugins/eval-runner/index.js": {
+      "count": 32,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:26:36.831Z"
+    },
+    "D:/prompt-studio/plugins/release-gate/index.js": {
+      "count": 6,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:26:37.580Z"
+    },
+    "D:/prompt-studio/.dshwolf/cerebrum.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:26:47.577Z"
+    },
+    "D:/prompt-studio/test-data/prompts.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:32:47.073Z"
+    },
+    "D:/prompt-studio/package.json": {
+      "count": 5,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:36:53.866Z"
+    },
+    "D:/prompt-studio/plugins/context-engine/index.js": {
+      "count": 20,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:44:57.984Z"
+    },
+    "D:/prompt-studio/启动.bat": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:48:33.770Z"
+    },
+    "D:/prompt-studio/test-data/backend-selftest.mjs": {
+      "count": 9,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:49:35.955Z"
+    },
+    "D:/prompt-studio/test-data/e2e/http-smoke.mjs": {
+      "count": 6,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:49:52.433Z"
+    },
+    "D:/prompt-studio/test-data/_inspect_db.cjs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:53:05.031Z"
+    },
+    "D:/prompt-studio/.dshwolf/buglog.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:53:07.359Z"
+    },
+    "C:/Users/Jasper/AppData/Local/Temp/ps-html-check.mjs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:53:25.513Z"
+    },
+    "C:/Users/Jasper/AppData/Local/Temp/ps-smoke-test.mjs": {
+      "count": 4,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:53:25.517Z"
+    },
+    "C:/Users/Jasper/AppData/Local/Temp/ps-baseline-223503/project-snapshot.index.js": {
+      "count": 3,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:54:01.085Z"
+    },
+    "C:/Users/Jasper/AppData/Local/Temp/ps-baseline-223503/cordis.patch.yml": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:54:03.064Z"
+    },
+    "C:/Users/Jasper/AppData/Local/Temp/ps-extract-check.mjs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T14:55:21.811Z"
+    },
+    "D:/prompt-studio/test-data/e2e/batch-regression-deterministic.json": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T15:55:21.281Z"
+    },
+    "D:/prompt-studio/test-data/batch-regression-sample.json": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T15:55:21.285Z"
+    },
+    "D:/prompt-studio/test-data/e2e/import-sample-1.txt": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T15:55:22.537Z"
+    },
+    "D:/prompt-studio/test-data/e2e/import-sample-2.txt": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T15:57:34.393Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s2-result-phase2a.json": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:04:18.359Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s2-result-phase2b.json": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:04:33.433Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s2-result-phase3.json": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:04:46.683Z"
+    },
+    "D:/prompt-studio/test-data/backend-selftest-sprint2.mjs": {
+      "count": 15,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:05:07.621Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s2-result-phase4.json": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:05:08.067Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s2-result-phase5.json": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:05:25.973Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s2-result-phase6.json": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:06:02.427Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s2-result-phase1b.json": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:06:32.304Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s2-result-phase5b.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:09:03.271Z"
+    },
+    "D:/prompt-studio/test-data/e2e/http-smoke-sprint2.mjs": {
+      "count": 4,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:10:00.387Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s2-result-phase7a.json": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:23:30.366Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s2-result-phase7b.json": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:23:49.465Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s2-result-phase7c.json": {
+      "count": 3,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:24:11.127Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s2-result-phase7d.json": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:25:10.514Z"
+    },
+    "D:/prompt-studio/.gitignore": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:44:52.414Z"
+    },
+    "D:/prompt-studio/node_modules/archiver/package.json": {
+      "count": 4,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:45:32.528Z"
+    },
+    "D:/prompt-studio/node_modules/archiver/index.js": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:48:47.478Z"
+    },
+    "D:/prompt-studio/node_modules/archiver/lib/core.js": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:49:01.492Z"
+    },
+    "D:/prompt-studio/plugins/settings-engine/index.js": {
+      "count": 6,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:52:37.454Z"
+    },
+    "D:/prompt-studio/test-data/backend-selftest-sprint3.mjs": {
+      "count": 9,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:53:54.213Z"
+    },
+    "D:/prompt-studio/test-data/e2e/http-smoke-sprint3.mjs": {
+      "count": 4,
+      "tokens": 0,
+      "first_read": "2026-11-04T16:56:58.523Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s3-result-phase1.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:05:55.147Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s3-result-phase2.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:06:05.671Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s3-result-phase3.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:06:14.771Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s3-result-phase4.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:06:19.565Z"
+    },
+    "D:/prompt-studio/test-data/e2e/s3-result-phase5.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:06:30.686Z"
+    },
+    "D:/prompt-studio/test-data/e2e/cqo-result-a1.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:39:04.492Z"
+    },
+    "D:/prompt-studio/test-data/e2e/cqo-result-a3.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:39:38.604Z"
+    },
+    "D:/prompt-studio/test-data/e2e/cqo-result-b1.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:40:05.650Z"
+    },
+    "D:/prompt-studio/test-data/e2e/cqo-result-b2.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:40:15.362Z"
+    },
+    "D:/prompt-studio/test-data/e2e/cqo-result-c1.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:40:49.533Z"
+    },
+    "D:/prompt-studio/test-data/e2e/cqo-result-c2.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:41:03.223Z"
+    },
+    "D:/prompt-studio/test-data/e2e/cqo-result-d.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:41:23.166Z"
+    },
+    "D:/prompt-studio/test-data/e2e/cqo-result-debug-cache.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:43:58.215Z"
+    },
+    "D:/prompt-studio/test-data/e2e/cqo-result-d2.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:45:38.715Z"
+    },
+    "D:/prompt-studio/test-data/e2e/cqo-final-summary-1.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:46:13.889Z"
+    },
+    "D:/prompt-studio/test-data/e2e/cqo-result-e-alignment.json": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-11-04T17:46:29.870Z"
+    }
+  },
+  "files_written": [
+    {
+      "file": "D:/prompt-studio/test-data/_inspect_db.cjs",
+      "at": "2026-11-04T14:26:03.278Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T14:38:40.840Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/db.js",
+      "at": "2026-11-04T14:38:44.797Z"
+    },
+    {
+      "file": "D:/prompt-studio/cordis.patch.yml",
+      "at": "2026-11-04T14:38:46.286Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T14:38:46.677Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/context-engine/index.js",
+      "at": "2026-11-04T14:38:47.942Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T14:38:52.882Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T14:38:56.680Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/db.js",
+      "at": "2026-11-04T14:38:59.166Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/project-snapshot/index.js",
+      "at": "2026-11-04T14:39:00.649Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T14:39:01.001Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/backend-selftest.mjs",
+      "at": "2026-11-04T14:39:21.206Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T14:39:24.504Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps-extract-check.mjs",
+      "at": "2026-11-04T14:39:48.109Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T14:40:32.785Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/backend-selftest.mjs",
+      "at": "2026-11-04T14:40:33.583Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/backend-selftest.mjs",
+      "at": "2026-11-04T14:40:34.850Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps-smoke-test.mjs",
+      "at": "2026-11-04T14:40:59.970Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps-smoke-test.mjs",
+      "at": "2026-11-04T14:41:21.283Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps-html-check.mjs",
+      "at": "2026-11-04T14:41:34.096Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps-snapshot-itest-1/itest.mjs",
+      "at": "2026-11-04T14:42:09.545Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps-snapshot-itest-1/itest2.mjs",
+      "at": "2026-11-04T14:42:23.425Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T14:42:30.180Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T14:42:31.526Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T14:42:35.833Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps-smoke-test.mjs",
+      "at": "2026-11-04T14:42:50.637Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/http-smoke.mjs",
+      "at": "2026-11-04T14:44:24.206Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/browser-e2e.js",
+      "at": "2026-11-04T14:55:41.073Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/browser-e2e.js",
+      "at": "2026-11-04T14:59:57.727Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T15:00:13.056Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps2-extract.mjs",
+      "at": "2026-11-04T15:00:29.666Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps2-race-test.mjs",
+      "at": "2026-11-04T15:00:31.435Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/browser-e2e.js",
+      "at": "2026-11-04T15:03:05.026Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/browser-e2e.js",
+      "at": "2026-11-04T15:04:17.938Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/browser-e2e.js",
+      "at": "2026-11-04T15:04:19.003Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/browser-e2e.js",
+      "at": "2026-11-04T15:04:20.182Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/browser-e2e.js",
+      "at": "2026-11-04T15:04:21.214Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e-report.md",
+      "at": "2026-11-04T15:06:40.327Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/batch-regression-sample.json",
+      "at": "2026-11-04T15:50:13.617Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/import-sample-1.txt",
+      "at": "2026-11-04T15:50:15.495Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/import-sample-2.txt",
+      "at": "2026-11-04T15:50:16.659Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/batch-regression-deterministic.json",
+      "at": "2026-11-04T15:50:18.319Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/http-smoke-sprint2.mjs",
+      "at": "2026-11-04T15:50:42.949Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/eval-runner/index.js",
+      "at": "2026-11-04T15:51:40.713Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/backend-selftest-sprint2.mjs",
+      "at": "2026-11-04T15:51:41.855Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/eval-runner/index.js",
+      "at": "2026-11-04T15:51:47.790Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/eval-runner/index.js",
+      "at": "2026-11-04T15:51:52.511Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T15:52:04.515Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T15:52:11.345Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T15:52:19.716Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T15:52:25.310Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/backend-selftest-sprint2.mjs",
+      "at": "2026-11-04T15:52:35.211Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T15:52:40.651Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T15:52:56.744Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T15:53:04.657Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T15:53:06.236Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T15:53:07.910Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T15:53:09.660Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T15:53:18.439Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps3-extract.mjs",
+      "at": "2026-11-04T15:53:24.161Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps3-vm-test.mjs",
+      "at": "2026-11-04T15:54:08.890Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps3-vm-test.mjs",
+      "at": "2026-11-04T15:54:17.939Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps3-vm-test.mjs",
+      "at": "2026-11-04T15:54:25.453Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps3-vm-test.mjs",
+      "at": "2026-11-04T15:54:33.674Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps3-vm-test.mjs",
+      "at": "2026-11-04T15:54:43.684Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps3-static-check.mjs",
+      "at": "2026-11-04T15:55:01.087Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase1-search.js",
+      "at": "2026-11-04T15:55:22.155Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase2-conflict.js",
+      "at": "2026-11-04T15:55:23.471Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase3-import.js",
+      "at": "2026-11-04T15:55:34.639Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase4-chat.js",
+      "at": "2026-11-04T15:55:36.276Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase5-batch.js",
+      "at": "2026-11-04T15:55:55.528Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase6-cleanup.js",
+      "at": "2026-11-04T15:55:57.027Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase6-cleanup.js",
+      "at": "2026-11-04T15:56:06.644Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase2a-conflict-open.js",
+      "at": "2026-11-04T16:04:04.157Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase2b-conflict-close.js",
+      "at": "2026-11-04T16:04:05.501Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase5b-batch-screenshot.js",
+      "at": "2026-11-04T16:05:32.474Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase1b-search-recheck.js",
+      "at": "2026-11-04T16:06:09.934Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e-report-sprint2.md",
+      "at": "2026-11-04T16:12:19.837Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase7-racefix.js",
+      "at": "2026-11-04T16:13:07.900Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/eval-runner/index.js",
+      "at": "2026-11-04T16:13:22.851Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/backend-selftest-sprint2.mjs",
+      "at": "2026-11-04T16:13:24.152Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/backend-selftest-sprint2.mjs",
+      "at": "2026-11-04T16:13:39.895Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:13:52.293Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:13:53.871Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:14:02.289Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:14:07.688Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:14:09.414Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:14:19.461Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:14:32.972Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:14:34.713Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:14:36.119Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:14:51.547Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps4-race-test.mjs",
+      "at": "2026-11-04T16:15:19.974Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps4-extract.mjs",
+      "at": "2026-11-04T16:15:24.326Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps4-race-test.mjs",
+      "at": "2026-11-04T16:15:35.990Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/http-check-empty-layers.mjs",
+      "at": "2026-11-04T16:21:10.562Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase7a-delete.js",
+      "at": "2026-11-04T16:23:03.526Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase7b-chat-race.js",
+      "at": "2026-11-04T16:23:04.865Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase7c-batch-race.js",
+      "at": "2026-11-04T16:23:14.925Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase7d-import-race.js",
+      "at": "2026-11-04T16:23:16.147Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s2-phase7c-batch-race.js",
+      "at": "2026-11-04T16:24:34.111Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e-report-sprint2.md",
+      "at": "2026-11-04T16:25:24.601Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e-report-sprint2.md",
+      "at": "2026-11-04T16:25:26.306Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e-report-sprint2.md",
+      "at": "2026-11-04T16:28:06.102Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e-report-sprint2.md",
+      "at": "2026-11-04T16:28:07.281Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/http-smoke-sprint3.mjs",
+      "at": "2026-11-04T16:44:57.606Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s3-phase1-rollback.js",
+      "at": "2026-11-04T16:45:15.943Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s3-phase2-apikey.js",
+      "at": "2026-11-04T16:45:17.502Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s3-phase3-copy.js",
+      "at": "2026-11-04T16:45:33.689Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s3-phase4-uiaudit.js",
+      "at": "2026-11-04T16:45:35.247Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s3-phase5-regression.js",
+      "at": "2026-11-04T16:45:42.224Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:46:04.297Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:46:21.126Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:46:29.100Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:46:30.901Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:46:33.627Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/settings-engine/index.js",
+      "at": "2026-11-04T16:46:38.802Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:46:40.131Z"
+    },
+    {
+      "file": "D:/prompt-studio/cordis.patch.yml",
+      "at": "2026-11-04T16:46:40.226Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:46:41.255Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/project-snapshot/index.js",
+      "at": "2026-11-04T16:46:43.367Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/project-snapshot/index.js",
+      "at": "2026-11-04T16:46:47.579Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:46:48.993Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:46:50.783Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/project-snapshot/index.js",
+      "at": "2026-11-04T16:46:51.984Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/project-snapshot/index.js",
+      "at": "2026-11-04T16:47:01.513Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:47:02.913Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:47:10.955Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:47:12.865Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:47:14.855Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T16:47:16.987Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/backend-selftest-sprint3.mjs",
+      "at": "2026-11-04T16:47:18.965Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/settings-engine/index.js",
+      "at": "2026-11-04T16:47:30.589Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps5-extract.mjs",
+      "at": "2026-11-04T16:47:34.254Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps5-static-check.mjs",
+      "at": "2026-11-04T16:47:35.808Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps5-vm-test.mjs",
+      "at": "2026-11-04T16:48:07.159Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps-sprint3-itest-1/settings-itest.mjs",
+      "at": "2026-11-04T16:48:18.928Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps-sprint3-itest-1/snapshot-itest.mjs",
+      "at": "2026-11-04T16:48:20.328Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps5-vm-test.mjs",
+      "at": "2026-11-04T16:48:31.174Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps5-vm-test.mjs",
+      "at": "2026-11-04T16:48:33.053Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/project-snapshot/index.js",
+      "at": "2026-11-04T16:49:08.141Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/project-snapshot/index.js",
+      "at": "2026-11-04T16:49:09.817Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps-sprint3-itest-1/snapshot-itest.mjs",
+      "at": "2026-11-04T16:49:29.676Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps-sprint3-itest-1/snapshot-itest.mjs",
+      "at": "2026-11-04T16:49:31.562Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/http-smoke-sprint3.mjs",
+      "at": "2026-11-04T16:51:32.401Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:13.376Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:15.156Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:16.586Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:23.784Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:25.339Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:27.122Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:28.762Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:30.527Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:32.359Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:33.876Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:40.965Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:42.563Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:44.942Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:47.110Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:48.395Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:01:50.314Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:02:01.036Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:02:03.927Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:02:05.229Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps6-extract.mjs",
+      "at": "2026-11-04T17:02:20.041Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps6-static-check.mjs",
+      "at": "2026-11-04T17:02:21.828Z"
+    },
+    {
+      "file": "C:/Users/Jasper/AppData/Local/Temp/ps6-vm-test.mjs",
+      "at": "2026-11-04T17:02:41.503Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/s3-phase5-regression.js",
+      "at": "2026-11-04T17:06:38.196Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e-report-sprint3.md",
+      "at": "2026-11-04T17:08:03.527Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-a1-full-replace.js",
+      "at": "2026-11-04T17:38:48.412Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-a2-empty-fallback.js",
+      "at": "2026-11-04T17:39:15.221Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-a3-injection.js",
+      "at": "2026-11-04T17:39:17.195Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-b1-align-tags.js",
+      "at": "2026-11-04T17:39:54.073Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-b2-ime-debounce.js",
+      "at": "2026-11-04T17:39:55.549Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-c1-cross-project.js",
+      "at": "2026-11-04T17:40:29.181Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-c2-rename-header.js",
+      "at": "2026-11-04T17:40:31.006Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-d-copy-purity.js",
+      "at": "2026-11-04T17:41:15.007Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/release-gate/index.js",
+      "at": "2026-11-04T17:41:43.310Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:41:45.813Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-c2-rename-header.js",
+      "at": "2026-11-04T17:43:17.846Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-c2-rename-header.js",
+      "at": "2026-11-04T17:44:07.704Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-c2-rename-header.js",
+      "at": "2026-11-04T17:44:12.265Z"
+    },
+    {
+      "file": "D:/prompt-studio/plugins/release-gate/index.js",
+      "at": "2026-11-04T17:44:28.026Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-c2-rename-header.js",
+      "at": "2026-11-04T17:44:29.672Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-d-copy-purity.js",
+      "at": "2026-11-04T17:45:31.171Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-a1-full-replace.js",
+      "at": "2026-11-04T17:45:48.626Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-a2-empty-fallback.js",
+      "at": "2026-11-04T17:45:49.798Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-e-alignment-shots.js",
+      "at": "2026-11-04T17:46:22.602Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e/cqo-f-final-snapshot.js",
+      "at": "2026-11-04T17:46:54.116Z"
+    },
+    {
+      "file": "D:/prompt-studio/public/index.html",
+      "at": "2026-11-04T17:47:57.839Z"
+    },
+    {
+      "file": "D:/prompt-studio/test-data/e2e-report-cqo.md",
+      "at": "2026-11-04T17:50:22.613Z"
+    }
+  ],
+  "edit_counts": {
+    "D:/prompt-studio/test-data/_inspect_db.cjs": 1,
+    "D:/prompt-studio/public/index.html": 67,
+    "D:/prompt-studio/plugins/db.js": 2,
+    "D:/prompt-studio/cordis.patch.yml": 2,
+    "D:/prompt-studio/plugins/context-engine/index.js": 1,
+    "D:/prompt-studio/plugins/project-snapshot/index.js": 7,
+    "D:/prompt-studio/test-data/backend-selftest.mjs": 3,
+    "C:/Users/Jasper/AppData/Local/Temp/ps-extract-check.mjs": 1,
+    "C:/Users/Jasper/AppData/Local/Temp/ps-smoke-test.mjs": 3,
+    "C:/Users/Jasper/AppData/Local/Temp/ps-html-check.mjs": 1,
+    "C:/Users/Jasper/AppData/Local/Temp/ps-snapshot-itest-1/itest.mjs": 1,
+    "C:/Users/Jasper/AppData/Local/Temp/ps-snapshot-itest-1/itest2.mjs": 1,
+    "D:/prompt-studio/test-data/e2e/http-smoke.mjs": 1,
+    "D:/prompt-studio/test-data/e2e/browser-e2e.js": 7,
+    "C:/Users/Jasper/AppData/Local/Temp/ps2-extract.mjs": 1,
+    "C:/Users/Jasper/AppData/Local/Temp/ps2-race-test.mjs": 1,
+    "D:/prompt-studio/test-data/e2e-report.md": 1,
+    "D:/prompt-studio/test-data/batch-regression-sample.json": 1,
+    "D:/prompt-studio/test-data/e2e/import-sample-1.txt": 1,
+    "D:/prompt-studio/test-data/e2e/import-sample-2.txt": 1,
+    "D:/prompt-studio/test-data/e2e/batch-regression-deterministic.json": 1,
+    "D:/prompt-studio/test-data/e2e/http-smoke-sprint2.mjs": 1,
+    "D:/prompt-studio/plugins/eval-runner/index.js": 4,
+    "D:/prompt-studio/test-data/backend-selftest-sprint2.mjs": 4,
+    "C:/Users/Jasper/AppData/Local/Temp/ps3-extract.mjs": 1,
+    "C:/Users/Jasper/AppData/Local/Temp/ps3-vm-test.mjs": 5,
+    "C:/Users/Jasper/AppData/Local/Temp/ps3-static-check.mjs": 1,
+    "D:/prompt-studio/test-data/e2e/s2-phase1-search.js": 1,
+    "D:/prompt-studio/test-data/e2e/s2-phase2-conflict.js": 1,
+    "D:/prompt-studio/test-data/e2e/s2-phase3-import.js": 1,
+    "D:/prompt-studio/test-data/e2e/s2-phase4-chat.js": 1,
+    "D:/prompt-studio/test-data/e2e/s2-phase5-batch.js": 1,
+    "D:/prompt-studio/test-data/e2e/s2-phase6-cleanup.js": 2,
+    "D:/prompt-studio/test-data/e2e/s2-phase2a-conflict-open.js": 1,
+    "D:/prompt-studio/test-data/e2e/s2-phase2b-conflict-close.js": 1,
+    "D:/prompt-studio/test-data/e2e/s2-phase5b-batch-screenshot.js": 1,
+    "D:/prompt-studio/test-data/e2e/s2-phase1b-search-recheck.js": 1,
+    "D:/prompt-studio/test-data/e2e-report-sprint2.md": 5,
+    "D:/prompt-studio/test-data/e2e/s2-phase7-racefix.js": 1,
+    "C:/Users/Jasper/AppData/Local/Temp/ps4-race-test.mjs": 2,
+    "C:/Users/Jasper/AppData/Local/Temp/ps4-extract.mjs": 1,
+    "D:/prompt-studio/test-data/e2e/http-check-empty-layers.mjs": 1,
+    "D:/prompt-studio/test-data/e2e/s2-phase7a-delete.js": 1,
+    "D:/prompt-studio/test-data/e2e/s2-phase7b-chat-race.js": 1,
+    "D:/prompt-studio/test-data/e2e/s2-phase7c-batch-race.js": 2,
+    "D:/prompt-studio/test-data/e2e/s2-phase7d-import-race.js": 1,
+    "D:/prompt-studio/test-data/e2e/http-smoke-sprint3.mjs": 2,
+    "D:/prompt-studio/test-data/e2e/s3-phase1-rollback.js": 1,
+    "D:/prompt-studio/test-data/e2e/s3-phase2-apikey.js": 1,
+    "D:/prompt-studio/test-data/e2e/s3-phase3-copy.js": 1,
+    "D:/prompt-studio/test-data/e2e/s3-phase4-uiaudit.js": 1,
+    "D:/prompt-studio/test-data/e2e/s3-phase5-regression.js": 2,
+    "D:/prompt-studio/plugins/settings-engine/index.js": 2,
+    "D:/prompt-studio/test-data/backend-selftest-sprint3.mjs": 1,
+    "C:/Users/Jasper/AppData/Local/Temp/ps5-extract.mjs": 1,
+    "C:/Users/Jasper/AppData/Local/Temp/ps5-static-check.mjs": 1,
+    "C:/Users/Jasper/AppData/Local/Temp/ps5-vm-test.mjs": 3,
+    "C:/Users/Jasper/AppData/Local/Temp/ps-sprint3-itest-1/settings-itest.mjs": 1,
+    "C:/Users/Jasper/AppData/Local/Temp/ps-sprint3-itest-1/snapshot-itest.mjs": 3,
+    "C:/Users/Jasper/AppData/Local/Temp/ps6-extract.mjs": 1,
+    "C:/Users/Jasper/AppData/Local/Temp/ps6-static-check.mjs": 1,
+    "C:/Users/Jasper/AppData/Local/Temp/ps6-vm-test.mjs": 1,
+    "D:/prompt-studio/test-data/e2e-report-sprint3.md": 1,
+    "D:/prompt-studio/test-data/e2e/cqo-a1-full-replace.js": 2,
+    "D:/prompt-studio/test-data/e2e/cqo-a2-empty-fallback.js": 2,
+    "D:/prompt-studio/test-data/e2e/cqo-a3-injection.js": 1,
+    "D:/prompt-studio/test-data/e2e/cqo-b1-align-tags.js": 1,
+    "D:/prompt-studio/test-data/e2e/cqo-b2-ime-debounce.js": 1,
+    "D:/prompt-studio/test-data/e2e/cqo-c1-cross-project.js": 1,
+    "D:/prompt-studio/test-data/e2e/cqo-c2-rename-header.js": 5,
+    "D:/prompt-studio/test-data/e2e/cqo-d-copy-purity.js": 2,
+    "D:/prompt-studio/plugins/release-gate/index.js": 2,
+    "D:/prompt-studio/test-data/e2e/cqo-e-alignment-shots.js": 1,
+    "D:/prompt-studio/test-data/e2e/cqo-f-final-snapshot.js": 1,
+    "D:/prompt-studio/test-data/e2e-report-cqo.md": 1
+  },
+  "anatomy_hits": 0,
+  "anatomy_misses": 70,
+  "repeated_reads_warned": 504,
+  "cerebrum_warnings": 0
+}

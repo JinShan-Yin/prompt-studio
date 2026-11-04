@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "lifetime": {
+    "total_sessions": 4
+  },
+  "sessions": [
+    {
+      "session_id": "session-4aaf041a-5b6c-4450-b764-057e2ad6bdd3",
+      "agent": "deepseek-flash",
+      "measured_tokens": 565916,
+      "at": "2026-11-04T17:50:58.141Z"
+    },
+    {
+      "session_id": "a369c403-76d6-49d2-a4b9-35c0ef5c960b",
+      "agent": "deepseek-flash",
+      "measured_tokens": 246694,
+      "at": "2026-11-04T16:50:53.208Z"
+    },
+    {
+      "session_id": "4a81fe74-14d9-471d-b5e2-d41a26cc005a",
+      "agent": "deepseek-flash",
+      "measured_tokens": 589477,
+      "at": "2026-11-04T17:05:40.952Z"
+    },
+    {
+      "session_id": "602fe835-bd28-4e7a-b15f-825c03de213d",
+      "agent": "deepseek-flash",
+      "measured_tokens": 515035,
+      "at": "2026-11-04T17:06:42.488Z"
+    }
+  ]
+}

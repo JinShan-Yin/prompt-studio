@@ -1,11 +1,15 @@
 - insert:
     - id: model-gateway
       name: './plugins/model-gateway/index.js'
+    - id: context-engine
+      name: './plugins/context-engine/index.js'
     - id: project-snapshot
       name: './plugins/project-snapshot/index.js'
     - id: kb-manager
       name: './plugins/kb-manager/index.js'
     - id: eval-runner
       name: './plugins/eval-runner/index.js'
+    - id: settings-engine
+      name: './plugins/settings-engine/index.js'
     - id: release-gate
       name: './plugins/release-gate/index.js'

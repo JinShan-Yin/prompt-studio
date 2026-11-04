@@ -1,0 +1,1 @@
+{"kb":{"before":11,"injected":11,"afterDelete":0,"kbIdsBefore":0,"deleteAllOk":true},"ctx":{"restored":true,"uiLoaded":true},"sprint1":{"stats":{"chars":"40","tokens":"24","expectedChars":40,"expectedTokens":24},"spans":1,"spanColor":"rgb(245, 158, 11)","speakOk":true,"heights":{"ta":64,"mirror":64,"diff":0},"statsCleared":true,"orange":true},"errors":[],"pass":true}

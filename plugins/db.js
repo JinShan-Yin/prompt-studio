@@ -12,7 +12,7 @@ function initDb() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS model_configs ( id TEXT PRIMARY KEY, provider TEXT NOT NULL, display_name TEXT NOT NULL, base_url TEXT NOT NULL, api_key TEXT NOT NULL, model_name TEXT NOT NULL, temperature REAL DEFAULT 0.1, max_context_length INTEGER NOT NULL DEFAULT 32000, is_active INTEGER DEFAULT 1 );
     CREATE TABLE IF NOT EXISTS companies ( id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL );
-    CREATE TABLE IF NOT EXISTS projects ( id TEXT PRIMARY KEY, company_id TEXT, name TEXT NOT NULL, target_agent_id TEXT );
+    CREATE TABLE IF NOT EXISTS projects ( id TEXT PRIMARY KEY, company_id TEXT, name TEXT NOT NULL, target_agent_id TEXT, context_json TEXT DEFAULT '{}' );
     CREATE TABLE IF NOT EXISTS modules ( id TEXT PRIMARY KEY, layer TEXT, name TEXT, sensitivity TEXT DEFAULT 'P2' );
     CREATE TABLE IF NOT EXISTS module_versions ( id TEXT PRIMARY KEY, module_id TEXT, version TEXT, content TEXT );
     CREATE TABLE IF NOT EXISTS kb_items ( id TEXT PRIMARY KEY, project_id TEXT, question TEXT, answer TEXT );
@@ -30,6 +30,16 @@ function initDb() {
     }
   } catch (e) {
     console.error("数据库升级检查失败，如遇报错请手动删除 data/prompt-studio.db 重新初始化", e);
+  }
+
+  // 兼容旧数据库：V2.0 模块二「AI 语境提取」需要 projects.context_json 字段（幂等、非破坏）
+  try {
+    const projectColumns = db.prepare("PRAGMA table_info(projects)").all();
+    if (!projectColumns.some(c => c.name === 'context_json')) {
+      db.exec("ALTER TABLE projects ADD COLUMN context_json TEXT DEFAULT '{}';");
+    }
+  } catch (e) {
+    console.error("数据库升级检查失败（projects.context_json），如遇报错请手动删除 data/prompt-studio.db 重新初始化", e);
   }
 
   return db;

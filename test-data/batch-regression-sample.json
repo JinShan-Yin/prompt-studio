@@ -1,0 +1,21 @@
+[
+  {
+    "user_query": "停车怎么收费？",
+    "standard_answer": "首小时8元，全天封顶50元。",
+    "bot_reply": "<speak>您好，停车首小时8元，全天封顶50元。</speak>"
+  },
+  {
+    "user_query": "停车场在哪里？",
+    "standard_answer": "商场B1层，入口位于东侧。",
+    "bot_reply": "**停车场在B1层**\n- 入口位于东侧"
+  },
+  {
+    "user_query": "停车怎么收费？",
+    "standard_answer": "首小时8元，全天封顶50元。",
+    "bot_reply": "<speak>老板您好，停车费首小时10元，全天封顶100元。</speak>"
+  },
+  {
+    "user_query": "你们的营业时间是什么？",
+    "standard_answer": "每天9:00-21:00。"
+  }
+]
