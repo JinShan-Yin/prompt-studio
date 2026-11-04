@@ -480,6 +480,138 @@
     .diff-cell.added { background: #ecfdf5; color: #15803d; }
     .diff-cell.empty { background: #f8fafc; }
     .diff-loading { padding: 30px; text-align: center; color: var(--text-muted); }
+
+    /* ============================================================
+       V3.0 FINAL · 全局极简蓝调 UI 与极端场景补强（纯原生 CSS）
+       —— 末尾覆盖层：统一颜色层级 / 防溢出 / 原生焦点清理 / 层级 z-index
+       ============================================================ */
+    :root {
+      --ui-primary: #4d6bfe;
+      --ui-primary-hover: #3b5bdf;
+      --ui-sidebar-bg: #f9fafb;
+      --ui-main-bg: #fcfcfc;
+      --ui-card-bg: #ffffff;
+      --ui-border: #e5e7eb;
+      --ui-text: #334155;
+      --ui-text-secondary: #64748b;
+    }
+    /* ---------- 一、颜色冲突与层级重构 ---------- */
+    html, body { background: var(--ui-main-bg); color: var(--ui-text); }
+    .main-content, .content-area { background: var(--ui-main-bg); }
+    .card { background: var(--ui-card-bg); border: 1px solid var(--ui-border); }
+    .sidebar { background: var(--ui-sidebar-bg) !important; border-right: 1px solid var(--ui-border) !important; }
+    .logo-area { background: transparent !important; border-bottom: 1px solid var(--ui-border) !important; }
+    #fallback { color: var(--ui-text) !important; }
+    .btn-new { background: #ffffff !important; border: 1px solid var(--ui-border) !important; color: var(--ui-text) !important; }
+    .btn-new:hover { background: #f1f5f9 !important; border-color: #cbd5e1 !important; color: var(--ui-primary) !important; }
+    .menu-parent { color: var(--ui-text-secondary) !important; }
+    .menu-parent:hover { background: #eef2ff !important; color: var(--ui-primary) !important; }
+    .menu-child { color: var(--ui-text) !important; }
+    .menu-child:hover { background: #f1f5f9 !important; color: var(--ui-primary) !important; }
+    .menu-child.active { background: #eef2ff !important; color: var(--ui-primary) !important; font-weight: 600; box-shadow: inset 3px 0 0 var(--ui-primary) !important; }
+    .menu-child.active:hover { background: #e0e7ff !important; }
+    .sidebar [style*="color: #909399"] { color: var(--ui-text-secondary) !important; }
+    .more-btn { color: #94a3b8 !important; flex: 0 0 auto; }
+    .menu-parent:hover .more-btn, .menu-child:hover .more-btn { background: #e2e8f0 !important; color: var(--ui-text) !important; opacity: 1; }
+    .tree-search-input { background: #ffffff !important; border: 1px solid var(--ui-border) !important; color: var(--ui-text) !important; }
+    .tree-search-input::placeholder { color: #94a3b8 !important; }
+    .tree-search-input:hover { border-color: #cbd5e1 !important; }
+    .tree-search-input:focus { border-color: var(--ui-primary) !important; box-shadow: 0 0 0 3px rgba(77, 107, 254, 0.15) !important; background: #ffffff !important; }
+    .tree-empty { color: var(--ui-text-secondary) !important; }
+    /* 消灭所有深色 <pre> 块（含内联样式，统一浅灰 + 深灰文字 + 极细边框） */
+    pre, .card pre, #eval-result {
+      background: #f8fafc !important;
+      color: #334155 !important;
+      border: 1px solid #e5e7eb !important;
+      border-radius: 8px !important;
+      box-shadow: none !important;
+    }
+    pre code { color: #334155 !important; background: transparent !important; }
+    /* 弹窗 / 下拉菜单 / Toast 柔和阴影 */
+    .modal-box, .model-box, .kb-edit-box, .diff-panel,
+    .custom-dropdown, #global-dropdown, .toast {
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08) !important;
+    }
+
+    /* ---------- 二、极限防溢出处理 ---------- */
+    .menu-parent { min-width: 0; }
+    .menu-parent > div:first-child { min-width: 0; overflow: hidden; flex: 1 1 auto; }
+    .menu-parent > div:first-child > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .menu-child { min-width: 0; }
+    .menu-child > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tree-container { overflow-x: hidden; }
+    .tag-chip { max-width: 200px; min-width: 0; flex: 0 1 auto; }
+    .tag-chip-label { max-width: 156px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tag-chip-del { flex: 0 0 16px; width: 16px; height: 16px; min-width: 16px; }
+    /* 全局弹窗：内容过多时内部滚动，底部按钮不被顶出屏幕 */
+    .modal-box, .model-box, .kb-edit-box, .diff-panel {
+      max-height: 85vh !important;
+      overflow-y: auto !important;
+    }
+
+    /* ---------- 三、浏览器原生毒点清理 ---------- */
+    *:focus { outline: none !important; }
+    input:focus, textarea:focus, select:focus {
+      outline: none !important;
+      border-color: var(--ui-primary) !important;
+      box-shadow: 0 0 0 3px rgba(77, 107, 254, 0.15) !important;
+    }
+    input, textarea { -webkit-appearance: none; appearance: none; }
+    input::placeholder, textarea::placeholder { color: #94a3b8; opacity: 1; }
+    ::selection { background: rgba(77, 107, 254, 0.18); color: #0f172a; }
+    /* 全局滚动条：6px、透明轨道、浅灰圆角滑块、悬浮加深 */
+    * { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    ::-webkit-scrollbar-corner { background: transparent; }
+
+    /* ---------- 四、结构与交互精修 ---------- */
+    /* 子级项目左侧极淡引导线 + 层级缩进 */
+    .tree-container .menu-child {
+      margin-left: 22px !important;
+      border-left: 1px solid var(--ui-border) !important;
+      padding-left: 14px !important;
+      border-radius: 0 6px 6px 0;
+    }
+    /* 绝对防遮挡的 z-index 层级 */
+    #global-dropdown, .custom-dropdown { z-index: 9990 !important; }
+    .modal-mask, #global-modal, #model-config-modal, #kb-edit-modal, .diff-mask { z-index: 9999 !important; }
+    .toast { z-index: 10000 !important; }
+    /* 带图标的按钮/菜单强制 Flex 居中 */
+    .btn, .btn-link, .btn-new, .icon-btn, .tag-chip,
+    .more-btn, .model-close-btn, .model-quick-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    /* 下拉菜单：块级行 + 内容自适应宽度，避免菜单溢出到屏幕左侧 */
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    #global-dropdown {
+      width: max-content;
+      min-width: 150px;
+      max-width: 240px;
+    }
+    .menu-parent, .menu-child { display: flex; align-items: center; justify-content: space-between; }
+    /* 全局可交互元素过渡 */
+    .btn, button, a, input, textarea, select,
+    .menu-parent, .menu-child, .dropdown-item, .tag-chip, .icon-btn,
+    .more-btn, .card, .table tr, .tree-search-input, .modal-box {
+      transition: all 0.2s ease-in-out;
+    }
+    /* 其它原生观感修正 */
+    body { color-scheme: light; }
+    button { -webkit-tap-highlight-color: transparent; }
+    select { background-color: #ffffff; color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 6px; }
+    button:disabled, .btn:disabled { cursor: not-allowed; opacity: 0.6; }
   </style>
 </head>
 <body>

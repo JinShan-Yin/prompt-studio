@@ -68,3 +68,11 @@
 ## 6. 结论
 
 夜间托管执行结束，当前系统状态为 **可运行**，请人类验收。
+
+## 7. 附加交付：全局极简蓝调 UI 重构（用户追加需求）
+
+- 侧边栏 `#f9fafb` / 主区 `#fcfcfc` / 卡片 `#ffffff` / 侧边栏右侧 `1px solid #e5e7eb`；深色 `<pre>` 全部改浅灰 `#f8fafc` + 深灰 `#334155` + 极细边框；弹窗/菜单/Toast 阴影统一 `0 10px 30px rgba(0,0,0,.08)`。
+- 防溢出：树文本 ellipsis、Tag 最大 200px + 省略号 + 固定 16×16 关闭按钮、全局弹窗 `max-height:85vh; overflow-y:auto`（实测 816.85px = 85vh，底部按钮可见）。
+- 原生清理：`*:focus{outline:none!important}`、输入框 focus 蓝色边框 `#4d6bfe` + 柔光 `0 0 0 3px rgba(77,107,254,.15)`、滚动条 6px 透明轨道 `#cbd5e1`/悬浮 `#94a3b8`。
+- 层级与交互：子级项目 `border-left:1px solid #e5e7eb` + margin 22px 引导线；z-index 下拉 9990 / 弹窗 9999 / Toast 10000；图标按钮 Flex 居中 + 0.2s 过渡。
+- 真机断言（`dsh-ego-browser`）：① 50 字超长项目名 → 侧边栏未变形、`text-overflow:ellipsis`、clientWidth 170 < scrollWidth 799；② 输入框聚焦 → outline:none、边框 rgb(77,107,254)、box-shadow 柔光；③ 树最底部 “...” 菜单 → 完整显示于视口内（left 81 / width 150）、elementFromPoint 命中菜单项、z-index 9990 > 卡片；④ 子级引导线 1px #e5e7eb；⑤ 全程 0 JS 报错。截图：`s5-01-sidebar-overflow-focus.png`、`s5-02-dropdown-over-card.png`、`s5-03-final-minimal-blue.png`。
