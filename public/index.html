@@ -4315,8 +4315,9 @@
       const tpl = templateCache.find((t) => String(t.id) === String(id));
       if (!tpl) { showToast('模板不存在，请刷新列表'); return; }
       openConfirmModal('应用模板', `将用模板「${tpl.name}」覆盖当前 L0 / L1 / L3 三层内容，是否继续？`, async () => {
-        if (!templateRestoreState) templateRestoreState = getEditorLayerValues();
-        setEditorLayerValues({ L0: tpl.l0_content || '', L1: tpl.l1_content || '', L3: tpl.l3_content || '' });
+        // 「恢复初始模板」语义 = 恢复到刚应用的模板原文（撤销应用后的人工改动）
+        templateRestoreState = { L0: tpl.l0_content || '', L1: tpl.l1_content || '', L3: tpl.l3_content || '' };
+        setEditorLayerValues(templateRestoreState);
         const restoreBtn = document.getElementById('restore-template-btn');
         if (restoreBtn) restoreBtn.style.display = 'inline-block';
         closeModal();
@@ -4326,14 +4327,14 @@
     }
     window.requestApplyTemplate = requestApplyTemplate;
 
-    /** ↩️ 恢复初始模板：把应用模板前的三层原文写回 */
+    /** ↩️ 恢复初始模板：恢复到刚应用时的模板原文（撤销应用后的人工修改） */
     function restoreInitialTemplate() {
       if (!templateRestoreState) { showToast('没有可恢复的初始内容'); return; }
       setEditorLayerValues(templateRestoreState);
       templateRestoreState = null;
       const restoreBtn = document.getElementById('restore-template-btn');
       if (restoreBtn) restoreBtn.style.display = 'none';
-      showToast('已恢复应用模板前的初始内容');
+      showToast('已恢复初始模板内容');
     }
     window.restoreInitialTemplate = restoreInitialTemplate;
 

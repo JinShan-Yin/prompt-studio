@@ -1304,6 +1304,8 @@ function validateBackupPayload(payload) {
     const allowedColumns = columnCache.get(table);
     rowsByTable[table] = rows.map((row, index) => {
       if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error(`表 ${table} 第 ${index + 1} 行必须是对象`);
+      // 所有表均以 id 为主键：缺失/非法主键一律拒绝（防脏数据进入事务）
+      if (typeof row.id !== 'string' || !row.id.trim()) throw new Error(`表 ${table} 第 ${index + 1} 行缺少主键 id`);
       const keys = Object.keys(row);
       if (keys.length === 0) throw new Error(`表 ${table} 第 ${index + 1} 行是空对象`);
       const unknownColumns = keys.filter((key) => !allowedColumns.includes(key));
