@@ -79,3 +79,10 @@
 - 文案：开启新项目弹窗/占位符改为“创建客户或行业”等；菜单名精简；Token 进度条顶部工具条。
 - 测试：test-data/e2e/v5p2-*（A 13、B1 8、B2 5、Tabs 7、Empty 2、Public 后端 6、高亮/布局 3 = 44 项全过）；截图 v5p2-01~05；报告 test-data/v5-phase2-acceptance-report.md。
 - 数据清理：测试夹具已删，最终 3 项目 / 2 客户 / KB 101 / 快照 62 / 仅 admin，integrity ok。
+
+## 十、V5.0 生产环境终极验收（修复版，commit 待提交）
+- F1：编辑器 max-height 520px + overflow-y auto；新增 syncEditorGutter 补偿滚动条宽度，mirror scrollTop 跟随；真实浏览器 60 行/120 变量滚到底部橙色高亮无错位（6/6 PASS，截图 test-data/e2e/fix-f1-scroll-bottom.png）。
+- F2：/api/snapshots/create 权限校验前置（越权优先 403）；全站文案统一「无权修改公共项目」；最小越权 Payload 与带 layers 均 403（6/6 PASS）。
+- F3：audit_logs 幂等新增 level/ip；logAction 自动 Info/Warn/Danger（代管修改 Warn、删除 Danger）+ 请求 IP；超管头部新增「📜 审计日志」面板（只读、级别筛选、body 挂载、Esc 关闭）；真实 Warn 行 ip=127.0.0.1；普通用户按钮隐藏/API 403（后端 7/7、UI 6/6、权限 4/4 PASS，截图 test-data/e2e/fix-f3-audit-panel.png）。
+- 回归：套件一 6/6、套件四 API 6/6 + UI 3/3、阶段一 smoke 11/11；套件二/三/六未受影响。
+- 数据终态：users=1/projects=3/companies=2/kb=101/snapshots=62/models=18/audit=30(Info)/integrity ok；测试数据与脚本已清理，无业务逻辑残留。

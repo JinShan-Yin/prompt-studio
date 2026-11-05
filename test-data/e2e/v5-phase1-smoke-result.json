@@ -101,7 +101,7 @@
         "actions": [
           "login",
           "login",
-          "logout"
+          "login"
         ]
       }
     },
@@ -116,7 +116,7 @@
       "name": "独立 sessions.db 已创建",
       "ok": true,
       "detail": {
-        "size": 12288
+        "size": 24576
       }
     }
   ],

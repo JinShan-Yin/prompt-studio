@@ -160,6 +160,7 @@
       top: 0;
       left: 0;
       height: 100%;
+      max-height: 520px;
       background: #fff;
       color: #606266;
       overflow: hidden;
@@ -172,7 +173,9 @@
       z-index: 2;
       display: block;
       resize: none;
-      overflow: hidden;
+      max-height: 520px;
+      overflow-y: auto;
+      overflow-x: hidden;
       background: transparent;
       color: transparent;
       caret-color: #333;
@@ -858,6 +861,24 @@
     body.public-readonly #ctx-extract-btn,
     body.public-readonly #kb-batch-delete-btn { opacity: .5; }
     @media (max-width: 900px) { .kb-main-grid { grid-template-columns: 1fr; } .kb-right { border-left: none; padding-left: 0; } }
+    /* 审计日志面板（仅超管） */
+    .audit-box { width: 1080px; max-width: calc(100vw - 32px); max-height: 88vh; display: flex; flex-direction: column; }
+    .audit-body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+    .audit-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .audit-level-select { width: 160px; }
+    .audit-status { font-size: 12px; color: #64748b; margin-left: auto; }
+    .audit-table-wrap { overflow: auto; max-height: 60vh; border: 1px solid #e5e7eb; border-radius: 10px; }
+    .audit-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .audit-table th { position: sticky; top: 0; background: #f8fafc; z-index: 1; white-space: nowrap; }
+    .audit-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; word-break: break-all; }
+    .audit-table tr.audit-row-warn td { background: #fffbeb; }
+    .audit-table tr.audit-row-danger td { background: #fef2f2; }
+    .audit-level { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .audit-level-info { background: #ecfdf5; color: #16a34a; border: 1px solid #bbf7d0; }
+    .audit-level-warn { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+    .audit-level-danger { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .audit-ip { font-family: var(--font-mono); color: #475569; white-space: nowrap; }
+    .audit-hint { font-size: 12px; color: #94a3b8; line-height: 1.6; }
     /* Tab1 顶部 Token 进度工具栏 */
     .token-toolbar { margin-bottom: 16px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f8fafc; }
     .token-toolbar-head { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #64748b; margin-bottom: 8px; }
@@ -898,6 +919,7 @@
         <div class="header-title">当前项目： <span id="current-name">请选择左侧项目</span><span id="public-badge" class="public-badge" style="display:none;">公共参考项目 · 只读</span></div>
         <div class="header-right">
           <span class="trial-badge" id="trial-badge">剩余试用：–</span>
+          <button type="button" class="icon-btn" id="audit-log-btn" onclick="openAuditLogPanel()" title="审计日志（黑匣子）" aria-label="审计日志" style="display:none;">📜</button>
           <button type="button" class="icon-btn" id="shortcuts-btn" onclick="openShortcutsModal()" title="快捷键面板" aria-label="快捷键面板">⌨️</button>
           <button type="button" class="icon-btn" id="backup-export-btn" onclick="exportBackup()" title="导出备份 JSON" aria-label="导出备份 JSON">💾</button>
           <button type="button" class="icon-btn" id="backup-import-btn" onclick="document.getElementById('backup-import-file').click()" title="导入备份 JSON（覆盖全部数据）" aria-label="导入备份 JSON">📥</button>
@@ -1159,6 +1181,39 @@
       <!-- 空状态 -->
       <div class="content-area" id="empty-state" style="display: flex; align-items: center; justify-content: center; color: #909399;">
         <p>请在左侧选择一个项目开始工作</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- V5 终极 QA F3：审计日志面板（仅超管可见；挂载 body 最外层） -->
+  <div id="audit-log-modal" class="modal-mask audit-modal-mask" onclick="if (event.target === this) closeAuditLogPanel();">
+    <div class="modal-box audit-box">
+      <div class="modal-header">
+        <span>📜 审计日志（黑匣子）</span>
+        <button type="button" class="btn-link" onclick="closeAuditLogPanel()" aria-label="关闭">✕</button>
+      </div>
+      <div class="modal-body audit-body">
+        <div class="audit-toolbar">
+          <select id="audit-level-filter" class="form-input audit-level-select" onchange="loadAuditLogs()">
+            <option value="">全部级别</option>
+            <option value="Info">Info（绿）</option>
+            <option value="Warn">Warn（黄）</option>
+            <option value="Danger">Danger（红）</option>
+          </select>
+          <button type="button" class="btn-link" onclick="loadAuditLogs()">刷新</button>
+          <span class="audit-status" id="audit-log-status"></span>
+        </div>
+        <div class="audit-table-wrap">
+          <table class="table audit-table">
+            <thead>
+              <tr><th>时间</th><th>级别</th><th>用户</th><th>动作</th><th>对象</th><th>IP</th><th>详情</th></tr>
+            </thead>
+            <tbody id="audit-log-tbody">
+              <tr><td colspan="7" style="text-align:center;color:#909399;">加载中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="audit-hint">黑匣子只读：仅超级管理员可查看，不提供修改/删除接口；代管修改记录为 Warn，高危删除记录为 Danger。</div>
       </div>
     </div>
   </div>
@@ -1485,6 +1540,7 @@
         textarea.style.height = textarea.scrollHeight + 'px';
         mirror.style.height = textarea.style.height;
         mirror.scrollTop = textarea.scrollTop;
+        syncEditorGutter(textarea);
         syncEditorScroll(textarea);
       });
       refreshAllEditorMirrors();
@@ -1516,6 +1572,14 @@
         const el = document.getElementById('val-' + layer);
         if (el) el.addEventListener('input', () => saveEditorDrafts(activeProjectId));
       });
+      // 审计日志面板 Esc 关闭（独立于其他弹窗，避免干扰）
+      document.addEventListener('keydown', (e) => {
+        const modal = document.getElementById('audit-log-modal');
+        if (e.key === 'Escape' && modal && getComputedStyle(modal).display !== 'none') {
+          closeAuditLogPanel();
+          e.stopPropagation();
+        }
+      }, true);
       loadCurrentUser();
     }
     window.initTabsAndHeader = initTabsAndHeader;
@@ -1534,6 +1598,8 @@
           const roleText = d.user.role === 'superadmin' ? '超管' : (d.user.role === 'teamadmin' ? '团管' : '');
           badge.innerText = '剩余试用：' + left + '/3' + (roleText ? ' · ' + roleText : '');
         }
+        const auditBtn = document.getElementById('audit-log-btn');
+        if (auditBtn) auditBtn.style.display = d.user.role === 'superadmin' ? 'inline-flex' : 'none';
       } catch (e) { /* 静默 */ }
     }
     async function logoutSession() {
@@ -1541,6 +1607,61 @@
       window.location.href = '/login.html';
     }
     window.logoutSession = logoutSession;
+
+    // ---------- V5 终极 QA F3：审计日志（黑匣子）面板 ----------
+    function openAuditLogPanel() {
+      if (!currentUserInfo || currentUserInfo.role !== 'superadmin') { showToast('仅超级管理员可查看审计日志'); return; }
+      const modal = document.getElementById('audit-log-modal');
+      if (!modal) return;
+      modal.style.display = 'flex';
+      loadAuditLogs();
+    }
+    function closeAuditLogPanel() {
+      const modal = document.getElementById('audit-log-modal');
+      if (modal) modal.style.display = 'none';
+    }
+    async function loadAuditLogs() {
+      const tbody = document.getElementById('audit-log-tbody');
+      const status = document.getElementById('audit-log-status');
+      const filter = document.getElementById('audit-level-filter');
+      if (!tbody) return;
+      const level = filter ? filter.value : '';
+      if (status) status.innerText = '加载中...';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#909399;">加载中...</td></tr>';
+      try {
+        const url = '/api/admin/audit-logs?limit=200' + (level ? '&level=' + encodeURIComponent(level) : '');
+        const res = await fetch(url);
+        const d = await res.json().catch(() => null);
+        if (!d || !d.success) throw new Error((d && d.error) || '加载失败');
+        const rows = Array.isArray(d.data) ? d.data : [];
+        if (status) status.innerText = '共 ' + rows.length + ' 条' + (level ? '（' + level + '）' : '');
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#909399;">暂无日志</td></tr>';
+          return;
+        }
+        tbody.innerHTML = rows.map((r) => {
+          const lv = ['Info', 'Warn', 'Danger'].includes(r.level) ? r.level : 'Info';
+          const rowCls = lv === 'Warn' ? 'audit-row-warn' : (lv === 'Danger' ? 'audit-row-danger' : '');
+          let timeText = String(r.created_at || '');
+          try { timeText = new Date(r.created_at).toLocaleString('zh-CN', { hour12: false }); } catch (e) { /* keep raw */ }
+          return `<tr class="${rowCls}">
+            <td style="white-space:nowrap;">${escapeHtml(timeText)}</td>
+            <td><span class="audit-level audit-level-${lv.toLowerCase()}">${lv}</span></td>
+            <td>${escapeHtml(r.username || r.user_id || '-')}</td>
+            <td>${escapeHtml(r.action || '')}</td>
+            <td>${escapeHtml((r.target_type || '') + (r.target_id ? ':' + r.target_id : ''))}</td>
+            <td class="audit-ip">${escapeHtml(r.ip || '-')}</td>
+            <td>${escapeHtml(String(r.detail || '').slice(0, 300))}</td>
+          </tr>`;
+        }).join('');
+      } catch (e) {
+        if (status) status.innerText = '';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#dc2626;">' + escapeHtml(e.message || '加载失败') + '</td></tr>';
+      }
+    }
+    window.openAuditLogPanel = openAuditLogPanel;
+    window.closeAuditLogPanel = closeAuditLogPanel;
+    window.loadAuditLogs = loadAuditLogs;
 
     /** 公共参考项目只读模式 */
     function setPublicProjectMode(project) {
@@ -1561,7 +1682,7 @@
     /** 所有写操作统一前置拦截（公共项目禁止修改） */
     function guardPublicProject() {
       if (window.isPublicProject) {
-        showToast('公共项目禁止修改');
+        showToast('无权修改公共项目');
         return true;
       }
       return false;
@@ -1633,7 +1754,7 @@
     window.handleTreeItemClick = handleTreeItemClick;
     async function batchDeleteTreeSelection() {
       if (selectedProjectIds.length === 0) return showToast('请先勾选项目');
-      if (window.isPublicProject) return showToast('公共项目禁止修改');
+      if (window.isPublicProject) return showToast('无权修改公共项目');
       const ids = selectedProjectIds.slice();
       openConfirmModal('批量删除项目', `确认删除选中的 ${ids.length} 个项目？（含其知识库与快照将无法访问）`, async () => {
         closeModal();
@@ -4039,6 +4160,15 @@
       mirror.scrollLeft = textarea.scrollLeft;
     }
 
+    /** V5 QA F1：编辑框出现纵向滚动条时，给镜像层等价右内边距，保证两层换行宽度一致、橙色高亮不错位 */
+    function syncEditorGutter(textarea) {
+      const mirror = getEditorMirror(textarea);
+      if (!textarea || !mirror || !textarea.offsetWidth) return;
+      const gutter = Math.max(0, textarea.offsetWidth - textarea.clientWidth - 2); // 左右边框各 1px
+      const paddingRight = parseFloat(getComputedStyle(textarea).paddingRight) || 10;
+      mirror.style.paddingRight = (paddingRight + gutter) + 'px';
+    }
+
     /** 防塌陷 + 高度同步：height='auto' 后取 scrollHeight（加回 border），两层设同一个高度 */
     function syncEditorHeight(textarea) {
       const mirror = getEditorMirror(textarea);
@@ -4054,6 +4184,7 @@
       const nextHeight = textarea.scrollHeight + borderY;
       textarea.style.height = nextHeight + 'px';
       if (mirror) mirror.style.height = nextHeight + 'px';
+      syncEditorGutter(textarea);
     }
 
     /** 输入 / 赋值后的统一刷新：渲染高亮 + 撑高 + 滚动对齐（withStats 时统计走 50ms 防抖） */

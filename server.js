@@ -112,11 +112,42 @@ function httpError(status, message, code) {
   if (code) e.code = code;
   return e;
 }
-/** 黑匣子审计日志（登录/删除/修改/代管/备份等关键操作） */
-function logAction(userId, action, targetType = '', targetId = '', detail = '') {
+/** 黑匣子审计日志（登录/删除/修改/代管/备份等关键操作；分级 Info/Warn/Danger + IP） */
+function inferAuditLevel(userId, action, targetType, targetId, explicitLevel) {
+  if (explicitLevel && ['Info', 'Warn', 'Danger'].includes(explicitLevel)) return explicitLevel;
+  const act = String(action || '');
+  // 高危删除类优先 Danger
+  if (/delete|remove|reset_password|backup_import|danger/i.test(act)) return 'Danger';
   try {
-    db.prepare('INSERT INTO audit_logs (id, user_id, action, target_type, target_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run('log-' + crypto.randomUUID().split('-')[0], userId || '', String(action || ''), String(targetType || ''), String(targetId || ''), String(detail || '').slice(0, 2000), new Date().toISOString());
+    const actor = userId ? db.prepare('SELECT role FROM users WHERE id = ?').get(userId) : null;
+    const isManager = !!(actor && ['superadmin', 'teamadmin'].includes(actor.role));
+    if (!isManager) return 'Info';
+    let ownerId = '';
+    if (targetType === 'project') {
+      const p = db.prepare('SELECT user_id FROM projects WHERE id = ?').get(String(targetId));
+      ownerId = p ? p.user_id : '';
+    } else if (targetType === 'kb') {
+      const k = db.prepare('SELECT project_id FROM kb_items WHERE id = ?').get(String(targetId));
+      if (k) { const p = db.prepare('SELECT user_id FROM projects WHERE id = ?').get(k.project_id); ownerId = p ? p.user_id : ''; }
+    } else if (targetType === 'snapshot') {
+      const s = db.prepare('SELECT user_id, project_id FROM snapshots WHERE id = ?').get(String(targetId));
+      if (s) {
+        ownerId = s.user_id || '';
+        if (!ownerId && s.project_id) { const p = db.prepare('SELECT user_id FROM projects WHERE id = ?').get(s.project_id); ownerId = p ? p.user_id : ''; }
+      }
+    }
+    // 超管/团管修改他人数据 = 代管修改 → Warn
+    if (ownerId && ownerId !== userId) return 'Warn';
+  } catch (e) { /* 推断失败按 Info */ }
+  return 'Info';
+}
+function logAction(userId, action, targetType = '', targetId = '', detail = '', explicitLevel = '') {
+  try {
+    const store = requestContext.getStore() || {};
+    const level = inferAuditLevel(userId, action, targetType, targetId, explicitLevel);
+    const ip = String(store.ip || '').slice(0, 120);
+    db.prepare('INSERT INTO audit_logs (id, user_id, action, target_type, target_id, detail, level, ip, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run('log-' + crypto.randomUUID().split('-')[0], userId || '', String(action || ''), String(targetType || ''), String(targetId || ''), String(detail || '').slice(0, 2000), level, ip, new Date().toISOString());
   } catch (e) {
     console.error('[audit] 写日志失败:', e.message);
   }
@@ -279,6 +310,14 @@ function initDb() {
     // 所有业务表加 user_id（旧数据统一归属 admin）
     const V5_BUSINESS_TABLES = ['companies', 'projects', 'kb_items', 'kb_item_versions', 'snapshots', 'eval_runs', 'model_configs', 'modules', 'module_versions', 'prompt_templates'];
     for (const table of V5_BUSINESS_TABLES) addColumnIfMissing(table, 'user_id', 'TEXT');
+    // V5.0 终极 QA 修复：审计日志分级 + IP（幂等）
+    addColumnIfMissing('audit_logs', 'level', "TEXT DEFAULT 'Info'");
+    addColumnIfMissing('audit_logs', 'ip', "TEXT DEFAULT ''");
+    try {
+      database.prepare("UPDATE audit_logs SET level = 'Info' WHERE level IS NULL OR level = ''").run();
+    } catch (e) {
+      console.error('[v5] 审计日志 level 回填失败（已跳过）:', e.message);
+    }
 
     const adminRow = database.prepare("SELECT id FROM users WHERE role = 'superadmin' ORDER BY rowid ASC LIMIT 1").get()
       || database.prepare('SELECT id FROM users ORDER BY rowid ASC LIMIT 1').get();
@@ -972,9 +1011,10 @@ app.use(session({
   rolling: true, // 每次操作刷新 Cookie，实现「2 小时无操作自动登出」
   cookie: { maxAge: SESSION_TTL_MS, httpOnly: true, sameSite: 'lax', secure: false },
 }));
-// 为每个请求建立用户上下文（供 chatCompletion 试用扣减/模型路由使用）
+// 为每个请求建立用户上下文（供 chatCompletion 试用扣减/模型路由使用；并记录审计 IP）
 app.use((req, res, next) => {
-  requestContext.run({ userId: req.session && req.session.userId ? req.session.userId : null }, next);
+  const ip = String(req.ip || (req.socket && req.socket.remoteAddress) || '');
+  requestContext.run({ userId: req.session && req.session.userId ? req.session.userId : null, ip }, next);
 });
 
 // 白名单：登录页 / 登录注册接口 / 登录页所需静态资源；其余未登录访问一律拦截
@@ -1088,14 +1128,14 @@ function requireProjectAccess(projectId, user) {
 function requireProjectWritable(projectId, user) {
   const project = requireProjectAccess(projectId, user);
   if (Number(project.is_public) === 1 && (!user || user.role !== 'superadmin')) {
-    throw httpError(403, '公共项目禁止修改');
+    throw httpError(403, '无权修改公共项目');
   }
   return project;
 }
 /** 已有项目行时的写保护（KB 等通过 project 行校验的场景） */
 function assertProjectWritableByRow(project, user) {
   if (project && Number(project.is_public) === 1 && (!user || user.role !== 'superadmin')) {
-    throw httpError(403, '公共项目禁止修改');
+    throw httpError(403, '无权修改公共项目');
   }
   return project;
 }
@@ -1303,7 +1343,23 @@ route(['GET'], '/api/admin/audit-logs', async (req, res) => {
   const admin = currentSessionUser(req);
   if (!admin || admin.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可查看审计日志' });
   const limit = Math.min(Number(req.query.limit) || 200, 1000);
-  const rows = db.prepare('SELECT * FROM audit_logs ORDER BY rowid DESC LIMIT ?').all(limit);
+  const level = String(req.query.level || '').trim();
+  const action = String(req.query.action || '').trim();
+  const usernames = new Map();
+  try {
+    for (const u of db.prepare('SELECT id, username, role FROM users').all()) usernames.set(u.id, u);
+  } catch (e) { /* ignore */ }
+  let where = [];
+  let params = [];
+  if (['Info', 'Warn', 'Danger'].includes(level)) { where.push('level = ?'); params.push(level); }
+  if (action) { where.push('action = ?'); params.push(action); }
+  const sql = 'SELECT * FROM audit_logs' + (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY rowid DESC LIMIT ?';
+  const rows = db.prepare(sql).all(...params, limit).map((r) => ({
+    ...r,
+    level: r.level || 'Info',
+    ip: r.ip || '',
+    username: (usernames.get(r.user_id) && usernames.get(r.user_id).username) || r.user_id || '',
+  }));
   sendJson(res, 200, { success: true, data: rows });
 });
 
@@ -1449,9 +1505,10 @@ route(['POST'], '/api/kb/update', async (req, res) => {
 route(['POST'], '/api/snapshots/create', async (req, res) => {
   const { project_id, layers, context_data } = req.body || {};
   if (!project_id || typeof project_id !== 'string') return sendJson(res, 400, { success: false, error: '缺少 project_id' });
-  if (!Array.isArray(layers)) return sendJson(res, 400, { success: false, error: 'layers 必须是数组' });
+  // 权限校验优先于 body 校验：越权请求必须优先 403（QA F2 修复）
   const snapshotUser = currentSessionUser(req);
   requireProjectWritable(project_id, snapshotUser);
+  if (!Array.isArray(layers)) return sendJson(res, 400, { success: false, error: 'layers 必须是数组' });
 
   // 语境来源：body.context_data（对象且非空）优先；否则安全读取 DB projects.context_json；默认 {}
   const useBodyContext = isUsableContextData(context_data);
