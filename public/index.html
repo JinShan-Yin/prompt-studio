@@ -1042,6 +1042,9 @@
         <div id="modal-company-select-container" style="display:none;">
           <select id="modal-company-select" class="form-input"></select>
         </div>
+        <div id="modal-new-company-container" style="display:none; margin-top: 10px;">
+          <input type="text" id="modal-new-company-input" class="form-input" placeholder="请输入新父级公司名称..." />
+        </div>
         <div id="modal-input-container">
           <input type="text" id="modal-input" class="form-input" placeholder="请输入名称...">
         </div>
@@ -2549,6 +2552,15 @@
     document.addEventListener('click', (e) => { if (!e.target.closest('.more-btn') && !e.target.closest('.custom-dropdown')) closeMenu(); });
 
     let modalCallback = null;
+    let createSubmitting = false;
+    const NEW_COMPANY_OPTION = '__new_company__';
+
+    /**
+     * 新建弹窗：
+     * - type='company'：仅创建父级公司/分组；
+     * - type='project'：父级公司下拉可选「已有公司」或「➕ 新建父级公司」；
+     *   选新建父级时：填父级名称 + 子级项目名 → 父级+子级一起创建；子级留空 → 仅创建父级公司。
+     */
     function openCreateModal(type, companyId = '') {
       closeMenu();
       const modal = document.getElementById('global-modal');
@@ -2564,29 +2576,109 @@
       createInputEl.type = 'text'; // 防止被 API Key 密码框样式污染
       createInputEl.placeholder = '请输入名称...';
       createInputEl.value = '';
-      
+
       const companyContainer = document.getElementById('modal-company-select-container');
       const companySelect = document.getElementById('modal-company-select');
+      const newCompanyContainer = document.getElementById('modal-new-company-container');
+      const newCompanyInput = document.getElementById('modal-new-company-input');
+      if (newCompanyContainer) newCompanyContainer.style.display = 'none';
+      if (newCompanyInput) newCompanyInput.value = '';
+
+      /** 切换父级选择时：显示/隐藏新父级输入框，并同步子级项目名 placeholder */
+      const syncParentMode = () => {
+        const isNewParent = !!companySelect && companySelect.value === NEW_COMPANY_OPTION;
+        if (newCompanyContainer) newCompanyContainer.style.display = isNewParent ? 'block' : 'none';
+        if (createInputEl) {
+          createInputEl.placeholder = isNewParent
+            ? '请输入子级项目名称（留空 = 仅创建父级公司）'
+            : '请输入项目名称...';
+        }
+        if (isNewParent && newCompanyInput) newCompanyInput.focus();
+      };
+
       if (type === 'project') {
         companyContainer.style.display = 'block';
-        companySelect.innerHTML = companies.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-        if (companyId) companySelect.value = companyId;
+        const existingOptions = companies.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+        companySelect.innerHTML = `${existingOptions}<option value="${NEW_COMPANY_OPTION}">➕ 新建父级公司…</option>`;
+        companySelect.value = companyId || (companies.length ? companies[0].id : NEW_COMPANY_OPTION);
+        companySelect.onchange = syncParentMode;
+        syncParentMode();
       } else {
         companyContainer.style.display = 'none';
+        companySelect.onchange = null;
+        createInputEl.placeholder = '请输入公司/分组名称...';
+      }
+      if (newCompanyInput) {
+        newCompanyInput.onkeydown = (e) => { if (e.key === 'Enter' && modalCallback) modalCallback(); };
       }
       document.getElementById('modal-confirm-btn').className = 'btn btn-primary';
       modal.style.display = 'flex';
-      document.getElementById('modal-input').focus();
+      createInputEl.focus();
 
       modalCallback = async () => {
-        const name = document.getElementById('modal-input').value.trim();
-        if (!name) return showToast('名称不能为空');
-        const url = type === 'company' ? '/api/companies/create' : '/api/projects/create';
-        const body = type === 'company' ? { name } : { company_id: companySelect.value, name };
+        if (createSubmitting) return; // 防双击/回车重复创建
+        createSubmitting = true;
         try {
-          const d = await safeFetchJson(`${url}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
-          if (d.success) { showToast('创建成功'); closeModal(); fetchData(); } else { showToast(d.error); }
-        } catch (e) { showToast(e.message); }
+          const name = createInputEl.value.trim();
+          // 仅创建父级公司/分组
+          if (type === 'company') {
+            if (!name) { showToast('名称不能为空'); return; }
+            const d = await safeFetchJson('/api/companies/create', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name })
+            });
+            if (d && d.success) { showToast('创建成功'); closeModal(); await fetchData(); }
+            else { showToast((d && (d.error || d.message)) || '创建失败'); }
+            return;
+          }
+          const parentChoice = companySelect.value;
+          const isNewParent = parentChoice === NEW_COMPANY_OPTION;
+          const newParentName = newCompanyInput ? newCompanyInput.value.trim() : '';
+          if (isNewParent && !newParentName) {
+            showToast('请输入新父级公司名称');
+            if (newCompanyInput) newCompanyInput.focus();
+            return;
+          }
+          if (!isNewParent && !name) { showToast('请输入项目名称'); createInputEl.focus(); return; }
+
+          // 只创建父级（新建父级 + 子级留空）
+          if (isNewParent && !name) {
+            const cd = await safeFetchJson('/api/companies/create', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newParentName })
+            });
+            if (cd && cd.success) { showToast('父级公司创建成功'); closeModal(); await fetchData(); }
+            else { showToast((cd && (cd.error || cd.message)) || '父级公司创建失败'); }
+            return;
+          }
+
+          // 父级+子级：新建父级时先建公司，再建其下项目
+          let companyIdToUse = parentChoice;
+          let createdCompany = false;
+          if (isNewParent) {
+            const cd = await safeFetchJson('/api/companies/create', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newParentName })
+            });
+            if (!cd || !cd.success) { showToast((cd && (cd.error || cd.message)) || '父级公司创建失败'); return; }
+            companyIdToUse = cd.id;
+            createdCompany = true;
+          }
+          const pd = await safeFetchJson('/api/projects/create', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company_id: companyIdToUse, name })
+          });
+          if (pd && pd.success) {
+            showToast(createdCompany ? '父级公司 + 项目创建成功' : '创建成功');
+            closeModal();
+            await fetchData();
+            if (pd.id) selectProject(pd.id, name); // 创建后直接选中新项目
+          } else {
+            const errText = (pd && (pd.error || pd.message)) || '创建失败';
+            showToast(createdCompany ? `父级公司已创建，但项目创建失败：${errText}` : errText);
+            if (createdCompany) await fetchData();
+          }
+        } catch (e) {
+          showToast((e && e.message) || '创建失败');
+        } finally {
+          createSubmitting = false;
+        }
       };
     }
 
@@ -2682,6 +2774,7 @@
     function closeModal() {
       document.getElementById('global-modal').style.display = 'none';
       modalCallback = null;
+      createSubmitting = false;
       const confirmBtn = document.getElementById('modal-confirm-btn');
       confirmBtn.style.background = 'var(--primary)';
       confirmBtn.disabled = false;
@@ -2691,6 +2784,11 @@
       modalInput.type = 'text';
       modalInput.placeholder = '请输入名称...';
       modalInput.value = '';
+      // 新建项目弹窗的「新父级公司」输入框复位，避免下次打开残留
+      const newCompanyContainer = document.getElementById('modal-new-company-container');
+      if (newCompanyContainer) newCompanyContainer.style.display = 'none';
+      const newCompanyInput = document.getElementById('modal-new-company-input');
+      if (newCompanyInput) newCompanyInput.value = '';
       // 冲突告警等复用 modal 后恢复默认样式，避免污染既有 modal 功能
       document.getElementById('modal-title').style.color = '#303133';
       const messageEl = document.getElementById('modal-message');
