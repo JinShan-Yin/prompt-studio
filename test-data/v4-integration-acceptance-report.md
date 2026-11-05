@@ -48,3 +48,31 @@
 模板测试数据、克隆测试项目/KB、测试快照与 KB 版本均已清理；页面最终 reload 重选 Trip（KB 97 / 快照 47 / 模板 0 / 无弹层 / 0 报错）。
 
 **最终判定：V4.0 12 项功能与既有 V3.0 能力全部通过集成验收，可交付。**
+
+---
+
+## 五、QA Bot 极限断言（76/76 PASS）+ Lead 最终签收
+
+### 5.1 QA Bot 断言（dsh-ego-browser 真实 DOM / 网络 / 剪贴板）
+| 套件 | 内容 | 断言 | 结果 |
+|---|---|---|---|
+| 一 | 模板库：提取微调后保存并应用、搜索过滤（可见 1 行/隐藏 1 行）、恢复语义回退 | 21 | 21 PASS |
+| 二 | L0/L1 分层润色 Payload 拦截（layer/content 正确、只替换对应层）、剪贴板真实粘贴逐字一致（89 字符含中文无乱码） | 17 | 17 PASS |
+| 三 | 深拷贝隔离（刷新后 A=3 / B=2）、缺失主键 400 事务前拦截、主键冲突 500 + ROLLBACK | 25 | 25 PASS |
+| 四 | 40 行超长中英混排高亮对齐（span=40、误差≤3px、滚动同步）、生成快照回归 | 13 | 13 PASS |
+| **合计** | | **76** | **76 PASS / 0 FAIL / 0 JS 报错** |
+
+### 5.2 Lead 独立最终签收（修复后代码）
+- 后端 V4：`v4-http-test.mjs` **35/35 PASS**。
+- V3 既有 6 套件回归：selftest 19 / smoke 41 / p24 36 / p2 17 / 安全 14 / Host 11 = **138/138 PASS**。
+- 浏览器最终验收：`final-acceptance-browser.js` **16/16 PASS**（0 JS Error）。
+- 脏数据拦截独立复核：
+  - 缺失主键 → **400「表 companies 第 1 行缺少主键 id」**，10 表行数前后完全一致；
+  - 主键重复（projects.id）→ **500「导入失败，事务已回滚：UNIQUE constraint failed: projects.id」**，回滚后 10 表行数完全一致（`rollbackDataIntact=true`）。
+- 恢复模板语义复核：应用模板 → 手改 123 → 恢复 = 模板原文，按钮隐藏。
+- DB 终态：`integrity_check=ok`；companies=1、projects=3（GTP-V6接綫員 / Trip旅游AI接线员 / 途牛热线，无 QA/克隆残留）、kb_items=198、snapshots=58、prompt_templates=0、activeModels=1。
+
+### 5.3 本轮总计
+**QA Bot 76 + Lead 后端/回归 173（35+138）+ 浏览器终验 16 = 265 项检查，0 失败。**
+
+**最终判定：V4.0 规模化功能（模板库 / AI 润色 / 备份恢复 / 深拷贝克隆）与既有 V3.0 能力全部通过极限断言与集成回归，可交付。**
