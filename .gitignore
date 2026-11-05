@@ -4,3 +4,9 @@ exports/
 .env
 backup_dsh/
 .v3-checkpoints/
+# 忽略测试产生的临时文件
+test-data/e2e/
+*.log
+
+# 忽略 DSH 本地插件缓存
+.dshwolf/
