@@ -19,10 +19,14 @@
 import 'dotenv/config'; // 自动读取项目根 .env 到 process.env
 import express from 'express';
 import cors from 'cors';
+import session from 'express-session';
+import connectSqlite3 from 'connect-sqlite3';
+import bcrypt from 'bcryptjs';
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { execSync } from 'child_process';
 import pLimit from 'p-limit';
 import { ZipArchive } from 'archiver'; // archiver@8 纯 ESM：无 default export
@@ -42,6 +46,81 @@ const INDEX_HTML = path.join(PUBLIC_DIR, 'index.html');
 
 const KEY_NAME = 'DEEPSEEK_API_KEY';
 const API_KEY_MIN_LENGTH = 20;
+
+// ============================================================
+// V5.0 多租户 / 认证 / 加密常量与基础工具
+// ============================================================
+const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 小时无操作自动登出（rolling）
+const SESSION_DB_PATH = path.join(DATA_DIR, 'sessions.db');
+const VAULT_KEY_PATH = path.join(DATA_DIR, '.vault-key');
+const ADMIN_DEFAULT_PASSWORD = 'newrock123';
+const TRIAL_LIMIT = 3;
+const requestContext = new AsyncLocalStorage();
+
+let vaultKeyCache = null;
+function getVaultKey() {
+  if (vaultKeyCache) return vaultKeyCache;
+  try {
+    if (fs.existsSync(VAULT_KEY_PATH)) {
+      const hex = fs.readFileSync(VAULT_KEY_PATH, 'utf8').trim();
+      if (/^[0-9a-f]{64}$/i.test(hex)) vaultKeyCache = Buffer.from(hex, 'hex');
+    }
+    if (!vaultKeyCache) throw new Error('missing');
+  } catch {
+    vaultKeyCache = crypto.randomBytes(32);
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(VAULT_KEY_PATH, vaultKeyCache.toString('hex'), { mode: 0o600 });
+  }
+  return vaultKeyCache;
+}
+/** AES-256-GCM 加密；存储前缀 enc:v1:iv:tag:data */
+function encryptSecret(plain) {
+  const key = getVaultKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const enc = Buffer.concat([cipher.update(String(plain ?? ''), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return 'enc:v1:' + iv.toString('base64') + ':' + tag.toString('base64') + ':' + enc.toString('base64');
+}
+/** 解密；兼容历史明文（无 enc:v1: 前缀直接返回原文） */
+function decryptSecret(stored) {
+  const s = String(stored ?? '');
+  if (!s.startsWith('enc:v1:')) return s;
+  try {
+    const parts = s.split(':');
+    const iv = Buffer.from(parts[2], 'base64');
+    const tag = Buffer.from(parts[3], 'base64');
+    const data = Buffer.from(parts[4], 'base64');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', getVaultKey(), iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
+  } catch (e) {
+    console.error('[vault] 解密失败（Key 可能已损坏或被替换）:', e.message);
+    return '';
+  }
+}
+/** 解密后仅保留前 3 + 后 4（绝不向前端返回完整 Key） */
+function maskKeyForDisplay(storedKey) {
+  const key = String(decryptSecret(storedKey) ?? '').trim();
+  if (!key) return '****';
+  return key.length > 8 ? `${key.slice(0, 3)}****${key.slice(-4)}` : '****';
+}
+function httpError(status, message, code) {
+  const e = new Error(message);
+  e.status = status;
+  e.statusCode = status;
+  if (code) e.code = code;
+  return e;
+}
+/** 黑匣子审计日志（登录/删除/修改/代管/备份等关键操作） */
+function logAction(userId, action, targetType = '', targetId = '', detail = '') {
+  try {
+    db.prepare('INSERT INTO audit_logs (id, user_id, action, target_type, target_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run('log-' + crypto.randomUUID().split('-')[0], userId || '', String(action || ''), String(targetType || ''), String(targetId || ''), String(detail || '').slice(0, 2000), new Date().toISOString());
+  } catch (e) {
+    console.error('[audit] 写日志失败:', e.message);
+  }
+}
 
 // 快照层顺序（与 V2.0 保持一致）
 const LAYER_ORDER = ['L0', 'L1', 'L2', 'L3.5', 'L3'];
@@ -164,6 +243,73 @@ function initDb() {
     console.error('[db] 数据库升级检查失败（model_configs）:', e.message);
   }
 
+  // ============================================================
+  // V5.0 阶段一：多租户底层平滑升级（幂等；绝不删除/重建旧业务表）
+  // ============================================================
+  try {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS teams ( id TEXT PRIMARY KEY, name TEXT, created_at TEXT );
+      CREATE TABLE IF NOT EXISTS users ( id TEXT PRIMARY KEY, username TEXT UNIQUE, password_hash TEXT, role TEXT, team_id TEXT, need_change_password INTEGER, trial_count INTEGER DEFAULT 0, created_at TEXT );
+      CREATE TABLE IF NOT EXISTS audit_logs ( id TEXT PRIMARY KEY, user_id TEXT, action TEXT, target_type TEXT, target_id TEXT, detail TEXT, created_at TEXT );
+    `);
+    const userCount = database.prepare('SELECT COUNT(*) c FROM users').get().c;
+    if (userCount === 0) {
+      database.prepare('INSERT INTO users (id, username, password_hash, role, team_id, need_change_password, trial_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run('user-admin', 'admin', bcrypt.hashSync(ADMIN_DEFAULT_PASSWORD, 10), 'superadmin', '', 1, 0, new Date().toISOString());
+      console.log('[v5] 已创建默认超管 admin / newrock123（首次登录需修改密码）');
+    }
+
+    const addColumnIfMissing = (table, column, definition) => {
+      try {
+        const columns = database.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+        if (columns.length === 0) return; // 表不存在则跳过
+        if (!columns.includes(column)) {
+          database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`);
+          console.log(`[v5] ${table} 补充列: ${column}`);
+        }
+      } catch (e) {
+        console.error(`[v5] 加列失败(已跳过，不影响启动): ${table}.${column}`, e.message);
+      }
+    };
+    // 可见性字段
+    addColumnIfMissing('projects', 'is_public', 'INTEGER DEFAULT 0');
+    addColumnIfMissing('projects', 'public_scope', "TEXT DEFAULT 'private'");
+    addColumnIfMissing('prompt_templates', 'is_public', 'INTEGER DEFAULT 0');
+    addColumnIfMissing('prompt_templates', 'public_scope', "TEXT DEFAULT 'private'");
+    // 所有业务表加 user_id（旧数据统一归属 admin）
+    const V5_BUSINESS_TABLES = ['companies', 'projects', 'kb_items', 'kb_item_versions', 'snapshots', 'eval_runs', 'model_configs', 'modules', 'module_versions', 'prompt_templates'];
+    for (const table of V5_BUSINESS_TABLES) addColumnIfMissing(table, 'user_id', 'TEXT');
+
+    const adminRow = database.prepare("SELECT id FROM users WHERE role = 'superadmin' ORDER BY rowid ASC LIMIT 1").get()
+      || database.prepare('SELECT id FROM users ORDER BY rowid ASC LIMIT 1').get();
+    const adminId = adminRow ? adminRow.id : '';
+    if (adminId) {
+      for (const table of V5_BUSINESS_TABLES) {
+        try {
+          database.prepare(`UPDATE ${table} SET user_id = ? WHERE user_id IS NULL OR user_id = ''`).run(adminId);
+        } catch (e) { /* 表可能为空/不存在，跳过 */ }
+      }
+    }
+    // 历史明文 API Key 平滑加密迁移（幂等）
+    try {
+      const modelRows = database.prepare('SELECT id, api_key FROM model_configs').all();
+      const updateKey = database.prepare('UPDATE model_configs SET api_key = ? WHERE id = ?');
+      let encrypted = 0;
+      for (const row of modelRows) {
+        if (typeof row.api_key === 'string' && row.api_key.trim() && !row.api_key.startsWith('enc:v1:')) {
+          updateKey.run(encryptSecret(row.api_key), row.id);
+          encrypted++;
+        }
+      }
+      if (encrypted > 0) console.log(`[v5] 已加密迁移 ${encrypted} 条历史模型 Key`);
+    } catch (e) {
+      console.error('[v5] 模型 Key 加密迁移失败:', e.message);
+    }
+    console.log('[v5] 数据库升级完成（多租户/认证/审计表 + user_id 迁移）');
+  } catch (e) {
+    console.error('[v5] 数据库升级失败（旧数据保持不变，服务继续以兼容模式运行）:', e.message);
+  }
+
   return database;
 }
 
@@ -174,6 +320,14 @@ try {
   console.error('[server] 数据库初始化失败，服务无法启动:', e.message);
   console.error('  提示：请检查 data/ 目录权限，或从备份恢复 data/prompt-studio.db');
   process.exit(1);
+}
+// V5.0：默认超管 ID（旧数据归属 & 公共 Key 提供者；后续所有隔离逻辑依赖）
+let ADMIN_USER_ID = '';
+try {
+  const adminRow = db.prepare("SELECT id FROM users WHERE role = 'superadmin' ORDER BY rowid ASC LIMIT 1").get();
+  ADMIN_USER_ID = adminRow ? adminRow.id : '';
+} catch (e) {
+  console.error('[v5] 查询超管账号失败:', e.message);
 }
 
 // ============================================================
@@ -463,6 +617,36 @@ function getActiveModelConfig() {
   }
 }
 
+/** V5.0：按用户查询其私有激活模型 */
+function getActiveModelConfigForUser(userId) {
+  try {
+    return db.prepare('SELECT * FROM model_configs WHERE user_id = ? AND is_active = 1 ORDER BY rowid DESC LIMIT 1').get(userId) || null;
+  } catch (e) {
+    console.warn('[LLM] 查询用户私有模型失败:', e.message);
+    return null;
+  }
+}
+/** V5.0：超管公共激活模型（无私有 Key 的用户走此模型 + 试用扣减） */
+function getActiveAdminModel() {
+  if (!ADMIN_USER_ID) return null;
+  return getActiveModelConfigForUser(ADMIN_USER_ID);
+}
+/** V5.0：原子占用一次免费试用额度（并发安全：UPDATE ... WHERE trial_count < 3） */
+function consumeTrialOrThrow(userId) {
+  const info = db.prepare('UPDATE users SET trial_count = trial_count + 1 WHERE id = ? AND trial_count < ?').run(userId, TRIAL_LIMIT);
+  if (!info || info.changes === 0) {
+    throw httpError(403, `免费试用额度已用完（${TRIAL_LIMIT}/${TRIAL_LIMIT}），请配置自己的 API Key`, 'TRIAL_EXHAUSTED');
+  }
+}
+/** V5.0：请求失败补偿——回滚已占用的试用次数 */
+function rollbackTrial(userId) {
+  try {
+    db.prepare('UPDATE users SET trial_count = trial_count - 1 WHERE id = ? AND trial_count > 0').run(userId);
+  } catch (e) {
+    console.error('[v5] 试用次数回滚失败:', e.message);
+  }
+}
+
 /** 阶段一 .env 回退配置（base_url/model 默认 deepseek；Key 来自 DEEPSEEK_API_KEY） */
 function buildEnvLlmConfig(temperature) {
   return {
@@ -510,49 +694,121 @@ async function requestChatCompletion(config, messages, timeoutMs = LLM_REQUEST_T
 async function chatCompletion(config, messages) {
   const callerConfig = { ...DEFAULT_LLM_CONFIG, ...(config || {}) };
   return llmLimit(async () => {
-    const activeModel = getActiveModelConfig();
-    if (activeModel) {
-      const modelName = activeModel.model_name || DEFAULT_LLM_CONFIG.model_name;
-      const activeBaseUrl = activeModel.base_url || DEFAULT_LLM_CONFIG.base_url;
-      try {
-        const security = validateModelBaseUrl(activeBaseUrl);
-        if (!security.ok) throw new Error('激活模型 Base URL 不安全：' + security.error);
-        const dbApiKey = resolveModelApiKey(activeBaseUrl, activeModel.api_key);
-        if (!dbApiKey) throw new Error('激活模型未配置 API Key（自定义/第三方端点不允许回退 .env Key）');
-        const dbConfig = {
-          base_url: activeBaseUrl,
-          model_name: modelName,
-          api_key: dbApiKey,
-          temperature: Number.isFinite(Number(activeModel.temperature)) ? Number(activeModel.temperature) : callerConfig.temperature,
-        };
-        console.log(`[LLM] 路由: DB 激活模型 (${activeModel.display_name || activeModel.id} / ${modelName})`);
-        return await requestChatCompletion(dbConfig, messages);
-      } catch (dbError) {
-        const reason = redactSecrets(dbError && dbError.message ? dbError.message : dbError, [activeModel.api_key]);
-        console.warn('[LLM] DB 激活模型调用失败，自动回落 .env 配置重试一次:', reason);
+    const contextUserId = (requestContext.getStore() && requestContext.getStore().userId) || '';
+    const contextUser = contextUserId ? db.prepare('SELECT * FROM users WHERE id = ?').get(contextUserId) : null;
+
+    // 无登录上下文（仅内部/兼容调用；API 层已被 auth gate 拦截）→ 沿用 V4 全局路由
+    if (!contextUser) {
+      const activeModel = getActiveModelConfig();
+      if (activeModel) {
+        try {
+          const security = validateModelBaseUrl(activeModel.base_url || DEFAULT_LLM_CONFIG.base_url);
+          if (!security.ok) throw new Error('激活模型 Base URL 不安全：' + security.error);
+          const key = decryptSecret(activeModel.api_key);
+          if (key) {
+            return await requestChatCompletion({
+              base_url: activeModel.base_url || DEFAULT_LLM_CONFIG.base_url,
+              model_name: activeModel.model_name || DEFAULT_LLM_CONFIG.model_name,
+              api_key: key,
+              temperature: Number.isFinite(Number(activeModel.temperature)) ? Number(activeModel.temperature) : callerConfig.temperature,
+            }, messages);
+          }
+        } catch (dbError) {
+          console.warn('[LLM] DB 激活模型调用失败，自动回落 .env:', redactSecrets(dbError && dbError.message ? dbError.message : dbError));
+        }
       }
-    } else {
-      console.log('[LLM] 路由: .env 默认配置（无激活模型）');
+      return requestChatCompletion(buildEnvLlmConfig(callerConfig.temperature), messages);
     }
+
+    const isSuperadmin = contextUser.role === 'superadmin';
+    let route = null; // { kind: 'private'|'public'|'public-env'|'admin-env', row, key }
+
+    // 1) 私有 Key：本人激活模型
+    const ownModel = getActiveModelConfigForUser(contextUser.id);
+    if (ownModel) {
+      const ownKey = decryptSecret(ownModel.api_key);
+      if (ownKey) {
+        route = { kind: 'private', row: ownModel, key: ownKey };
+      } else if (isSuperadmin) {
+        const envKey = resolveModelApiKey(ownModel.base_url || DEFAULT_LLM_CONFIG.base_url, '');
+        if (envKey) route = { kind: 'admin-env', row: ownModel, key: envKey };
+      }
+    }
+
+    // 2) 无私有 Key：普通用户使用超管公共 Key（或系统 .env），并消耗一次试用额度
+    if (!route && !isSuperadmin) {
+      const publicModel = getActiveAdminModel();
+      if (publicModel) {
+        const publicKey = decryptSecret(publicModel.api_key) || resolveModelApiKey(publicModel.base_url || DEFAULT_LLM_CONFIG.base_url, '');
+        if (publicKey) route = { kind: 'public', row: publicModel, key: publicKey };
+      }
+      if (!route) {
+        const envKey = resolveModelApiKey(DEFAULT_LLM_CONFIG.base_url, '');
+        if (envKey) route = { kind: 'public-env', row: null, key: envKey };
+      }
+      if (!route) throw new Error('当前没有可用的公共 API Key，请联系管理员配置');
+    }
+    // 3) 超管无激活模型：直接使用 .env 系统 Key（不消耗试用）
+    if (!route && isSuperadmin) {
+      const envConfig = buildEnvLlmConfig(callerConfig.temperature);
+      if (!envConfig.api_key) throw new Error('未配置系统 API Key（管理员可在右上角 ⚙️ 设置 .env Key）');
+      route = { kind: 'admin-env', row: null, key: envConfig.api_key };
+    }
+    if (!route) throw new Error('没有可用的模型路由');
+
+    let dbConfig;
+    if (route.row) {
+      const baseUrl = route.row.base_url || DEFAULT_LLM_CONFIG.base_url;
+      const security = validateModelBaseUrl(baseUrl);
+      if (!security.ok) throw new Error('激活模型 Base URL 不安全：' + security.error);
+      dbConfig = {
+        base_url: baseUrl,
+        model_name: route.row.model_name || DEFAULT_LLM_CONFIG.model_name,
+        api_key: route.key,
+        temperature: Number.isFinite(Number(route.row.temperature)) ? Number(route.row.temperature) : callerConfig.temperature,
+      };
+    } else {
+      dbConfig = buildEnvLlmConfig(callerConfig.temperature);
+      dbConfig.api_key = route.key || dbConfig.api_key;
+    }
+
+    const usingTrial = route.kind === 'public' || route.kind === 'public-env';
+    // 防并发白嫖：原子占用额度（trial_count < 3 才成功，并发竞争失败者直接 403）
+    if (usingTrial) consumeTrialOrThrow(contextUser.id);
+    console.log(`[LLM] 路由: ${route.kind} (${route.row ? (route.row.display_name || route.row.id) : '.env'}) user=${contextUser.username}${usingTrial ? ' / trial+1' : ''}`);
     try {
-      return await requestChatCompletion(buildEnvLlmConfig(callerConfig.temperature), messages);
-    } catch (envError) {
-      throw new Error(redactSecrets(envError && envError.message ? envError.message : envError));
+      return await requestChatCompletion(dbConfig, messages);
+    } catch (error) {
+      // 大模型报错/超时 → 回滚本次试用扣减
+      if (usingTrial) rollbackTrial(contextUser.id);
+      if (isSuperadmin && route.kind === 'private') {
+        // 管理员私有模型失败 → 仍回落 .env（保持既有韧性；不涉及试用）
+        try {
+          console.warn('[LLM] 管理员私有模型失败，自动回落 .env:', redactSecrets(error && error.message ? error.message : error, [route.key]));
+          return await requestChatCompletion(buildEnvLlmConfig(callerConfig.temperature), messages);
+        } catch (envError) {
+          throw new Error(redactSecrets(envError && envError.message ? envError.message : envError));
+        }
+      }
+      throw new Error(redactSecrets(error && error.message ? error.message : error, [route.key]));
     }
   });
 }
 
+
 /** 用给定配置做一次最小连通性测试（/api/models/test 专用；20s 超时；错误信息已脱敏）
- *  安全：Base URL 必须通过 SSRF 校验；.env 真实 Key 只允许发送给官方 DeepSeek 端点。 */
-async function testModelConnection({ base_url, model_name, api_key }) {
+ *  安全：Base URL 必须通过 SSRF 校验；.env 真实 Key 只允许发送给官方 DeepSeek 端点。
+ *  V5.0：allowEnvFallback 仅超管可为 true（普通用户不得借用系统 .env Key）。 */
+async function testModelConnection({ base_url, model_name, api_key }, options = {}) {
   const startedAt = Date.now();
   const effectiveModelName = model_name || DEFAULT_LLM_CONFIG.model_name;
   const targetBaseUrl = base_url || DEFAULT_LLM_CONFIG.base_url;
   const security = validateModelBaseUrl(targetBaseUrl);
   if (!security.ok) return { success: false, message: security.error };
-  const effectiveApiKey = resolveModelApiKey(targetBaseUrl, api_key);
+  const explicitKey = typeof api_key === 'string' ? api_key.trim() : '';
+  const effectiveApiKey = explicitKey || (options.allowEnvFallback ? resolveModelApiKey(targetBaseUrl, '') : '');
   if (!effectiveApiKey) {
-    return { success: false, message: '该 Base URL 必须显式填写 API Key（自定义/第三方端点禁止回退 .env Key，防 Key 外泄）' };
+    return { success: false, message: '该 Base URL 必须显式填写 API Key（普通用户禁止回退系统 .env Key，防 Key 外泄）' };
   }
   try {
     await requestChatCompletion(
@@ -689,6 +945,161 @@ function sendJson(res, statusCode, data) {
 // 已注册路由清单（启动时打印数量，便于核对）
 const registeredRoutes = [];
 
+// ============================================================
+// V5.0 认证会话（express-session + 独立 sessions.db，避免业务库死锁）
+// ============================================================
+function loadOrCreateSessionSecret() {
+  const secretPath = path.join(DATA_DIR, '.session-secret');
+  try {
+    if (fs.existsSync(secretPath)) {
+      const existing = fs.readFileSync(secretPath, 'utf8').trim();
+      if (existing.length >= 32) return existing;
+    }
+  } catch (e) { /* 重新生成 */ }
+  const secret = crypto.randomBytes(32).toString('hex');
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(secretPath, secret, { mode: 0o600 });
+  return secret;
+}
+const SQLiteSessionStore = connectSqlite3(session);
+const sessionStore = new SQLiteSessionStore({ db: 'sessions.db', dir: DATA_DIR, table: 'sessions' });
+app.use(session({
+  store: sessionStore,
+  secret: loadOrCreateSessionSecret(),
+  name: 'newrock.sid',
+  resave: false,
+  saveUninitialized: false,
+  rolling: true, // 每次操作刷新 Cookie，实现「2 小时无操作自动登出」
+  cookie: { maxAge: SESSION_TTL_MS, httpOnly: true, sameSite: 'lax', secure: false },
+}));
+// 为每个请求建立用户上下文（供 chatCompletion 试用扣减/模型路由使用）
+app.use((req, res, next) => {
+  requestContext.run({ userId: req.session && req.session.userId ? req.session.userId : null }, next);
+});
+
+// 白名单：登录页 / 登录注册接口 / 登录页所需静态资源；其余未登录访问一律拦截
+const AUTH_WHITELIST_PATHS = new Set(['/login.html', '/api/auth/login', '/api/auth/register', '/api/auth/logout']);
+const AUTH_PUBLIC_STATIC_RE = /^\/(logo\.png|favicon\.ico)$/i;
+function authGate(req, res, next) {
+  const requestPath = req.path;
+  if (AUTH_WHITELIST_PATHS.has(requestPath) || AUTH_PUBLIC_STATIC_RE.test(requestPath)) return next();
+  const loggedIn = !!(req.session && req.session.userId);
+  if (loggedIn) return next();
+  if (requestPath.startsWith('/api/')) {
+    return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录或会话已过期，请重新登录' });
+  }
+  return res.redirect(302, '/login.html');
+}
+app.use(authGate);
+
+function getSessionUser(req) {
+  const userId = req.session && req.session.userId ? String(req.session.userId) : '';
+  if (!userId) return null;
+  try {
+    return db.prepare('SELECT * FROM users WHERE id = ?').get(userId) || null;
+  } catch (e) { return null; }
+}
+function publicUser(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    team_id: user.team_id || '',
+    need_change_password: Number(user.need_change_password) || 0,
+    trial_count: Number(user.trial_count) || 0,
+  };
+}
+function requireLogin(req, res, next) {
+  const user = getSessionUser(req);
+  if (!user) return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录或会话已过期' });
+  req.user = user;
+  return next();
+}
+function requireSuperAdmin(req, res, next) {
+  const user = getSessionUser(req);
+  if (!user) return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录或会话已过期' });
+  if (user.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '需要超级管理员权限' });
+  req.user = user;
+  return next();
+}
+function requireManager(req, res, next) {
+  const user = getSessionUser(req);
+  if (!user) return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录或会话已过期' });
+  if (!['superadmin', 'teamadmin'].includes(user.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  req.user = user;
+  return next();
+}
+function isValidUsername(username) {
+  return /^(1[3-9]\d{9}|[^\s@]+@[^\s@]+\.[^\s@]+)$/.test(String(username || '').trim());
+}
+
+// ============================================================
+// V5.0 多租户数据隔离辅助（个人 / 团管 / 超管）
+// ============================================================
+/** 当前请求用户（auth gate 保证 /api 已登录；无会话时返回 null，内部调用需自行处理） */
+function currentSessionUser(req) {
+  return (req && req.user) || getSessionUser(req);
+}
+/** 可见数据的所有者 userId 列表；超管返回 null 表示“无限制” */
+function visibleOwnerIds(user) {
+  if (!user) return [];
+  if (user.role === 'superadmin') return null;
+  if (user.role === 'teamadmin') {
+    const rows = db.prepare('SELECT id FROM users WHERE team_id = ?').all(user.team_id || '');
+    return rows.map((r) => r.id);
+  }
+  return [user.id];
+}
+/** 某条数据的所有者是否对当前用户可见（个人=本人；团管=同团队；超管=全部） */
+function canAccessOwner(ownerUserId, user) {
+  if (!user) return false;
+  if (user.role === 'superadmin') return true;
+  if (!ownerUserId) return false;
+  if (ownerUserId === user.id) return true;
+  if (user.role === 'teamadmin') {
+    try {
+      const owner = db.prepare('SELECT team_id FROM users WHERE id = ?').get(ownerUserId);
+      return !!(owner && owner.team_id && owner.team_id === (user.team_id || ''));
+    } catch (e) { return false; }
+  }
+  return false;
+}
+/** 校验项目访问权（越权返回 403，不存在返回 404） */
+function requireProjectAccess(projectId, user) {
+  const project = projectId ? db.prepare('SELECT * FROM projects WHERE id = ?').get(String(projectId)) : null;
+  if (!project) throw httpError(404, '项目不存在或无权访问');
+  if (!canAccessOwner(project.user_id, user)) throw httpError(403, '无权访问该项目');
+  return project;
+}
+/** 校验公司访问权 */
+function requireCompanyAccess(companyId, user) {
+  const company = companyId ? db.prepare('SELECT * FROM companies WHERE id = ?').get(String(companyId)) : null;
+  if (!company) throw httpError(404, '客户/行业不存在或无权访问');
+  if (!canAccessOwner(company.user_id, user)) throw httpError(403, '无权访问该客户/行业');
+  return company;
+}
+/** 校验快照访问权（优先 user_id，缺失则回落到项目归属） */
+function requireSnapshotAccess(snapshotId, user) {
+  const snapshot = snapshotId ? db.prepare('SELECT * FROM snapshots WHERE id = ?').get(String(snapshotId)) : null;
+  if (!snapshot) throw httpError(404, '快照不存在或无权访问');
+  let ownerId = snapshot.user_id;
+  if (!ownerId && snapshot.project_id) {
+    const project = db.prepare('SELECT user_id FROM projects WHERE id = ?').get(snapshot.project_id);
+    ownerId = project ? project.user_id : '';
+  }
+  if (!canAccessOwner(ownerId, user)) throw httpError(403, '无权访问该快照');
+  return snapshot;
+}
+/** 校验知识库条目访问权（回落到所属项目） */
+function requireKbAccess(kbId, user) {
+  const item = kbId ? db.prepare('SELECT * FROM kb_items WHERE id = ?').get(String(kbId)) : null;
+  if (!item) throw httpError(404, '知识条目不存在或无权访问');
+  const project = item.project_id ? db.prepare('SELECT * FROM projects WHERE id = ?').get(item.project_id) : null;
+  if (!project || !canAccessOwner(project.user_id, user)) throw httpError(403, '无权访问该知识条目');
+  return { item, project };
+}
+
+
 /**
  * 注册 API 路由：统一方法校验（非允许方法 -> 405 JSON）+ 异常兜底。
  * @param {string[]} methods 允许的方法，如 ['GET'] / ['POST'] / ['GET','POST']
@@ -705,10 +1116,167 @@ function route(methods, requestPath, handler) {
     } catch (e) {
       console.error(`[API 错误] ${req.method} ${requestPath}:`, e.message);
       if (res.headersSent) return res.destroy(e);
-      sendJson(res, 500, { success: false, error: e.message });
+      const status = Number(e && (e.status || e.statusCode)) || 500;
+      const payload = { success: false, error: e.message };
+      if (e && e.code) payload.code = e.code;
+      return sendJson(res, status, payload);
     }
   });
 }
+
+// ------------------------------------------------------------
+// 4.0 V5.0 认证接口（登录 / 注册 / 登出 / 当前用户 / 修改密码）
+// ------------------------------------------------------------
+route(['POST'], '/api/auth/register', async (req, res) => {
+  const body = req.body || {};
+  const username = typeof body.username === 'string' ? body.username.trim() : '';
+  const password = typeof body.password === 'string' ? body.password : '';
+  if (!isValidUsername(username)) {
+    return sendJson(res, 400, { success: false, error: '请输入正确的手机号或邮箱作为账号' });
+  }
+  if (password.length < 6) {
+    return sendJson(res, 400, { success: false, error: '密码至少 6 位' });
+  }
+  const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (exists) return sendJson(res, 409, { success: false, error: '该账号已注册' });
+  const id = 'user-' + crypto.randomUUID().split('-')[0];
+  try {
+    db.prepare('INSERT INTO users (id, username, password_hash, role, team_id, need_change_password, trial_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, username, bcrypt.hashSync(password, 10), 'user', '', 0, 0, new Date().toISOString());
+  } catch (e) {
+    return sendJson(res, 409, { success: false, error: '注册失败：账号已存在' });
+  }
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  req.session.userId = user.id;
+  req.session.role = user.role;
+  req.session.save((err) => {
+    if (err) return sendJson(res, 500, { success: false, error: '会话保存失败，请重试' });
+    logAction(user.id, 'register', 'user', user.id, `username=${user.username}`);
+    return sendJson(res, 200, { success: true, user: publicUser(user) });
+  });
+});
+
+route(['POST'], '/api/auth/login', async (req, res) => {
+  const body = req.body || {};
+  const username = typeof body.username === 'string' ? body.username.trim() : '';
+  const password = typeof body.password === 'string' ? body.password : '';
+  if (!username || !password) return sendJson(res, 400, { success: false, error: '请输入账号和密码' });
+  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    return sendJson(res, 401, { success: false, error: '账号或密码错误' });
+  }
+  req.session.userId = user.id;
+  req.session.role = user.role;
+  req.session.save((err) => {
+    if (err) return sendJson(res, 500, { success: false, error: '会话保存失败，请重试' });
+    logAction(user.id, 'login', 'user', user.id, `role=${user.role}`);
+    return sendJson(res, 200, { success: true, user: publicUser(user) });
+  });
+});
+
+route(['POST'], '/api/auth/logout', async (req, res) => {
+  const user = getSessionUser(req);
+  if (user) logAction(user.id, 'logout', 'user', user.id, '');
+  req.session.destroy(() => {
+    res.clearCookie('newrock.sid');
+    return sendJson(res, 200, { success: true, message: '已退出登录' });
+  });
+});
+
+route(['GET'], '/api/auth/me', async (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录或会话已过期' });
+  return sendJson(res, 200, { success: true, user: publicUser(user) });
+});
+
+route(['POST'], '/api/auth/change-password', async (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录或会话已过期' });
+  const body = req.body || {};
+  const oldPassword = typeof body.old_password === 'string' ? body.old_password : '';
+  const newPassword = typeof body.new_password === 'string' ? body.new_password : '';
+  if (!bcrypt.compareSync(oldPassword, user.password_hash)) {
+    return sendJson(res, 400, { success: false, error: '原密码不正确' });
+  }
+  if (newPassword.length < 6) return sendJson(res, 400, { success: false, error: '新密码至少 6 位' });
+  db.prepare('UPDATE users SET password_hash = ?, need_change_password = 0 WHERE id = ?').run(bcrypt.hashSync(newPassword, 10), user.id);
+  logAction(user.id, 'change_password', 'user', user.id, '');
+  return sendJson(res, 200, { success: true, message: '密码已修改' });
+});
+
+// ------------------------------------------------------------
+// 4.0.1 V5.0 团队 / 用户管理 / 审计（阶段一基础能力）
+// ------------------------------------------------------------
+route(['GET'], '/api/teams', async (req, res) => {
+  const user = currentSessionUser(req);
+  if (!user) return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录' });
+  if (user.role === 'superadmin') return sendJson(res, 200, { success: true, data: db.prepare('SELECT * FROM teams ORDER BY created_at ASC').all() });
+  const team = user.team_id ? db.prepare('SELECT * FROM teams WHERE id = ?').get(user.team_id) : null;
+  return sendJson(res, 200, { success: true, data: team ? [team] : [] });
+});
+
+route(['POST'], '/api/teams/create', async (req, res) => {
+  const user = currentSessionUser(req);
+  if (!user || user.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可创建团队' });
+  const name = typeof (req.body || {}).name === 'string' ? req.body.name.trim() : '';
+  if (!name) return sendJson(res, 400, { success: false, error: '团队名称不能为空' });
+  const id = 'team-' + crypto.randomUUID().split('-')[0];
+  db.prepare('INSERT INTO teams (id, name, created_at) VALUES (?, ?, ?)').run(id, name, new Date().toISOString());
+  logAction(user.id, 'team_create', 'team', id, name);
+  sendJson(res, 200, { success: true, id, message: '团队创建成功' });
+});
+
+route(['GET'], '/api/admin/users', async (req, res) => {
+  const user = currentSessionUser(req);
+  if (!user || !['superadmin', 'teamadmin'].includes(user.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  let rows;
+  if (user.role === 'superadmin') {
+    rows = db.prepare('SELECT id, username, role, team_id, need_change_password, trial_count, created_at FROM users ORDER BY created_at ASC').all();
+  } else {
+    rows = db.prepare('SELECT id, username, role, team_id, need_change_password, trial_count, created_at FROM users WHERE team_id = ? ORDER BY created_at ASC').all(user.team_id || '');
+  }
+  sendJson(res, 200, { success: true, data: rows });
+});
+
+route(['POST'], '/api/admin/users/reset-password', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  const targetId = typeof (req.body || {}).user_id === 'string' ? req.body.user_id.trim() : '';
+  const target = targetId ? db.prepare('SELECT * FROM users WHERE id = ?').get(targetId) : null;
+  if (!target) return sendJson(res, 404, { success: false, error: '用户不存在' });
+  if (admin.role === 'teamadmin' && (target.role !== 'user' || target.team_id !== (admin.team_id || ''))) {
+    return sendJson(res, 403, { success: false, error: '团管只能重置本团队成员密码' });
+  }
+  if (admin.role === 'superadmin' && target.role === 'superadmin' && target.id !== admin.id) {
+    return sendJson(res, 403, { success: false, error: '不能重置其他超管密码' });
+  }
+  db.prepare('UPDATE users SET password_hash = ?, need_change_password = 1 WHERE id = ?').run(bcrypt.hashSync('123456', 10), target.id);
+  logAction(admin.id, 'admin_reset_password', 'user', target.id, 'reset to 123456');
+  sendJson(res, 200, { success: true, message: '密码已重置为 123456，用户下次登录需修改密码' });
+});
+
+route(['POST'], '/api/admin/users/assign-team', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || admin.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可分配团队' });
+  const body = req.body || {};
+  const targetId = typeof body.user_id === 'string' ? body.user_id.trim() : '';
+  const teamId = typeof body.team_id === 'string' ? body.team_id.trim() : '';
+  const target = targetId ? db.prepare('SELECT * FROM users WHERE id = ?').get(targetId) : null;
+  if (!target) return sendJson(res, 404, { success: false, error: '用户不存在' });
+  if (teamId && !db.prepare('SELECT id FROM teams WHERE id = ?').get(teamId)) return sendJson(res, 404, { success: false, error: '团队不存在' });
+  const nextRole = body.role === 'teamadmin' ? 'teamadmin' : (target.role === 'teamadmin' ? 'user' : target.role);
+  db.prepare('UPDATE users SET team_id = ?, role = ? WHERE id = ?').run(teamId, nextRole === 'superadmin' ? 'superadmin' : nextRole, target.id);
+  logAction(admin.id, 'assign_team', 'user', target.id, `team=${teamId} role=${nextRole}`);
+  sendJson(res, 200, { success: true, message: '团队分配成功' });
+});
+
+route(['GET'], '/api/admin/audit-logs', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || admin.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可查看审计日志' });
+  const limit = Math.min(Number(req.query.limit) || 200, 1000);
+  const rows = db.prepare('SELECT * FROM audit_logs ORDER BY rowid DESC LIMIT ?').all(limit);
+  sendJson(res, 200, { success: true, data: rows });
+});
 
 // ------------------------------------------------------------
 // 4.1 语境接口
@@ -717,6 +1285,7 @@ function route(methods, requestPath, handler) {
 route(['GET'], '/api/context/get', async (req, res) => {
   const projectId = String(req.query.project_id || (req.body && req.body.project_id) || '');
   if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  requireProjectAccess(projectId, currentSessionUser(req));
   sendJson(res, 200, { success: true, data: readProjectContext(projectId) });
 });
 
@@ -724,8 +1293,11 @@ route(['POST'], '/api/context/save', async (req, res) => {
   const body = req.body || {};
   const projectId = body.project_id || req.query.project_id || '';
   if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  const user = currentSessionUser(req);
+  requireProjectAccess(projectId, user);
   const context = normalizeContext(body.context_data);
   const info = db.prepare('UPDATE projects SET context_json = ? WHERE id = ?').run(JSON.stringify(context), projectId);
+  logAction(user.id, 'context_save', 'project', projectId, '');
   sendJson(res, 200, { success: true, updated: info.changes > 0, data: context });
 });
 
@@ -733,6 +1305,7 @@ route(['POST'], '/api/context/extract', async (req, res) => {
   const body = req.body || {};
   const projectId = body.project_id || req.query.project_id || '';
   if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  requireProjectAccess(projectId, currentSessionUser(req));
 
   const rows = db.prepare('SELECT question, answer FROM kb_items WHERE project_id = ?').all(projectId);
   if (rows.length === 0) {
@@ -773,31 +1346,43 @@ route(['POST'], '/api/kb/parse', async (req, res) => {
 
 route(['POST'], '/api/kb/save', async (req, res) => {
   const { project_id, pairs } = req.body || {};
-  const insertItem = db.prepare('INSERT INTO kb_items (id, project_id, question, answer) VALUES (?, ?, ?, ?)');
-  const insertVer = db.prepare('INSERT INTO kb_item_versions (id, item_id, version_hash, content, is_deleted) VALUES (?, ?, ?, ?, 0)');
+  if (!project_id) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  if (!Array.isArray(pairs)) return sendJson(res, 400, { success: false, error: 'pairs 必须是数组' });
+  const user = currentSessionUser(req);
+  const project = requireProjectAccess(project_id, user);
+  const ownerId = project.user_id || user.id;
+  const insertItem = db.prepare('INSERT INTO kb_items (id, project_id, question, answer, user_id) VALUES (?, ?, ?, ?, ?)');
+  const insertVer = db.prepare('INSERT INTO kb_item_versions (id, item_id, version_hash, content, is_deleted, user_id) VALUES (?, ?, ?, ?, 0, ?)');
   db.transaction(() => {
     for (const pair of pairs) {
       const itemId = 'kb-' + crypto.randomUUID().split('-')[0];
       const versionId = 'v-' + crypto.randomUUID().split('-')[0];
       const contentStr = JSON.stringify(pair);
       const hash = crypto.createHash('md5').update(contentStr).digest('hex');
-      insertItem.run(itemId, project_id, pair.question, pair.answer);
-      insertVer.run(versionId, itemId, hash, contentStr);
+      insertItem.run(itemId, project_id, pair.question, pair.answer, ownerId);
+      insertVer.run(versionId, itemId, hash, contentStr, ownerId);
     }
   })();
+  logAction(user.id, 'kb_save', 'project', project_id, `count=${pairs.length}`);
   sendJson(res, 200, { success: true, message: `已成功入库 ${pairs.length} 条` });
 });
 
 route(['GET'], '/api/kb/list', async (req, res) => {
-  const rows = db.prepare('SELECT id, question, answer FROM kb_items WHERE project_id = ?').all(req.query.project_id || '');
+  const projectId = req.query.project_id || '';
+  if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  requireProjectAccess(projectId, currentSessionUser(req));
+  const rows = db.prepare('SELECT id, question, answer FROM kb_items WHERE project_id = ?').all(projectId);
   sendJson(res, 200, { success: true, data: rows });
 });
 
 route(['POST'], '/api/kb/delete', async (req, res) => {
   const body = req.body || {};
   if (!body.id) return sendJson(res, 400, { error: '缺少 ID' });
+  const user = currentSessionUser(req);
+  requireKbAccess(body.id, user);
   db.prepare('DELETE FROM kb_items WHERE id = ?').run(body.id);
   db.prepare('UPDATE kb_item_versions SET is_deleted = 1 WHERE item_id = ?').run(body.id);
+  logAction(user.id, 'kb_delete', 'kb', body.id, '');
   sendJson(res, 200, { success: true, message: '删除成功' });
 });
 
@@ -810,6 +1395,8 @@ route(['POST'], '/api/kb/update', async (req, res) => {
   const answer = typeof body.answer === 'string' ? body.answer.trim() : '';
   if (!question || !answer) return sendJson(res, 400, { success: false, error: 'question 和 answer 必须是非空字符串' });
 
+  const kbUser = currentSessionUser(req);
+  requireKbAccess(id, kbUser);
   const existing = db.prepare('SELECT id FROM kb_items WHERE id = ?').get(id);
   if (!existing) return sendJson(res, 404, { success: false, error: '知识条目不存在' });
 
@@ -832,6 +1419,8 @@ route(['POST'], '/api/snapshots/create', async (req, res) => {
   const { project_id, layers, context_data } = req.body || {};
   if (!project_id || typeof project_id !== 'string') return sendJson(res, 400, { success: false, error: '缺少 project_id' });
   if (!Array.isArray(layers)) return sendJson(res, 400, { success: false, error: 'layers 必须是数组' });
+  const snapshotUser = currentSessionUser(req);
+  requireProjectAccess(project_id, snapshotUser);
 
   // 语境来源：body.context_data（对象且非空）优先；否则安全读取 DB projects.context_json；默认 {}
   const useBodyContext = isUsableContextData(context_data);
@@ -851,8 +1440,8 @@ route(['POST'], '/api/snapshots/create', async (req, res) => {
 
   const snapshotId = 'snap-' + crypto.randomUUID().split('-')[0];
   const now = new Date().toISOString();
-  db.prepare('INSERT INTO snapshots (id, project_id, module_versions_json, final_prompt_content, created_at, eval_pass, eval_score) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(snapshotId, project_id, JSON.stringify(layers), prompt, now, 1, 5.0);
+  db.prepare('INSERT INTO snapshots (id, project_id, module_versions_json, final_prompt_content, created_at, eval_pass, eval_score, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(snapshotId, project_id, JSON.stringify(layers), prompt, now, 1, 5.0, snapshotUser.id);
 
   sendJson(res, 200, {
     success: true,
@@ -865,6 +1454,7 @@ route(['POST'], '/api/snapshots/create', async (req, res) => {
 
 route(['GET'], '/api/snapshots/list', async (req, res) => {
   if (!req.query.project_id) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  requireProjectAccess(req.query.project_id, currentSessionUser(req));
   const rows = db.prepare('SELECT id, created_at, eval_pass, eval_score FROM snapshots WHERE project_id = ? ORDER BY created_at DESC').all(req.query.project_id);
   sendJson(res, 200, { success: true, data: rows });
 });
@@ -873,6 +1463,7 @@ route(['GET'], '/api/snapshots/detail', async (req, res) => {
   const body = req.body || {};
   const id = req.query.id || body.id;
   if (!id) return sendJson(res, 400, { success: false, error: '缺少 id' });
+  requireSnapshotAccess(id, currentSessionUser(req));
   const row = db.prepare('SELECT id, project_id, final_prompt_content, created_at, module_versions_json, eval_pass, eval_score FROM snapshots WHERE id = ?').get(id);
   if (!row) return sendJson(res, 404, { success: false, error: '快照不存在' });
   sendJson(res, 200, {
@@ -892,6 +1483,7 @@ route(['GET'], '/api/snapshots/detail', async (req, res) => {
 route(['POST'], '/api/prompt/assemble', async (req, res) => {
   const { project_id, layers, context_data } = req.body || {};
   if (!Array.isArray(layers)) return sendJson(res, 400, { success: false, error: 'layers 必须是数组' });
+  if (project_id) requireProjectAccess(project_id, currentSessionUser(req));
 
   const useBodyContext = isUsableContextData(context_data);
   const context = useBodyContext
@@ -909,6 +1501,7 @@ route(['POST'], '/api/prompt/assemble', async (req, res) => {
 route(['GET'], '/api/projects/export_zip', async (req, res) => {
   const projectId = req.query.project_id;
   if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  requireProjectAccess(projectId, currentSessionUser(req));
 
   const project = db.prepare('SELECT id, name FROM projects WHERE id = ?').get(projectId);
   if (!project) return sendJson(res, 404, { success: false, error: '项目不存在' });
@@ -956,49 +1549,91 @@ route(['GET'], '/api/projects/export_zip', async (req, res) => {
 // ------------------------------------------------------------
 
 route(['GET'], '/api/companies', async (req, res) => {
-  sendJson(res, 200, { success: true, data: db.prepare('SELECT * FROM companies').all() });
+  const user = currentSessionUser(req);
+  const ids = visibleOwnerIds(user);
+  if (ids === null) {
+    return sendJson(res, 200, { success: true, data: db.prepare('SELECT * FROM companies').all() });
+  }
+  if (ids.length === 0) return sendJson(res, 200, { success: true, data: [] });
+  const placeholders = ids.map(() => '?').join(', ');
+  const rows = db.prepare(`SELECT * FROM companies WHERE user_id IN (${placeholders})`).all(...ids);
+  sendJson(res, 200, { success: true, data: rows });
 });
 
 route(['POST'], '/api/companies/create', async (req, res) => {
   const body = req.body || {};
+  const user = currentSessionUser(req);
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  if (!name) return sendJson(res, 400, { success: false, error: '名称不能为空' });
   const id = 'comp-' + crypto.randomUUID().split('-')[0];
-  db.prepare('INSERT INTO companies (id, name, category) VALUES (?, ?, ?)').run(id, body.name, '默认');
+  db.prepare('INSERT INTO companies (id, name, category, user_id) VALUES (?, ?, ?, ?)').run(id, name, '默认', user.id);
+  logAction(user.id, 'company_create', 'company', id, name);
   sendJson(res, 200, { success: true, id, message: '创建成功' });
 });
 
 route(['POST'], '/api/companies/update', async (req, res) => {
   const body = req.body || {};
-  db.prepare('UPDATE companies SET name = ? WHERE id = ?').run(body.name, body.id);
+  const user = currentSessionUser(req);
+  requireCompanyAccess(body.id, user);
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  if (!name) return sendJson(res, 400, { success: false, error: '名称不能为空' });
+  db.prepare('UPDATE companies SET name = ? WHERE id = ?').run(name, body.id);
+  logAction(user.id, 'company_update', 'company', body.id, name);
   sendJson(res, 200, { success: true, message: '修改成功' });
 });
 
 route(['POST'], '/api/companies/delete', async (req, res) => {
   const body = req.body || {};
+  const user = currentSessionUser(req);
+  requireCompanyAccess(body.id, user);
   db.prepare('DELETE FROM companies WHERE id = ?').run(body.id);
   db.prepare('DELETE FROM projects WHERE company_id = ?').run(body.id);
+  logAction(user.id, 'company_delete', 'company', body.id, '');
   sendJson(res, 200, { success: true, message: '删除成功' });
 });
 
 route(['GET'], '/api/projects', async (req, res) => {
-  sendJson(res, 200, { success: true, data: db.prepare('SELECT * FROM projects').all() });
+  const user = currentSessionUser(req);
+  const ids = visibleOwnerIds(user);
+  if (ids === null) {
+    return sendJson(res, 200, { success: true, data: db.prepare('SELECT * FROM projects').all() });
+  }
+  if (ids.length === 0) return sendJson(res, 200, { success: true, data: [] });
+  const placeholders = ids.map(() => '?').join(', ');
+  const rows = db.prepare(`SELECT * FROM projects WHERE user_id IN (${placeholders})`).all(...ids);
+  sendJson(res, 200, { success: true, data: rows });
 });
 
 route(['POST'], '/api/projects/create', async (req, res) => {
   const body = req.body || {};
+  const user = currentSessionUser(req);
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  if (!name) return sendJson(res, 400, { success: false, error: '项目名称不能为空' });
+  const companyId = typeof body.company_id === 'string' ? body.company_id.trim() : '';
+  if (companyId) requireCompanyAccess(companyId, user);
   const id = 'proj-' + crypto.randomUUID().split('-')[0];
-  db.prepare('INSERT INTO projects (id, company_id, name, target_agent_id) VALUES (?, ?, ?, ?)').run(id, body.company_id, body.name, '');
+  db.prepare('INSERT INTO projects (id, company_id, name, target_agent_id, user_id) VALUES (?, ?, ?, ?, ?)').run(id, companyId, name, '', user.id);
+  logAction(user.id, 'project_create', 'project', id, name);
   sendJson(res, 200, { success: true, id, message: '创建成功' });
 });
 
 route(['POST'], '/api/projects/update', async (req, res) => {
   const body = req.body || {};
-  db.prepare('UPDATE projects SET name = ? WHERE id = ?').run(body.name, body.id);
+  const user = currentSessionUser(req);
+  requireProjectAccess(body.id, user);
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  if (!name) return sendJson(res, 400, { success: false, error: '名称不能为空' });
+  db.prepare('UPDATE projects SET name = ? WHERE id = ?').run(name, body.id);
+  logAction(user.id, 'project_update', 'project', body.id, name);
   sendJson(res, 200, { success: true, message: '修改成功' });
 });
 
 route(['POST'], '/api/projects/delete', async (req, res) => {
   const body = req.body || {};
+  const user = currentSessionUser(req);
+  requireProjectAccess(body.id, user);
   db.prepare('DELETE FROM projects WHERE id = ?').run(body.id);
+  logAction(user.id, 'project_delete', 'project', body.id, '');
   sendJson(res, 200, { success: true, message: '删除成功' });
 });
 
@@ -1008,6 +1643,7 @@ route(['POST'], '/api/projects/delete', async (req, res) => {
 
 route(['GET'], '/api/gate/export', async (req, res) => {
   const snapshotId = req.query.snapshot_id;
+  requireSnapshotAccess(snapshotId, currentSessionUser(req));
 
   const snap = db.prepare('SELECT * FROM snapshots WHERE id = ?').get(snapshotId);
   if (!snap) {
@@ -1053,6 +1689,8 @@ route(['POST'], '/api/eval/run', async (req, res) => {
 route(['POST'], '/api/eval/generate_questions', async (req, res) => {
   const body = req.body || {};
   const projectId = typeof body.project_id === 'string' ? body.project_id : '';
+  const quizUser = currentSessionUser(req);
+  if (projectId) requireProjectAccess(projectId, quizUser);
   const requestedCount = Number(body.count);
   const count = Number.isInteger(requestedCount) && requestedCount >= 1 && requestedCount <= 20 ? requestedCount : 5;
 
@@ -1119,6 +1757,7 @@ route(['POST'], '/api/eval/generate_questions', async (req, res) => {
 route(['POST'], '/api/chat/reply', async (req, res) => {
   const body = req.body || {};
   const { project_id, layers, context_data } = body;
+  if (project_id) requireProjectAccess(project_id, currentSessionUser(req));
 
   // 1) messages 校验与清洗（只留 user/assistant、截断 4000、最近 12 条）
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
@@ -1146,6 +1785,11 @@ route(['POST'], '/api/chat/reply', async (req, res) => {
 // ------------------------------------------------------------
 
 route(['GET', 'POST'], '/api/settings/api-key', async (req, res) => {
+  // V5.0：系统 .env Key 属于全局公共资产，仅超级管理员可查看/修改
+  const settingsUser = getSessionUser(req);
+  if (!settingsUser || settingsUser.role !== 'superadmin') {
+    return sendJson(res, 403, { success: false, error: '仅超级管理员可管理系统 API Key' });
+  }
   // GET：只返回脱敏信息
   if (req.method === 'GET') {
     const key = getCurrentApiKey();
@@ -1173,9 +1817,10 @@ route(['GET', 'POST'], '/api/settings/api-key', async (req, res) => {
 // 4.8 多模型路由中枢（阶段二）
 // ------------------------------------------------------------
 
-/** DB 行 -> 对外模型对象（绝不返回完整 api_key） */
+/** DB 行 -> 对外模型对象（解密后仅展示 mask，绝不返回完整 api_key） */
 function toPublicModel(row) {
-  const hasKey = typeof row.api_key === 'string' && row.api_key.trim().length > 0;
+  const plainKey = decryptSecret(row.api_key);
+  const hasKey = typeof plainKey === 'string' && plainKey.trim().length > 0;
   return {
     id: row.id,
     provider: row.provider,
@@ -1185,16 +1830,22 @@ function toPublicModel(row) {
     is_active: row.is_active, // 保持 DB 原始 1/0，前端用 Number(is_active) === 1 判断
     temperature: row.temperature,
     has_key: hasKey,
-    masked_key: hasKey ? maskApiKey(row.api_key) : '',
+    masked_key: hasKey ? maskKeyForDisplay(row.api_key) : '',
   };
 }
 
 route(['GET'], '/api/models', async (req, res) => {
-  const rows = db.prepare('SELECT * FROM model_configs ORDER BY rowid ASC').all();
+  const currentUser = getSessionUser(req);
+  if (!currentUser) return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录' });
+  const rows = currentUser.role === 'superadmin'
+    ? db.prepare('SELECT * FROM model_configs ORDER BY rowid ASC').all()
+    : db.prepare('SELECT * FROM model_configs WHERE user_id = ? ORDER BY rowid ASC').all(currentUser.id);
   sendJson(res, 200, { success: true, data: rows.map(toPublicModel) });
 });
 
 route(['POST'], '/api/models/save', async (req, res) => {
+  const currentUser = getSessionUser(req);
+  if (!currentUser) return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录' });
   const body = req.body || {};
   const provider = typeof body.provider === 'string' ? body.provider.trim() : '';
   const baseUrl = typeof body.base_url === 'string' ? body.base_url.trim().replace(/\/+$/, '') : '';
@@ -1216,30 +1867,40 @@ route(['POST'], '/api/models/save', async (req, res) => {
   const wantActive = body.is_active === true || body.is_active === 1 || body.is_active === '1' || body.is_active === 'true';
 
   const existing = incomingId ? db.prepare('SELECT * FROM model_configs WHERE id = ?').get(incomingId) : null;
+  if (existing && existing.user_id && existing.user_id !== currentUser.id && currentUser.role !== 'superadmin') {
+    return sendJson(res, 403, { success: false, error: '无权修改他人的模型配置' });
+  }
   const id = incomingId || 'model-' + crypto.randomUUID().split('-')[0];
-  // api_key 为空时保留原值；但**非官方 DeepSeek 端点禁止空 Key**（否则运行时不会回落 .env，配置也不可用）
-  const apiKey = apiKeyInput || (existing && typeof existing.api_key === 'string' ? existing.api_key : '');
-  if (!apiKey && !urlSecurity.isEnvKeyAllowed) {
+  // Key 防覆盖：前端回显的 masked Key（含 *）或留空都表示“未修改”，严禁写入星号/空值覆盖原加密 Key
+  const keepExistingKey = !apiKeyInput || apiKeyInput.includes('*');
+  const existingPlainKey = existing ? decryptSecret(existing.api_key) : '';
+  const apiKeyPlain = keepExistingKey ? existingPlainKey : apiKeyInput;
+  const apiKeyStored = keepExistingKey ? (existing ? existing.api_key : '') : encryptSecret(apiKeyInput);
+  if (!apiKeyPlain && !urlSecurity.isEnvKeyAllowed) {
     return sendJson(res, 400, { success: false, error: '自定义/第三方 Base URL 必须填写 API Key（不允许使用 .env 回退，防 Key 外泄）' });
   }
 
-  // 单活模型：激活当前模型前先把其它模型置 0
-  if (wantActive) db.prepare('UPDATE model_configs SET is_active = 0').run();
+  // 单活模型：仅重置当前用户自己的模型（多租户互不影响）
+  if (wantActive) db.prepare('UPDATE model_configs SET is_active = 0 WHERE user_id = ?').run(currentUser.id);
 
   if (existing) {
     const isActive = isActiveSpecified ? (wantActive ? 1 : 0) : existing.is_active;
     db.prepare('UPDATE model_configs SET provider = ?, display_name = ?, base_url = ?, api_key = ?, model_name = ?, temperature = ?, is_active = ? WHERE id = ?')
-      .run(provider, displayName, baseUrl, apiKey, modelName, temperature, isActive, id);
+      .run(provider, displayName, baseUrl, apiKeyStored, modelName, temperature, isActive, id);
+    logAction(currentUser.id, 'model_save', 'model', id, `provider=${provider} base=${baseUrl}`);
     return sendJson(res, 200, { success: true, message: '模型配置已更新', id, is_active: isActive });
   }
 
   const maxContextLength = Number.isFinite(Number(body.max_context_length)) ? Number(body.max_context_length) : 32000;
-  db.prepare('INSERT INTO model_configs (id, provider, display_name, base_url, api_key, model_name, temperature, max_context_length, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, provider, displayName, baseUrl, apiKey, modelName, temperature, maxContextLength, wantActive ? 1 : 0);
+  db.prepare('INSERT INTO model_configs (id, provider, display_name, base_url, api_key, model_name, temperature, max_context_length, is_active, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, provider, displayName, baseUrl, apiKeyStored, modelName, temperature, maxContextLength, wantActive ? 1 : 0, currentUser.id);
+  logAction(currentUser.id, 'model_save', 'model', id, `provider=${provider} base=${baseUrl}`);
   sendJson(res, 200, { success: true, message: '模型配置已保存', id, is_active: wantActive ? 1 : 0 });
 });
 
 route(['POST'], '/api/models/test', async (req, res) => {
+  const currentUser = getSessionUser(req);
+  if (!currentUser) return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录' });
   const body = req.body || {};
   const provider = typeof body.provider === 'string' ? body.provider.trim() : '';
   const baseUrl = typeof body.base_url === 'string' ? body.base_url.trim() : '';
@@ -1247,8 +1908,18 @@ route(['POST'], '/api/models/test', async (req, res) => {
   if (!baseUrl || !modelName) {
     return sendJson(res, 400, { success: false, message: 'base_url / model_name 为必填项' });
   }
-  const result = await testModelConnection({ base_url: baseUrl, model_name: modelName, api_key: body.api_key });
-  if (result.success) console.log(`[models] 连接测试成功: provider=${provider || '-'} model=${modelName}`);
+  let providedKey = typeof body.api_key === 'string' ? body.api_key.trim() : '';
+  if (!providedKey) {
+    // 未显式填 Key 时，尝试复用当前用户已保存的同 base_url 模型 Key（不回显）
+    const ownRow = db.prepare('SELECT * FROM model_configs WHERE user_id = ? AND base_url = ? ORDER BY rowid DESC LIMIT 1')
+      .get(currentUser.id, baseUrl.replace(/\/+$/, ''));
+    if (ownRow) providedKey = decryptSecret(ownRow.api_key);
+  }
+  const result = await testModelConnection(
+    { base_url: baseUrl, model_name: modelName, api_key: providedKey },
+    { allowEnvFallback: currentUser.role === 'superadmin' },
+  );
+  if (result.success) console.log(`[models] 连接测试成功: provider=${provider || '-'} model=${modelName} user=${currentUser.username}`);
   else console.warn(`[models] 连接测试失败: provider=${provider || '-'} model=${modelName} reason=${result.message}`);
   sendJson(res, 200, result);
 });
@@ -1327,11 +1998,15 @@ function validateBackupPayload(payload) {
 // ---------- 阶段一：提示词模板库 ----------
 
 route(['GET'], '/api/templates', async (req, res) => {
-  const rows = db.prepare('SELECT * FROM prompt_templates ORDER BY created_at DESC, rowid DESC').all();
+  const user = currentSessionUser(req);
+  const rows = user.role === 'superadmin'
+    ? db.prepare('SELECT * FROM prompt_templates ORDER BY created_at DESC, rowid DESC').all()
+    : db.prepare('SELECT * FROM prompt_templates WHERE user_id = ? OR is_public = 1 ORDER BY created_at DESC, rowid DESC').all(user.id);
   sendJson(res, 200, { success: true, data: rows });
 });
 
 route(['POST'], '/api/templates/save', async (req, res) => {
+  const user = currentSessionUser(req);
   const body = req.body || {};
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   const l0 = typeof body.l0_content === 'string' ? body.l0_content : '';
@@ -1341,24 +2016,40 @@ route(['POST'], '/api/templates/save', async (req, res) => {
   if (name.length > 100) return sendJson(res, 400, { success: false, error: '模板名称过长（≤100 字符）' });
   if (!l0.trim() && !l1.trim() && !l3.trim()) return sendJson(res, 400, { success: false, error: '模板三层内容不能全为空' });
   const incomingId = typeof body.id === 'string' ? body.id.trim() : '';
-  const existing = incomingId ? db.prepare('SELECT id FROM prompt_templates WHERE id = ?').get(incomingId) : null;
+  const existing = incomingId ? db.prepare('SELECT * FROM prompt_templates WHERE id = ?').get(incomingId) : null;
+  if (existing && existing.user_id && existing.user_id !== user.id && user.role !== 'superadmin') {
+    return sendJson(res, 403, { success: false, error: '无权修改他人模板' });
+  }
   const id = incomingId || 'tpl-' + crypto.randomUUID().split('-')[0];
   const now = new Date().toISOString();
+  const canPublic = user.role === 'superadmin';
+  const isPublic = canPublic && (body.is_public === true || body.is_public === 1 || body.is_public === '1') ? 1 : 0;
+  const publicScope = isPublic ? (typeof body.public_scope === 'string' && body.public_scope.trim() ? body.public_scope.trim() : 'global') : 'private';
   if (existing) {
-    db.prepare('UPDATE prompt_templates SET name = ?, l0_content = ?, l1_content = ?, l3_content = ? WHERE id = ?')
-      .run(name, l0, l1, l3, id);
+    const nextPublic = canPublic && body.is_public !== undefined ? isPublic : Number(existing.is_public) || 0;
+    const nextScope = canPublic && body.is_public !== undefined ? publicScope : (existing.public_scope || 'private');
+    db.prepare('UPDATE prompt_templates SET name = ?, l0_content = ?, l1_content = ?, l3_content = ?, is_public = ?, public_scope = ? WHERE id = ?')
+      .run(name, l0, l1, l3, nextPublic, nextScope, id);
+    logAction(user.id, 'template_save', 'template', id, name);
     return sendJson(res, 200, { success: true, message: '模板已更新', id });
   }
-  db.prepare('INSERT INTO prompt_templates (id, name, l0_content, l1_content, l3_content, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(id, name, l0, l1, l3, now);
+  db.prepare('INSERT INTO prompt_templates (id, name, l0_content, l1_content, l3_content, created_at, user_id, is_public, public_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, name, l0, l1, l3, now, user.id, isPublic, publicScope);
+  logAction(user.id, 'template_save', 'template', id, name);
   sendJson(res, 200, { success: true, message: '模板已保存', id });
 });
 
 route(['POST'], '/api/templates/delete', async (req, res) => {
+  const user = currentSessionUser(req);
   const id = typeof (req.body || {}).id === 'string' ? req.body.id.trim() : '';
   if (!id) return sendJson(res, 400, { success: false, error: '缺少模板 id' });
-  const info = db.prepare('DELETE FROM prompt_templates WHERE id = ?').run(id);
-  if (info.changes === 0) return sendJson(res, 404, { success: false, error: '模板不存在' });
+  const tpl = db.prepare('SELECT * FROM prompt_templates WHERE id = ?').get(id);
+  if (!tpl) return sendJson(res, 404, { success: false, error: '模板不存在' });
+  if (tpl.user_id && tpl.user_id !== user.id && user.role !== 'superadmin') {
+    return sendJson(res, 403, { success: false, error: '无权删除他人模板' });
+  }
+  db.prepare('DELETE FROM prompt_templates WHERE id = ?').run(id);
+  logAction(user.id, 'template_delete', 'template', id, '');
   sendJson(res, 200, { success: true, message: '模板已删除' });
 });
 
@@ -1425,10 +2116,14 @@ route(['POST'], '/api/ai/polish', async (req, res) => {
 // ---------- 阶段三：备份恢复 ----------
 
 route(['GET'], '/api/backup/export', async (req, res) => {
+  const user = currentSessionUser(req);
+  if (!user || user.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可导出全量备份' });
   sendJson(res, 200, buildBackupSnapshot());
 });
 
 route(['POST'], '/api/backup/import', async (req, res) => {
+  const importUser = currentSessionUser(req);
+  if (!importUser || importUser.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可导入全量备份' });
   let rowsByTable;
   try {
     rowsByTable = validateBackupPayload(req.body);
@@ -1468,32 +2163,52 @@ route(['POST'], '/api/backup/import', async (req, res) => {
     return sendJson(res, 500, { success: false, error: `备份导入失败，事务已回滚：${e.message}`, backup_file: safetyBackupPath });
   }
   console.log('[backup] 备份导入成功:', JSON.stringify(importedCounts), '安全备份:', safetyBackupPath);
+  // 兼容旧备份：补齐 user_id 归属并加密明文模型 Key（在事务外执行，失败不影响已导入数据）
+  try {
+    if (ADMIN_USER_ID) {
+      for (const table of BACKUP_TABLES) {
+        if (table === 'model_configs') db.prepare(`UPDATE ${table} SET user_id = ? WHERE user_id IS NULL OR user_id = ''`).run(ADMIN_USER_ID);
+      }
+    }
+    const rows = db.prepare('SELECT id, api_key FROM model_configs').all();
+    const updateKey = db.prepare('UPDATE model_configs SET api_key = ? WHERE id = ?');
+    for (const row of rows) {
+      if (row.api_key && !String(row.api_key).startsWith('enc:v1:')) updateKey.run(encryptSecret(row.api_key), row.id);
+    }
+    logAction(importUser.id, 'backup_import', 'backup', '', JSON.stringify(importedCounts).slice(0, 500));
+  } catch (e) {
+    console.warn('[backup] 导入后 user_id/Key 兼容处理失败:', e.message);
+  }
   sendJson(res, 200, { success: true, message: '备份导入成功（全部表已替换）', imported: importedCounts, backup_file: safetyBackupPath });
 });
 
 // ---------- 阶段三：项目深拷贝克隆 ----------
 
 route(['POST'], '/api/projects/clone', async (req, res) => {
+  const cloneUser = currentSessionUser(req);
   const sourceId = typeof (req.body || {}).id === 'string' ? req.body.id.trim() : '';
   if (!sourceId) return sendJson(res, 400, { success: false, error: '缺少项目 id' });
+  requireProjectAccess(sourceId, cloneUser);
   const source = db.prepare('SELECT * FROM projects WHERE id = ?').get(sourceId);
   if (!source) return sendJson(res, 404, { success: false, error: '源项目不存在' });
   const newProjectId = 'proj-' + crypto.randomUUID().split('-')[0];
   const newName = `${source.name || '未命名项目'}（副本）`;
+  const cloneOwnerId = cloneUser.id;
   const kbRows = db.prepare('SELECT * FROM kb_items WHERE project_id = ?').all(sourceId);
   const clone = db.transaction(() => {
-    db.prepare('INSERT INTO projects (id, company_id, name, target_agent_id, context_json) VALUES (?, ?, ?, ?, ?)')
-      .run(newProjectId, source.company_id, newName, source.target_agent_id || '', source.context_json || '{}');
+    db.prepare('INSERT INTO projects (id, company_id, name, target_agent_id, context_json, user_id) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(newProjectId, source.company_id, newName, source.target_agent_id || '', source.context_json || '{}', cloneOwnerId);
     const kbIds = [];
     for (const row of kbRows) {
       const newKbId = 'kb-' + crypto.randomUUID().split('-')[0];
-      db.prepare('INSERT INTO kb_items (id, project_id, question, answer) VALUES (?, ?, ?, ?)')
-        .run(newKbId, newProjectId, row.question ?? '', row.answer ?? '');
+      db.prepare('INSERT INTO kb_items (id, project_id, question, answer, user_id) VALUES (?, ?, ?, ?, ?)')
+        .run(newKbId, newProjectId, row.question ?? '', row.answer ?? '', cloneOwnerId);
       kbIds.push(newKbId);
     }
     return kbIds;
   });
   const newKbIds = clone();
+  logAction(cloneUser.id, 'project_clone', 'project', newProjectId, `source=${sourceId} kb=${newKbIds.length}`);
   sendJson(res, 200, {
     success: true,
     message: `克隆成功：项目 + ${newKbIds.length} 条知识库记录已复制（全新 id）`,

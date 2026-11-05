@@ -1,0 +1,17 @@
+{
+  "url": "http://127.0.0.1:3000/",
+  "projects": [
+    "Trip旅游AI接线员",
+    "途牛热线"
+  ],
+  "companies": 2,
+  "kb": "共 97 条",
+  "me": {
+    "id": "user-admin",
+    "username": "admin",
+    "role": "superadmin",
+    "team_id": "",
+    "need_change_password": 1,
+    "trial_count": 0
+  }
+}

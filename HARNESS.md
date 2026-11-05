@@ -55,3 +55,15 @@
 ## 七、测试数据
 - 提示词与验证素材：`test-data/`（`prompts.md`、e2e 脚本与报告、截图）。
 - 已知 P3：历史测试快照/模型行会累积（`snapshots` 约 40+、`model_configs` 十余条测试行），无删除 API，不影响业务；可在确认后手工清理 DB。
+
+## 八、V5.0 阶段一：多租户与认证（当前权威）
+- 运行方式不变：node server.js / 启动.bat → http://127.0.0.1:3000；未登录访问页面 302 → /login.html，未登录 API → 401 JSON。
+- 账号：默认超管 admin / newrock123（bcrypt 10 轮；首次登录提醒改密）；支持手机号/邮箱注册；need_change_password=1 表示需改密；管理员可将他人密码重置为 123456。
+- Session：express-session + connect-sqlite3，独立 data/sessions.db；Cookie 2 小时 rolling；白名单仅登录页/登录注册接口/logo，避免死循环。
+- 新增依赖：express-session、connect-sqlite3、bcryptjs、sqlite3（connect-sqlite3 运行时依赖）。
+- 多租户隔离：业务表含 user_id；GET 按角色过滤（user=本人；teamadmin=同团队；superadmin=全部），写接口校验所有权；companies/projects/prompt_templates 含 is_public/public_scope。
+- 模型 Key：AES-256-GCM 加密（data/.vault-key），接口只回掩码；保存时 Key 含 * 严禁覆盖；私有 Key → 超管公共 Key/.env（原子扣 3 次试用，失败回滚）；超管不消耗试用。
+- 审计：audit_logs 记录登录/注册/登出/改密/重置/删除/修改/克隆/备份等。
+- 新增接口：/api/auth/{register,login,logout,me,change-password}、/api/teams、/api/teams/create、/api/admin/users、/api/admin/users/reset-password、/api/admin/users/assign-team、/api/admin/audit-logs。
+- 验收证据：test-data/v5-phase1-acceptance-report.md、test-data/e2e/v5-phase1-*.json、截图 v5-01-login-redirect.png / v5-02-tree-after-migration.png。
+- 数据安全：迁移前备份 data/backup-pre-v5-*.db；已修复迁移前测试污染，当前业务数据 3 项目（GTP/Trip/途牛）+ KB 101 条，全部归属 admin，integrity_check=ok。

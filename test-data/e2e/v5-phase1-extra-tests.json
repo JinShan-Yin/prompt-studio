@@ -1,0 +1,60 @@
+{
+  "total": 9,
+  "passed": 9,
+  "failed": 0,
+  "results": [
+    {
+      "name": "admin 登录（默认密码）",
+      "ok": true
+    },
+    {
+      "name": "新用户注册成功",
+      "ok": true
+    },
+    {
+      "name": "管理员一键重置为 123456",
+      "ok": true
+    },
+    {
+      "name": "重置后首次登录提醒改密（need_change_password=1）",
+      "ok": true
+    },
+    {
+      "name": "用户自助修改密码后新密码可登录",
+      "ok": true
+    },
+    {
+      "name": "改密后 need_change_password 已清零",
+      "ok": true
+    },
+    {
+      "name": "模型列表只回显掩码 Key（无完整 Key）",
+      "ok": true,
+      "detail": {
+        "masked_key": "sk-****7890"
+      }
+    },
+    {
+      "name": "保存时传入含 * 的掩码 Key → 不覆盖真实 Key",
+      "ok": true,
+      "detail": {
+        "before": "sk-****7890",
+        "after": "sk-****7890"
+      }
+    },
+    {
+      "name": "迁移后 Trip 语境数据完好（旅游行业）",
+      "ok": true,
+      "detail": {
+        "industry": "旅游行业",
+        "business_scene": [
+          "售后"
+        ],
+        "core_goal": [
+          "安抚情绪"
+        ]
+      }
+    }
+  ],
+  "testUser": "13746012388"
+}

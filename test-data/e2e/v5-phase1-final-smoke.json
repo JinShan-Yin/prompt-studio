@@ -1,0 +1,81 @@
+{
+  "total": 11,
+  "passed": 11,
+  "failed": 0,
+  "results": [
+    {
+      "name": "未登录 / → 302 login.html",
+      "ok": true,
+      "detail": {
+        "status": 302,
+        "location": "/login.html"
+      }
+    },
+    {
+      "name": "默认超管登录成功",
+      "ok": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "会话 Cookie 有效期约 7200s（2 小时无操作登出）",
+      "ok": true,
+      "detail": {
+        "ttlSeconds": 7200,
+        "setCookie": "newrock.sid=***; Path=/; Expires=Thu, 05 Nov 2026 06:36:31 GMT; HttpOnly; SameSite=Lax"
+      }
+    },
+    {
+      "name": "默认密码提醒标记 need_change_password=1",
+      "ok": true
+    },
+    {
+      "name": "旧项目数据完整（GTP / Trip / 途牛热线）",
+      "ok": true,
+      "detail": {
+        "names": [
+          "GTP-V6接綫員",
+          "Trip旅游AI接线员",
+          "途牛热线"
+        ]
+      }
+    },
+    {
+      "name": "旧客户/行业数据完整（Sam / 政府）",
+      "ok": true,
+      "detail": {
+        "names": [
+          "Sam",
+          "政府"
+        ]
+      }
+    },
+    {
+      "name": "Trip 提示词知识库完好（97 条）",
+      "ok": true,
+      "detail": {
+        "count": 97
+      }
+    },
+    {
+      "name": "途牛热线历史快照可访问（5 条）",
+      "ok": true,
+      "detail": {
+        "count": 5
+      }
+    },
+    {
+      "name": "/api/auth/me 返回 admin/superadmin",
+      "ok": true
+    },
+    {
+      "name": "审计日志可用且含登录记录",
+      "ok": true
+    },
+    {
+      "name": "独立 sessions.db 存在",
+      "ok": true
+    }
+  ]
+}

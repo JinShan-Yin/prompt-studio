@@ -1,0 +1,157 @@
+{
+  "total": 16,
+  "passed": 16,
+  "failed": 0,
+  "results": [
+    {
+      "name": "超管 admin 登录成功",
+      "ok": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "迁移后超管仍有激活公共模型（供试用政策）",
+      "ok": true,
+      "detail": {
+        "id": "model-e51fa07e",
+        "display": "DeepSeek-夜间验收",
+        "base": "https://api.deepseek.com/v1"
+      }
+    },
+    {
+      "name": "普通用户 A 注册 + 自动登录成功",
+      "ok": true,
+      "detail": {
+        "username": "13945261401",
+        "role": "user",
+        "trial": 0
+      }
+    },
+    {
+      "name": "防并发扣减：5 并发评测恰好 3 成功 / 2 被 403 拦截",
+      "ok": true,
+      "detail": {
+        "statuses": [
+          200,
+          200,
+          200,
+          403,
+          403
+        ],
+        "okCount": 3,
+        "forbiddenCount": 2,
+        "errors": [
+          "免费试用额度已用完（3/3），请配置自己的 API Key",
+          "免费试用额度已用完（3/3），请配置自己的 API Key"
+        ]
+      }
+    },
+    {
+      "name": "A 试用次数停在上限 3（未超额）",
+      "ok": true,
+      "detail": {
+        "trial_count": 3
+      }
+    },
+    {
+      "name": "个人用户数据隔离：A 看不到 admin 的 3 个项目",
+      "ok": true,
+      "detail": {
+        "count": 0
+      }
+    },
+    {
+      "name": "个人用户数据隔离：A 看不到 admin 的客户/行业与模型",
+      "ok": true
+    },
+    {
+      "name": "越权访问 admin 项目语境 → 403",
+      "ok": true,
+      "detail": {
+        "status": 403,
+        "body": {
+          "success": false,
+          "error": "无权访问该项目"
+        }
+      }
+    },
+    {
+      "name": "普通用户导出全量备份 → 403",
+      "ok": true,
+      "detail": {
+        "status": 403
+      }
+    },
+    {
+      "name": "公共 Key 故障时评测失败（非 200）",
+      "ok": true,
+      "detail": {
+        "status": 500,
+        "error": "LLM 调用失败 (401): {\"error\":{\"message\":\"Authentication Fails, Your api key: ****7890 is invalid (request_id: 07236781-9519-484b-8d23-b4b0537429c8)\",\"type\":\"authentication_error\",\"param\":null,\"code\":\"invalid_request_error\"}}"
+      }
+    },
+    {
+      "name": "失败后试用次数自动回滚（B trial_count=0）",
+      "ok": true,
+      "detail": {
+        "trial_count": 0
+      }
+    },
+    {
+      "name": "恢复原始超管激活模型",
+      "ok": true,
+      "detail": {
+        "activeId": "model-e51fa07e"
+      }
+    },
+    {
+      "name": "超管创建团队并把 B 设为团管",
+      "ok": true,
+      "detail": {
+        "team": "team-c6c86468",
+        "assign": 200
+      }
+    },
+    {
+      "name": "团管 B 可见同团队 C 的项目（连表/团队过滤生效）",
+      "ok": true,
+      "detail": {
+        "count": 1,
+        "ids": [
+          "QA_TEAM_PROJECT_452614"
+        ]
+      }
+    },
+    {
+      "name": "团管 B 仍看不到超管 admin 的个人项目",
+      "ok": true
+    },
+    {
+      "name": "黑匣子审计日志包含 login / register / project_create",
+      "ok": true,
+      "detail": {
+        "actions": [
+          "login",
+          "project_create",
+          "company_create",
+          "assign_team",
+          "register",
+          "team_create",
+          "model_save"
+        ]
+      }
+    }
+  ],
+  "created": {
+    "users": [
+      "13945261401",
+      "13945261402",
+      "13945261403"
+    ],
+    "team": "team-c6c86468",
+    "company": "comp-d153a149",
+    "project": "proj-12b264a4",
+    "badModel": "model-1610d09a"
+  }
+}
