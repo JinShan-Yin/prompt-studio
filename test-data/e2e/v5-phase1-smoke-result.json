@@ -80,8 +80,8 @@
           "user_id": "user-admin"
         },
         {
-          "id": "proj-47f785f8",
-          "name": "Trip旅游AI接线员（副本）",
+          "id": "proj-7ec6f484",
+          "name": "途牛热线",
           "user_id": "user-admin"
         }
       ]
@@ -97,9 +97,11 @@
       "name": "登录已写入 audit_logs",
       "ok": true,
       "detail": {
-        "count": 1,
+        "count": 20,
         "actions": [
-          "login"
+          "login",
+          "login",
+          "logout"
         ]
       }
     },

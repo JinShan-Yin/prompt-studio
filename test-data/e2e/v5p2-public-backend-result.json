@@ -1,0 +1,63 @@
+{
+  "results": [
+    {
+      "name": "临时普通用户注册并登录",
+      "ok": true,
+      "detail": {
+        "username": "13655253744"
+      }
+    },
+    {
+      "name": "普通用户可见全局公共项目（GET /api/projects 含 is_public）",
+      "ok": true,
+      "detail": {
+        "id": "proj-f5c2ad12",
+        "name": "QA_PUBLIC_REF_60349",
+        "is_public": 1
+      }
+    },
+    {
+      "name": "普通用户可只读访问公共项目知识库",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "kbCount": 0
+      }
+    },
+    {
+      "name": "后端兜底：普通用户写公共项目快照 403",
+      "ok": true,
+      "detail": {
+        "status": 403,
+        "body": {
+          "success": false,
+          "error": "公共项目禁止修改"
+        }
+      }
+    },
+    {
+      "name": "后端兜底：普通用户写公共项目语境 403",
+      "ok": true,
+      "detail": {
+        "status": 403,
+        "body": {
+          "success": false,
+          "error": "公共项目禁止修改"
+        }
+      }
+    },
+    {
+      "name": "后端兜底：普通用户写公共项目知识库 403",
+      "ok": true,
+      "detail": {
+        "status": 403,
+        "body": {
+          "success": false,
+          "error": "公共项目禁止修改"
+        }
+      }
+    }
+  ],
+  "username": "13655253744",
+  "pass": true
+}

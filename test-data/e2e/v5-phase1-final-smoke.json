@@ -23,7 +23,7 @@
       "ok": true,
       "detail": {
         "ttlSeconds": 7200,
-        "setCookie": "newrock.sid=***; Path=/; Expires=Thu, 05 Nov 2026 06:36:31 GMT; HttpOnly; SameSite=Lax"
+        "setCookie": "newrock.sid=***; Path=/; Expires=Thu, 05 Nov 2026 07:17:13 GMT; HttpOnly; SameSite=Lax"
       }
     },
     {
