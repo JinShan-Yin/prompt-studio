@@ -67,3 +67,15 @@
 - 新增接口：/api/auth/{register,login,logout,me,change-password}、/api/teams、/api/teams/create、/api/admin/users、/api/admin/users/reset-password、/api/admin/users/assign-team、/api/admin/audit-logs。
 - 验收证据：test-data/v5-phase1-acceptance-report.md、test-data/e2e/v5-phase1-*.json、截图 v5-01-login-redirect.png / v5-02-tree-after-migration.png。
 - 数据安全：迁移前备份 data/backup-pre-v5-*.db；已修复迁移前测试污染，当前业务数据 3 项目（GTP/Trip/途牛）+ KB 101 条，全部归属 admin，integrity_check=ok。
+
+## 九、V5.0 阶段二：前端 Tab 大改造（增量）
+- 改造原则：对既有 public/index.html 增量改造，V4 卡片 DOM/ID/事件/函数全部保留；server.js 仅补公共参考项目只读可见 + 写保护。
+- 右侧三层：Header（当前项目同侧栏选中样式 + 剩余试用 + 退出登录，删除“本地开发环境”）→ 四大 Tab（提示词编辑/知识库管理/智能体评测/历史快照，选中 #4d6bfe 2px 下划线）→ 内容区；未选项目空状态 + Tab 灰显。
+- Tab1：Token 工具条上移；语境配置折叠面板；切回 Tab1 在 setTimeout(...,0) 内 refreshAllEditorMirrors → textarea autoHeight + mirror 同步 → syncEditorScroll，保留 mirrorDiv+textarea 双层高亮。
+- Tab2：左右 7:3；Checkbox 全选/批量删除；批量删除必须串行 await（禁 Promise.all），全屏 Loading；切项目清空 selectedKbIds。
+- Tab3：左对话模拟器 / 右批量评测数据双栏，保留聊天 auto-scroll；Tab4：全宽快照表 + Diff 弹窗（挂 body）。
+- 公共项目：is_public 检测 → textarea readonly + 写按钮禁用 + window.isPublicProject=true + 全局 guardPublicProject() 拦截 + 徽标；后端非超管写 403。
+- 树多选：Checkbox 包裹层 stopPropagation，不触发折叠；顶部操作条“已选中 X 项 [批量删除]”，串行删除。
+- 文案：开启新项目弹窗/占位符改为“创建客户或行业”等；菜单名精简；Token 进度条顶部工具条。
+- 测试：test-data/e2e/v5p2-*（A 13、B1 8、B2 5、Tabs 7、Empty 2、Public 后端 6、高亮/布局 3 = 44 项全过）；截图 v5p2-01~05；报告 test-data/v5-phase2-acceptance-report.md。
+- 数据清理：测试夹具已删，最终 3 项目 / 2 客户 / KB 101 / 快照 62 / 仅 admin，integrity ok。

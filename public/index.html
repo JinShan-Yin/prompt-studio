@@ -809,6 +809,63 @@
     .shortcut-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 13px; color: var(--text-main); }
     .shortcut-keys { display: flex; gap: 6px; flex-wrap: wrap; }
     .kbd { display: inline-block; min-width: 22px; padding: 2px 7px; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 5px; background: var(--bg-soft); font-family: var(--font-mono); font-size: 12px; color: var(--text-main); text-align: center; }
+
+    /* ============================================================
+       V5.0 阶段二：Tab 导航 / Header / 知识库批量 / 公共项目只读 / 树多选
+       ============================================================ */
+    .header-title { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--text-secondary); }
+    #current-name { color: #4d6bfe; font-weight: 600; font-size: 14px; }
+    .public-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px; background: #fff7ed; color: #b45309; border: 1px solid #fed7aa; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .trial-badge { font-size: 12px; color: #64748b; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+    .tab-bar { display: flex; align-items: center; gap: 28px; padding: 0 24px; height: 52px; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; z-index: 8; flex-shrink: 0; }
+    .tab-item { position: relative; height: 52px; padding: 0 2px; border: none; background: transparent; font-size: 14px; font-weight: 500; color: #6b7280; cursor: pointer; white-space: nowrap; transition: color .2s ease; display: inline-flex; align-items: center; gap: 6px; }
+    .tab-item::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: #4d6bfe; transform: scaleX(0); transition: transform .2s ease; }
+    .tab-item:hover { color: #111827; }
+    .tab-item.active { color: #4d6bfe; font-weight: 600; }
+    .tab-item.active::after { transform: scaleX(1); }
+    .tab-bar.disabled { opacity: .45; pointer-events: none; }
+    #main-content .card[data-tab] { animation: tabFadeIn .2s ease; }
+    @keyframes tabFadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+    .context-header-actions { display: flex; align-items: center; gap: 12px; }
+    .context-card.collapsed .card-body { display: none; }
+    .context-card .card-header { cursor: pointer; }
+    .kb-main-grid { display: grid; grid-template-columns: 7fr 3fr; gap: 20px; align-items: start; }
+    .kb-right { border-left: 1px solid #e5e7eb; padding-left: 20px; }
+    .kb-right-title { font-size: 14px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+    .kb-right-hint { font-size: 12px; color: #94a3b8; margin-bottom: 10px; line-height: 1.6; }
+    .kb-right-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .kb-batch-bar { display: flex; align-items: center; gap: 12px; padding: 2px 0 10px; font-size: 12px; color: #64748b; }
+    .kb-select-all-wrap { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+    .kb-selected-count { margin-left: auto; color: #4d6bfe; font-weight: 600; }
+    #kb-batch-delete-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .kb-item-check { flex: 0 0 auto; width: 16px; height: 16px; margin-right: 10px; accent-color: #4d6bfe; cursor: pointer; }
+    .kb-item-main { flex: 1; min-width: 0; }
+    .kb-item-toolbar { display: flex; gap: 8px; flex: 0 0 auto; }
+    .fullscreen-loading { position: fixed; inset: 0; z-index: 10120; background: rgba(15, 23, 42, .34); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; }
+    .loading-card { background: #fff; border-radius: 14px; box-shadow: 0 20px 60px rgba(15, 23, 42, .18); padding: 22px 28px; display: flex; align-items: center; gap: 12px; font-size: 14px; color: #334155; }
+    .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #dbeafe; border-top-color: #4d6bfe; animation: spin .7s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .multi-select-bar { position: sticky; top: 0; z-index: 6; margin: 0 12px 8px; padding: 8px 10px; border-radius: 10px; background: #eff6ff; border: 1px solid #c7d2fe; color: #3b5bdb; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+    .multi-select-btn { border: 1px solid #c7d2fe; background: #fff; color: #3b5bdb; border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
+    .multi-select-btn.danger { border-color: #fecaca; color: #dc2626; background: #fff; }
+    .tree-check-wrap { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; margin-right: 8px; }
+    .tree-checkbox { width: 15px; height: 15px; accent-color: #4d6bfe; cursor: pointer; }
+    .tree-item-selected { background: #eef2ff !important; }
+    body.public-readonly .editor-input, body.public-readonly .form-textarea { background: #f8fafc; }
+    body.public-readonly .btn-primary,
+    body.public-readonly .polish-btn,
+    body.public-readonly #clean-format-btn,
+    body.public-readonly #ctx-extract-btn,
+    body.public-readonly #kb-batch-delete-btn { opacity: .5; }
+    @media (max-width: 900px) { .kb-main-grid { grid-template-columns: 1fr; } .kb-right { border-left: none; padding-left: 0; } }
+    /* Tab1 顶部 Token 进度工具栏 */
+    .token-toolbar { margin-bottom: 16px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f8fafc; }
+    .token-toolbar-head { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #64748b; margin-bottom: 8px; }
+    .token-toolbar-head > span:first-child { font-weight: 600; color: #334155; }
+    /* Tab3 评测：左对话模拟器 / 右评测数据面板（双栏） */
+    #main-content[data-active-tab="eval"] { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); gap: 20px; align-items: start; }
+    #main-content[data-active-tab="eval"] > .card[data-tab="eval"] { margin-bottom: 0; }
+    @media (max-width: 1100px) { #main-content[data-active-tab="eval"] { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -827,15 +884,20 @@
       <div class="tree-search-wrap">
         <input id="tree-search" class="tree-search-input" type="text" placeholder="🔍 搜索项目/场景" autocomplete="off" oninput="renderTree()" />
       </div>
+      <div class="multi-select-bar" id="multi-select-bar" style="display:none;">
+        <span>已选中 <b id="multi-selected-count">0</b> 项</span>
+        <button type="button" class="multi-select-btn danger" onclick="batchDeleteTreeSelection()">批量删除</button>
+        <button type="button" class="multi-select-btn" onclick="exitMultiSelectMode()">取消</button>
+      </div>
       <div class="tree-container" id="tree-container"></div>
     </div>
 
     <!-- 主内容区 -->
     <div class="main-content">
       <div class="header">
-        <div class="header-title">当前项目： <span id="current-name">请选择左侧项目</span></div>
+        <div class="header-title">当前项目： <span id="current-name">请选择左侧项目</span><span id="public-badge" class="public-badge" style="display:none;">公共参考项目 · 只读</span></div>
         <div class="header-right">
-          <span class="env-badge">本地开发环境</span>
+          <span class="trial-badge" id="trial-badge">剩余试用：–</span>
           <button type="button" class="icon-btn" id="shortcuts-btn" onclick="openShortcutsModal()" title="快捷键面板" aria-label="快捷键面板">⌨️</button>
           <button type="button" class="icon-btn" id="backup-export-btn" onclick="exportBackup()" title="导出备份 JSON" aria-label="导出备份 JSON">💾</button>
           <button type="button" class="icon-btn" id="backup-import-btn" onclick="document.getElementById('backup-import-file').click()" title="导入备份 JSON（覆盖全部数据）" aria-label="导入备份 JSON">📥</button>
@@ -843,16 +905,25 @@
           <button type="button" class="icon-btn" id="api-key-btn" onclick="openModelConfigModal()" title="模型配置中心" aria-label="模型配置中心">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
           </button>
+          <button type="button" class="icon-btn" id="logout-btn" onclick="logoutSession()" title="退出登录" aria-label="退出登录">⏻</button>
         </div>
+      </div>
+
+      <!-- V5.0 阶段二：四大 Tab 导航 -->
+      <div class="tab-bar disabled" id="tab-bar">
+        <button type="button" class="tab-item" data-tab="edit" onclick="switchTab('edit')">📝 提示词编辑</button>
+        <button type="button" class="tab-item" data-tab="kb" onclick="switchTab('kb')">📚 知识库管理</button>
+        <button type="button" class="tab-item" data-tab="eval" onclick="switchTab('eval')">⚖️ 智能体评测</button>
+        <button type="button" class="tab-item" data-tab="snapshot" onclick="switchTab('snapshot')">🕒 历史快照</button>
       </div>
 
       <!-- 核心功能区 (默认隐藏，选中项目后显示) -->
       <div class="content-area" id="main-content" style="display: none;">
         
         <!-- 卡片1：提示词编辑 -->
-        <div class="card">
+        <div class="card" data-tab="edit">
           <div class="card-header">
-            <span>📝 提示词编辑与快照</span>
+            <span>📝 提示词编辑</span>
             <div class="card-header-actions">
               <button class="btn-link" id="extract-template-btn" type="button" onclick="extractPromptTemplate()">✨ 提取新模板</button>
               <button class="btn-link" id="apply-template-btn" type="button" onclick="openTemplateApplyModal()">📂 应用模板</button>
@@ -861,6 +932,16 @@
             </div>
           </div>
           <div class="card-body">
+            <div class="token-toolbar">
+              <div class="token-toolbar-head">
+                <span>Token 进度</span>
+                <span id="token-progress-label">Token 占用 0%</span>
+                <span class="limit-warning" id="token-limit-warning" style="display: none;">⚠️ 超出 4000 Token 上限</span>
+              </div>
+              <div class="token-progress-track" id="token-progress-track" title="Token 上限 4000">
+                <div class="token-progress-fill" id="token-progress-bar"></div>
+              </div>
+            </div>
             <div class="form-group">
               <div class="label-row">
                 <label class="form-label" for="val-L0">L0 全局安全基座</label>
@@ -907,13 +988,6 @@
                 <textarea id="val-L3" class="form-textarea editor-input" rows="3" spellcheck="false"></textarea>
               </div>
             </div>
-            <div class="token-progress-track" id="token-progress-track" title="Token 上限 4000">
-              <div class="token-progress-fill" id="token-progress-bar"></div>
-            </div>
-            <div class="token-progress-meta">
-              <span id="token-progress-label">Token 占用 0%</span>
-              <span class="limit-warning" id="token-limit-warning" style="display: none;">⚠️ 超出 4000 Token 上限</span>
-            </div>
             <div class="editor-stats" id="editor-stats">
               <span>总字符数：<span class="stat-strong" id="stats-chars">0</span></span>
               <span style="color:#dcdfe6;">|</span>
@@ -921,21 +995,24 @@
               <span style="margin-left:auto; color:#c0c4cc; font-size:12px;">Token ≈ 字符数 × 0.6（向上取整）</span>
             </div>
             <div class="editor-actions">
-              <button class="btn btn-primary" id="generate-snapshot-btn" onclick="generateSnapshot()" style="flex: 1;">组装并生成快照</button>
+              <button class="btn btn-primary" id="generate-snapshot-btn" onclick="generateSnapshot()" style="flex: 1;">生成为历史快照</button>
               <button class="btn btn-secondary" id="copy-prompt-btn" type="button" onclick="copyPromptAsText()">📋 复制为 NewLync Text</button>
             </div>
           </div>
         </div>
 
-        <!-- 语境配置卡片（模块二：公共基座与语境） -->
-        <div class="card">
+        <!-- 语境配置卡片（Tab1 折叠面板） -->
+        <div class="card context-card collapsed" data-tab="edit" id="context-card">
           <div class="card-header">
             <span>🎯 语境配置</span>
-            <button class="btn btn-primary" id="ctx-extract-btn" type="button" onclick="aiExtractContext()" style="padding: 6px 14px; font-size: 13px;">
-              <span class="ctx-extract-label">✨ AI 智能提取</span>
-            </button>
+            <div class="context-header-actions">
+              <button class="btn btn-link" type="button" id="ctx-toggle-btn" onclick="toggleContextPanel()">展开</button>
+              <button class="btn btn-primary" id="ctx-extract-btn" type="button" onclick="aiExtractContext()" style="padding: 6px 14px; font-size: 13px;">
+                <span class="ctx-extract-label">✨ AI 智能提取</span>
+              </button>
+            </div>
           </div>
-          <div class="card-body">
+          <div class="card-body" id="context-card-body">
             <div class="form-group">
               <label class="form-label">行业 <span class="var-hint">{{industry}}</span></label>
               <input id="ctx-industry" class="form-input" type="text" placeholder="例如：汽车服务 / 金融 / 电商零售" />
@@ -958,40 +1035,51 @@
           </div>
         </div>
 
-        <!-- 卡片2：知识库列表（模块三：搜索 / 冲突检测 / 批量导入 TXT） -->
-        <div class="card">
+        <!-- 卡片2：知识库列表（Tab2：左右 7:3 布局 + 批量管理） -->
+        <div class="card" data-tab="kb" id="kb-card">
           <div class="card-header">
-            <span>📚 知识库列表</span>
+            <span>📚 知识库管理</span>
             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
               <button class="btn-link" onclick="loadKbList()">刷新列表</button>
               <button class="btn-link" id="kb-conflict-btn" onclick="detectKbConflicts()">⚠️ 冲突检测</button>
               <button class="btn-link" id="kb-import-btn" onclick="document.getElementById('kb-import-files').click()">📥 批量导入 TXT</button>
             </div>
           </div>
-          <div class="card-body">
-            <div class="kb-toolbar">
-              <input id="kb-search" class="kb-search-input" type="text" placeholder="🔍 搜索知识库（问题或答案关键字）..." oninput="renderKbList()" />
-              <span class="kb-count" id="kb-count">共 0 条</span>
-              <span class="kb-import-status" id="kb-import-status"></span>
+          <div class="card-body kb-main-grid">
+            <div class="kb-left">
+              <div class="kb-toolbar">
+                <input id="kb-search" class="kb-search-input" type="text" placeholder="🔍 搜索知识库（问题或答案关键字）..." oninput="renderKbList()" />
+                <span class="kb-count" id="kb-count">共 0 条</span>
+                <span class="kb-import-status" id="kb-import-status"></span>
+              </div>
+              <div class="kb-batch-bar">
+                <label class="kb-select-all-wrap"><input type="checkbox" id="kb-select-all" onchange="toggleSelectAllKb(this.checked)" /> 全选</label>
+                <button class="btn btn-link" type="button" id="kb-batch-delete-btn" onclick="batchDeleteKb()" disabled>🧹 批量删除</button>
+                <span class="kb-selected-count" id="kb-selected-count">已选 0 项</span>
+              </div>
+              <input type="file" id="kb-import-files" accept=".txt,text/plain" multiple style="display: none;" onchange="handleKbImport(event.target.files)" />
+              <div class="kb-banner" id="kb-banner">
+                <span id="kb-banner-text"></span>
+                <button type="button" class="kb-banner-close" title="关闭" onclick="hideKbConflictBanner()">×</button>
+              </div>
+              <div id="kb-list-container" style="max-height: 460px; overflow-y: auto; margin-bottom: 8px;">
+                <div class="kb-empty">暂无数据</div>
+              </div>
             </div>
-            <input type="file" id="kb-import-files" accept=".txt,text/plain" multiple style="display: none;" onchange="handleKbImport(event.target.files)" />
-            <div class="kb-banner" id="kb-banner">
-              <span id="kb-banner-text"></span>
-              <button type="button" class="kb-banner-close" title="关闭" onclick="hideKbConflictBanner()">×</button>
-            </div>
-            <div id="kb-list-container" style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
-              <div class="kb-empty">暂无数据</div>
-            </div>
-            <div style="border-top: 1px solid #ebeef5; padding-top: 16px;">
-              <textarea id="kb-text" class="form-textarea" rows="2" placeholder="在此粘贴 FAQ 文本..." style="margin-bottom: 10px;"></textarea>
-              <button class="btn btn-success" onclick="parseKb()">解析文本</button>
-              <button class="btn btn-primary" id="save-kb-btn" onclick="saveKb()" style="display: none;">确认入库</button>
+            <div class="kb-right">
+              <div class="kb-right-title">TXT 解析入库</div>
+              <div class="kb-right-hint">粘贴 FAQ 文本（每段一问一答），解析后点击「确认入库」。</div>
+              <textarea id="kb-text" class="form-textarea" rows="12" placeholder="在此粘贴 FAQ 文本..." style="margin-bottom: 10px;"></textarea>
+              <div class="kb-right-actions">
+                <button class="btn btn-success" onclick="parseKb()">解析文本</button>
+                <button class="btn btn-primary" id="save-kb-btn" onclick="saveKb()" style="display: none;">确认入库</button>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- 卡片3：多轮对话模拟器（模块四） -->
-        <div class="card">
+        <!-- 卡片3：多轮对话模拟器（Tab3：左对话右评测面板） -->
+        <div class="card" data-tab="eval">
           <div class="card-header">
             <span>🗣️ 多轮对话模拟器</span>
             <button class="btn-link" id="chat-clear-btn" onclick="clearChat()">清空对话</button>
@@ -1017,8 +1105,8 @@
           </div>
         </div>
 
-        <!-- 卡片4：批处理回归测试（模块四） -->
-        <div class="card">
+        <!-- 卡片4：批处理回归测试（Tab3） -->
+        <div class="card" data-tab="eval">
           <div class="card-header">
             <span>🧪 批处理回归测试</span>
           </div>
@@ -1040,10 +1128,10 @@
           </div>
         </div>
 
-        <!-- 卡片5：历史快照中心 -->
-        <div class="card">
+        <!-- 卡片5：历史快照（Tab4） -->
+        <div class="card" data-tab="snapshot">
           <div class="card-header">
-            <span>🕒 历史快照中心</span>
+            <span>🕒 历史快照</span>
             <div class="card-header-actions">
               <button class="btn-link" onclick="loadSnapshots()">刷新列表</button>
               <button class="btn-link" id="export-zip-btn" onclick="exportProjectZip()">📦 批量导出 Zip</button>
@@ -1077,6 +1165,9 @@
 
   <!-- 下拉菜单、弹窗、Toast 容器 -->
   <div id="global-dropdown" class="custom-dropdown"></div>
+  <div id="kb-batch-loading" class="fullscreen-loading" style="display:none;">
+    <div class="loading-card"><span class="spinner"></span><span>正在串行删除知识条目…</span></div>
+  </div>
   <div id="global-modal" class="modal-mask">
     <div class="modal-box">
       <div class="modal-header" id="modal-title">标题</div>
@@ -1086,7 +1177,7 @@
           <select id="modal-company-select" class="form-input"></select>
         </div>
         <div id="modal-new-company-container" style="display:none; margin-top: 10px;">
-          <input type="text" id="modal-new-company-input" class="form-input" placeholder="请输入新父级公司名称..." />
+          <input type="text" id="modal-new-company-input" class="form-input" placeholder="请输入新客户或行业" />
         </div>
         <div id="modal-input-container">
           <input type="text" id="modal-input" class="form-input" placeholder="请输入名称...">
@@ -1334,6 +1425,230 @@
       return (el ? el.value : '').trim().toLowerCase();
     }
 
+    // ============================================================
+    // V5.0 阶段二：Tab 导航 / 公共项目只读 / 左侧树多选 / 草稿备份
+    // （增量改造：保留全部既有卡片的 DOM 与 JS 逻辑，仅做显隐与增强）
+    // ============================================================
+    let currentTab = 'edit';
+    let multiSelectMode = false;
+    let selectedProjectIds = [];
+    let currentUserInfo = null;
+    window.isPublicProject = false;
+
+    function findProjectById(projectId) {
+      for (const c of (typeof companies !== 'undefined' && Array.isArray(companies) ? companies : [])) {
+        for (const p of (c.children || [])) {
+          if (p.id === projectId) return p;
+        }
+      }
+      return null;
+    }
+
+    function setTabsEnabled(enabled) {
+      const bar = document.getElementById('tab-bar');
+      if (bar) bar.classList.toggle('disabled', !enabled);
+    }
+
+    /** 切换 Tab：只控制既有卡片显隐，绝不重建/移动卡片内部 DOM */
+    function switchTab(tab) {
+      if (!activeProjectId) { showToast('请先选择左侧项目'); return; }
+      currentTab = tab;
+      document.querySelectorAll('#tab-bar .tab-item').forEach((btn) => {
+        btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+      });
+      document.querySelectorAll('#main-content .card[data-tab]').forEach((card) => {
+        card.style.display = card.getAttribute('data-tab') === tab ? '' : 'none';
+      });
+      const area = document.getElementById('main-content');
+      if (area) {
+        area.setAttribute('data-active-tab', tab);
+        area.scrollTop = 0;
+      }
+      if (tab === 'edit') {
+        // 核心：Tab 切回编辑时强制重算 textarea 高度 / 镜像高度 / 滚动同步（防高亮错位）
+        setTimeout(() => { refreshEditorLayoutAfterTabShow(); }, 0);
+      } else if (tab === 'kb') {
+        loadKbList();
+      } else if (tab === 'snapshot') {
+        loadSnapshots();
+      }
+    }
+    window.switchTab = switchTab;
+
+    /** Tab 1 重新显示后强制刷新双层高亮布局 */
+    function refreshEditorLayoutAfterTabShow() {
+      ['L0', 'L1', 'L3'].forEach((layer) => {
+        const textarea = document.getElementById('val-' + layer);
+        const mirror = document.getElementById('mirror-' + layer);
+        if (!textarea || !mirror) return;
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+        mirror.style.height = textarea.style.height;
+        mirror.scrollTop = textarea.scrollTop;
+        syncEditorScroll(textarea);
+      });
+      refreshAllEditorMirrors();
+      updateEditorStats();
+    }
+
+    /** 语境配置折叠面板（展开时强制重算编辑器布局） */
+    function toggleContextPanel(force) {
+      const card = document.getElementById('context-card');
+      const btn = document.getElementById('ctx-toggle-btn');
+      if (!card) return;
+      const expand = typeof force === 'boolean' ? !force : card.classList.contains('collapsed');
+      card.classList.toggle('collapsed', !expand);
+      if (btn) btn.innerText = expand ? '收起' : '展开';
+      if (expand) setTimeout(() => { refreshEditorLayoutAfterTabShow(); }, 0);
+    }
+    window.toggleContextPanel = toggleContextPanel;
+
+    /** 页面初始化：Tab 初始态（仅 Tab1 可见）+ 头部用户信息 + 草稿监听 */
+    function initTabsAndHeader() {
+      document.querySelectorAll('#tab-bar .tab-item').forEach((btn) => {
+        btn.classList.toggle('active', btn.getAttribute('data-tab') === 'edit');
+      });
+      document.querySelectorAll('#main-content .card[data-tab]').forEach((card) => {
+        card.style.display = card.getAttribute('data-tab') === 'edit' ? '' : 'none';
+      });
+      setTabsEnabled(false);
+      ['L0', 'L1', 'L3'].forEach((layer) => {
+        const el = document.getElementById('val-' + layer);
+        if (el) el.addEventListener('input', () => saveEditorDrafts(activeProjectId));
+      });
+      loadCurrentUser();
+    }
+    window.initTabsAndHeader = initTabsAndHeader;
+
+    /** 顶部登录用户信息 / 剩余试用 / 退出登录 */
+    async function loadCurrentUser() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.status === 401) { window.location.href = '/login.html'; return; }
+        const d = await res.json();
+        if (!d || !d.success) return;
+        currentUserInfo = d.user;
+        const badge = document.getElementById('trial-badge');
+        if (badge) {
+          const left = Math.max(0, 3 - Number(d.user.trial_count || 0));
+          const roleText = d.user.role === 'superadmin' ? '超管' : (d.user.role === 'teamadmin' ? '团管' : '');
+          badge.innerText = '剩余试用：' + left + '/3' + (roleText ? ' · ' + roleText : '');
+        }
+      } catch (e) { /* 静默 */ }
+    }
+    async function logoutSession() {
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) { /* ignore */ }
+      window.location.href = '/login.html';
+    }
+    window.logoutSession = logoutSession;
+
+    /** 公共参考项目只读模式 */
+    function setPublicProjectMode(project) {
+      const isPublic = !!(project && Number(project.is_public) === 1);
+      window.isPublicProject = isPublic;
+      document.body.classList.toggle('public-readonly', isPublic);
+      const badge = document.getElementById('public-badge');
+      if (badge) badge.style.display = isPublic ? 'inline-flex' : 'none';
+      ['val-L0', 'val-L1', 'val-L3'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.readOnly = isPublic;
+      });
+      ['generate-snapshot-btn', 'ctx-extract-btn', 'clean-format-btn', 'polish-L0', 'polish-L1', 'polish-L3'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = isPublic;
+      });
+    }
+    /** 所有写操作统一前置拦截（公共项目禁止修改） */
+    function guardPublicProject() {
+      if (window.isPublicProject) {
+        showToast('公共项目禁止修改');
+        return true;
+      }
+      return false;
+    }
+    window.guardPublicProject = guardPublicProject;
+
+    /** 草稿实时备份（localStorage），切换 Tab / 项目不丢内容 */
+    function saveEditorDrafts(projectId) {
+      if (!projectId) return;
+      try {
+        const drafts = {
+          L0: document.getElementById('val-L0').value,
+          L1: document.getElementById('val-L1').value,
+          L3: document.getElementById('val-L3').value,
+        };
+        localStorage.setItem('ps_draft_' + projectId, JSON.stringify(drafts));
+      } catch (e) { /* storage 不可用时忽略 */ }
+    }
+    function restoreEditorDrafts(projectId) {
+      if (!projectId) return false;
+      try {
+        const raw = localStorage.getItem('ps_draft_' + projectId);
+        if (!raw) return false;
+        const drafts = JSON.parse(raw);
+        if (!drafts || typeof drafts !== 'object') return false;
+        setEditorLayerValues({ L0: drafts.L0 || '', L1: drafts.L1 || '', L3: drafts.L3 || '' });
+        return true;
+      } catch (e) { return false; }
+    }
+
+    /** 左侧树多选模式 */
+    function updateMultiSelectBar() {
+      const bar = document.getElementById('multi-select-bar');
+      const countEl = document.getElementById('multi-selected-count');
+      if (countEl) countEl.innerText = String(selectedProjectIds.length);
+      if (bar) bar.style.display = multiSelectMode ? 'flex' : 'none';
+    }
+    function enterMultiSelectMode() {
+      closeMenu();
+      multiSelectMode = true;
+      selectedProjectIds = [];
+      renderTree();
+      updateMultiSelectBar();
+      showToast('多选模式已开启，请勾选项目');
+    }
+    window.enterMultiSelectMode = enterMultiSelectMode;
+    function exitMultiSelectMode() {
+      multiSelectMode = false;
+      selectedProjectIds = [];
+      renderTree();
+      updateMultiSelectBar();
+    }
+    window.exitMultiSelectMode = exitMultiSelectMode;
+    function toggleProjectSelection(projectId) {
+      const idx = selectedProjectIds.indexOf(projectId);
+      if (idx >= 0) selectedProjectIds.splice(idx, 1);
+      else selectedProjectIds.push(projectId);
+      renderTree();
+      updateMultiSelectBar();
+    }
+    window.toggleProjectSelection = toggleProjectSelection;
+    function handleTreeItemClick(projectId, projectName) {
+      if (multiSelectMode) {
+        toggleProjectSelection(projectId);
+      } else {
+        selectProject(projectId, projectName);
+      }
+    }
+    window.handleTreeItemClick = handleTreeItemClick;
+    async function batchDeleteTreeSelection() {
+      if (selectedProjectIds.length === 0) return showToast('请先勾选项目');
+      if (window.isPublicProject) return showToast('公共项目禁止修改');
+      const ids = selectedProjectIds.slice();
+      openConfirmModal('批量删除项目', `确认删除选中的 ${ids.length} 个项目？（含其知识库与快照将无法访问）`, async () => {
+        closeModal();
+        for (const id of ids) {
+          try {
+            await safeFetchJson('/api/projects/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+          } catch (e) { /* 串行继续 */ }
+        }
+        showToast(`已删除 ${ids.length} 个项目`);
+        exitMultiSelectMode();
+        await fetchData();
+      });
+    }
+    window.batchDeleteTreeSelection = batchDeleteTreeSelection;
+
     function renderTree() {
       const container = document.getElementById('tree-container');
       if (!container) return;
@@ -1365,6 +1680,7 @@
           `;
         });
         container.innerHTML = hitCount === 0 ? '<div class="tree-empty">无匹配项目</div>' : html;
+        updateMultiSelectBar();
         return;
       }
 
@@ -1398,15 +1714,27 @@
         `;
       });
       container.innerHTML = html;
+      updateMultiSelectBar();
     }
 
     function createTreeItemHTML(item, type, isPinned) {
       let activeClass = activeProjectId === item.id ? 'active' : '';
       let paddingStyle = isPinned ? 'margin-left: 16px; padding-left: 16px;' : '';
+      const isMultiProject = multiSelectMode && type === 'project';
+      const isChecked = isMultiProject && selectedProjectIds.indexOf(item.id) >= 0;
+      const clickHandler = isMultiProject
+        ? `handleTreeItemClick('${item.id}', '${String(item.name || '').replace(/'/g, "\\'")}')`
+        : `selectProject('${item.id}', '${String(item.name || '').replace(/'/g, "\\'")}')`;
+      const checkboxWrap = isMultiProject
+        ? `<span class="tree-check-wrap" onclick="event.stopPropagation(); toggleProjectSelection('${item.id}');">
+             <input type="checkbox" class="tree-checkbox" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleProjectSelection('${item.id}');" aria-label="选择项目" />
+           </span>`
+        : '';
       return `
-        <div class="menu-child ${activeClass}" style="${paddingStyle}" onclick="selectProject('${item.id}', '${item.name}')">
-          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex:1; padding-right:8px;">${item.name}</span>
-          <div class="more-btn" onclick="showMenu(event, '${item.id}', '${type}')">
+        <div class="menu-child ${activeClass} ${isChecked ? 'tree-item-selected' : ''}" style="${paddingStyle}" onclick="${clickHandler}">
+          ${checkboxWrap}
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex:1; padding-right:8px;">${escapeHtml(item.name)}</span>
+          <div class="more-btn" onclick="event.stopPropagation(); showMenu(event, '${item.id}', '${type}')">
             <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
           </div>
         </div>
@@ -1419,10 +1747,17 @@
     }
 
     function selectProject(id, name) {
+      // 切换项目前先备份上一项目草稿（localStorage 实时草稿，防丢）
+      if (activeProjectId && activeProjectId !== id) saveEditorDrafts(activeProjectId);
       activeProjectId = id;
       document.getElementById('current-name').innerText = name;
-      document.getElementById('main-content').style.display = 'block';
+      // 清除内联 display，让 Tab3 的 CSS grid 双栏布局生效
+      document.getElementById('main-content').style.display = '';
       document.getElementById('empty-state').style.display = 'none';
+      setTabsEnabled(true);
+      setPublicProjectMode(findProjectById(id));
+      switchTab('edit');
+      resetKbSelection();
       renderTree();
       
       // 选中项目后，清空旧数据并重新拉取该项目的知识库和快照
@@ -1449,6 +1784,13 @@
       // 模块一：高亮层 / 高度 / Token 统计刷新（选中项目后主动刷新一次）
       refreshAllEditorMirrors();
       updateEditorStats();
+      // V5 阶段二：恢复该项目 localStorage 草稿（若有）
+      if (restoreEditorDrafts(id)) {
+        refreshAllEditorMirrors();
+        updateEditorStats();
+      }
+      // Tab 1 强制布局重算（防高亮错位）
+      setTimeout(() => { refreshEditorLayoutAfterTabShow(); }, 0);
       // 模块二：加载该项目的语境配置（先 clearContext 清空，再异步回填）
       loadProjectContext(id);
     }
@@ -1458,6 +1800,7 @@
     // 1. 生成快照（并发保护：生成中忽略重复触发，Ctrl+S 与按钮共用）
     let snapshotPending = false;
     async function generateSnapshot() {
+      if (guardPublicProject()) return;
       if (!activeProjectId) {
         showToast('请先选择一个项目');
         return;
@@ -1509,6 +1852,75 @@
     window.escapeHtml = escapeHtml;
 
     let currentKbData = []; // 知识库缓存（搜索/冲突检测基于此渲染，避免重复请求）
+    let selectedKbIds = []; // V5 阶段二：知识库批量多选
+
+    /** 重置知识库多选（切换项目 / 批量删除后调用） */
+    function resetKbSelection() {
+      selectedKbIds = [];
+      updateKbSelectionUI();
+    }
+    function updateKbSelectionUI() {
+      const countEl = document.getElementById('kb-selected-count');
+      const batchBtn = document.getElementById('kb-batch-delete-btn');
+      const selectAll = document.getElementById('kb-select-all');
+      if (countEl) countEl.innerText = '已选 ' + selectedKbIds.length + ' 项';
+      if (batchBtn) batchBtn.disabled = selectedKbIds.length === 0 || window.isPublicProject;
+      if (selectAll) {
+        const visibleIds = Array.from(document.querySelectorAll('#kb-list-container .kb-item-check')).map((cb) => cb.getAttribute('data-id'));
+        selectAll.checked = visibleIds.length > 0 && visibleIds.every((id) => selectedKbIds.indexOf(id) >= 0);
+      }
+      document.querySelectorAll('#kb-list-container .kb-item-check').forEach((cb) => {
+        cb.checked = selectedKbIds.indexOf(cb.getAttribute('data-id')) >= 0;
+        const item = cb.closest('.kb-item');
+        if (item) item.classList.toggle('tree-item-selected', cb.checked);
+      });
+    }
+    function toggleKbSelection(id) {
+      const idx = selectedKbIds.indexOf(id);
+      if (idx >= 0) selectedKbIds.splice(idx, 1);
+      else selectedKbIds.push(id);
+      updateKbSelectionUI();
+    }
+    function toggleSelectAllKb(checked) {
+      const visibleIds = Array.from(document.querySelectorAll('#kb-list-container .kb-item-check')).map((cb) => cb.getAttribute('data-id'));
+      if (checked) {
+        visibleIds.forEach((id) => { if (selectedKbIds.indexOf(id) === -1) selectedKbIds.push(id); });
+      } else {
+        selectedKbIds = selectedKbIds.filter((id) => visibleIds.indexOf(id) === -1);
+      }
+      updateKbSelectionUI();
+    }
+    /** 批量删除知识条目：⚠️ 必须串行 await，禁止 Promise.all；删除期间全屏 Loading 防乱点 */
+    async function batchDeleteKb() {
+      if (guardPublicProject()) return;
+      if (selectedKbIds.length === 0) return showToast('请先勾选知识条目');
+      const ids = selectedKbIds.slice();
+      openConfirmModal('批量删除知识库', `确认删除选中的 ${ids.length} 条知识条目？该操作不可撤销。`, async () => {
+        closeModal();
+        const loading = document.getElementById('kb-batch-loading');
+        if (loading) loading.style.display = 'flex';
+        let success = 0;
+        try {
+          for (const id of ids) {
+            try {
+              const d = await safeFetchJson('/api/kb/delete', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+              });
+              if (d && d.success) success++;
+            } catch (e) { /* 单条失败不影响后续串行删除 */ }
+          }
+        } finally {
+          if (loading) loading.style.display = 'none';
+        }
+        selectedKbIds = [];
+        showToast(`批量删除完成：成功 ${success}/${ids.length} 条`);
+        updateKbSelectionUI();
+        await loadKbList();
+      });
+    }
+    window.batchDeleteKb = batchDeleteKb;
+    window.toggleKbSelection = toggleKbSelection;
+    window.toggleSelectAllKb = toggleSelectAllKb;
 
     async function loadKbList() {
       if (!activeProjectId) return;
@@ -1546,21 +1958,29 @@
       }
       if (all.length === 0) {
         container.innerHTML = '<div class="kb-empty">暂无知识条目</div>';
+        updateKbSelectionUI();
         return;
       }
       if (matched.length === 0) {
         container.innerHTML = '<div class="kb-empty">无匹配条目</div>';
+        updateKbSelectionUI();
         return;
       }
       container.innerHTML = matched.map((item) => `
         <div class="kb-item">
-          <div style="flex:1;">
+          <label class="kb-item-check-wrap" onclick="event.stopPropagation()">
+            <input type="checkbox" class="kb-item-check" data-id="${escapeHtml(String(item.id))}" ${selectedKbIds.indexOf(item.id) >= 0 ? 'checked' : ''} onchange="toggleKbSelection(this.getAttribute('data-id'))" aria-label="选择知识条目" />
+          </label>
+          <div class="kb-item-main">
             <div class="kb-q">Q: ${escapeHtml(item.question)}</div>
             <div class="kb-a">A: ${escapeHtml(item.answer)}</div>
           </div>
-          <button class="btn btn-link" style="margin-left:10px;" onclick='editKb(${escapeHtml(JSON.stringify(String(item.id)))})'>编辑</button>
-          <button class="btn btn-link" style="color: var(--danger); margin-left:10px;" onclick='deleteKb(${escapeHtml(JSON.stringify(String(item.id)))})'>删除</button>
+          <div class="kb-item-toolbar">
+            <button class="btn btn-link" onclick='editKb(${escapeHtml(JSON.stringify(String(item.id)))})'>编辑</button>
+            <button class="btn btn-link" style="color: var(--danger);" onclick='deleteKb(${escapeHtml(JSON.stringify(String(item.id)))})'>删除</button>
+          </div>
         </div>`).join('');
+      updateKbSelectionUI();
     }
     window.renderKbList = renderKbList;
 
@@ -1717,6 +2137,7 @@
 
     /** 删除单条知识（复用 #global-modal 确认弹窗，替代原生 confirm；刷新列表时保留搜索关键字） */
     function deleteKb(id) {
+      if (guardPublicProject()) return;
       const modal = document.getElementById('global-modal');
       const titleEl = document.getElementById('modal-title');
       const messageEl = document.getElementById('modal-message');
@@ -1792,6 +2213,7 @@
 
     /** 💾 保存知识条目修改：POST /api/kb/update {id, question, answer}；成功后刷新列表（搜索词保留） */
     async function saveKbEdit() {
+      if (guardPublicProject()) return;
       if (kbEditSaving) return;
       if (!editingKbId) { setKbEditError('缺少条目 ID'); return; }
       const questionEl = document.getElementById('kb-edit-question');
@@ -1828,6 +2250,7 @@
     window.saveKbEdit = saveKbEdit;
 
     async function parseKb() {
+      if (guardPublicProject()) return;
       const text = document.getElementById('kb-text').value;
       if (!text) return showToast('请先输入文本');
       const btn = event.target;
@@ -1848,6 +2271,7 @@
     }
 
     async function saveKb() {
+      if (guardPublicProject()) return;
       if (currentKbPairs.length === 0) return;
       const btn = document.getElementById('save-kb-btn');
       btn.innerText = '入库中...'; btn.disabled = true;
@@ -2630,7 +3054,7 @@
         menuHtml = `
           <div class="dropdown-item" onclick="openCreateModal('project', '${id}')">➕ 新项目</div>
           <div class="dropdown-item" onclick="togglePin('${id}')">📌 ${isPinned ? '取消置顶' : '置顶'}</div>
-          <div class="dropdown-item" onclick="showToast('多选模式已激活')">☑️ 多选</div>
+          <div class="dropdown-item" onclick="enterMultiSelectMode()">☑️ 多选</div>
           <div class="dropdown-item" onclick="openEditModal('company', '${id}', '${targetItem.name}')">✏️ 重命名</div>
           <div class="dropdown-divider"></div>
           <div class="dropdown-item danger" onclick="deleteItem('${id}', 'companies', '${targetItem.name}')">🗑️ 删除</div>
@@ -2639,7 +3063,7 @@
         menuHtml = `
           <div class="dropdown-item" onclick="togglePin('${id}')">📌 ${isPinned ? '取消置顶' : '置顶'}</div>
           <div class="dropdown-item" onclick="cloneProject('${id}')">📄 克隆项目</div>
-          <div class="dropdown-item" onclick="showToast('多选模式已激活')">☑️ 多选</div>
+          <div class="dropdown-item" onclick="enterMultiSelectMode()">☑️ 多选</div>
           <div class="dropdown-item" onclick="openEditModal('project', '${id}', '${targetItem.name}')">✏️ 重命名</div>
           <div class="dropdown-divider"></div>
           <div class="dropdown-item danger" onclick="deleteItem('${id}', 'projects', '${targetItem.name}')">🗑️ 删除</div>
@@ -2675,7 +3099,7 @@
     function openCreateModal(type, companyId = '') {
       closeMenu();
       const modal = document.getElementById('global-modal');
-      document.getElementById('modal-title').innerText = type === 'company' ? '新建公司/分组' : '新建项目';
+      document.getElementById('modal-title').innerText = type === 'company' ? '创建客户或行业' : '开启新项目';
       document.getElementById('modal-title').style.color = '#303133';
       const createMsgEl = document.getElementById('modal-message');
       createMsgEl.style.display = 'none';
@@ -2702,7 +3126,7 @@
         if (createInputEl) {
           createInputEl.placeholder = isNewParent
             ? '请输入子级项目名称（留空 = 仅创建父级公司）'
-            : '请输入项目名称...';
+            : '请输入项目名称(留空 = 仅创建客户或行业)';
         }
         if (isNewParent && newCompanyInput) newCompanyInput.focus();
       };
@@ -2710,7 +3134,7 @@
       if (type === 'project') {
         companyContainer.style.display = 'block';
         const existingOptions = companies.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
-        companySelect.innerHTML = `${existingOptions}<option value="${NEW_COMPANY_OPTION}">➕ 新建父级公司…</option>`;
+        companySelect.innerHTML = `${existingOptions}<option value="${NEW_COMPANY_OPTION}">➕ 创建客户或行业…</option>`;
         companySelect.value = companyId || (companies.length ? companies[0].id : NEW_COMPANY_OPTION);
         companySelect.onchange = syncParentMode;
         syncParentMode();
@@ -2745,7 +3169,7 @@
           const isNewParent = parentChoice === NEW_COMPANY_OPTION;
           const newParentName = newCompanyInput ? newCompanyInput.value.trim() : '';
           if (isNewParent && !newParentName) {
-            showToast('请输入新父级公司名称');
+            showToast('请输入新客户或行业');
             if (newCompanyInput) newCompanyInput.focus();
             return;
           }
@@ -3473,6 +3897,7 @@
     // ==================== V3.0 阶段四：一键清理排版 ====================
     /** 对 L0/L1/L3 执行：行首尾空白去除、连续空行折叠为 1、删除首尾空行、中文逗号「，」→ 英文逗号「,」 */
     function cleanupFormatting() {
+      if (guardPublicProject()) return;
       let removedChars = 0;
       let changedBlocks = 0;
       EDITOR_LAYERS.forEach(layer => {
@@ -3892,6 +4317,7 @@
     }
 
     async function saveContextSilently(projectId, payload) {
+      if (window.isPublicProject) return;
       try {
         await safeFetchJson(`/api/context/save`, {
           method: 'POST',
@@ -3958,6 +4384,7 @@
 
     /** ✨ AI 智能提取：无项目先提示 → 先查知识库非空 → AbortController 请求 → 校验项目未切换后回填 */
     async function aiExtractContext() {
+      if (guardPublicProject()) return;
       if (!activeProjectId) {
         showToast('请先选择一个项目');
         return;
@@ -4312,6 +4739,7 @@
 
     /** 应用模板：手写确认框 → 写入三层 + 记录可回退状态 + 显示恢复按钮 */
     function requestApplyTemplate(id) {
+      if (guardPublicProject()) return;
       const tpl = templateCache.find((t) => String(t.id) === String(id));
       if (!tpl) { showToast('模板不存在，请刷新列表'); return; }
       openConfirmModal('应用模板', `将用模板「${tpl.name}」覆盖当前 L0 / L1 / L3 三层内容，是否继续？`, async () => {
@@ -4360,6 +4788,7 @@
     let polishingLayer = null;
 
     async function polishLayer(layer) {
+      if (guardPublicProject()) return;
       if (polishingLayer) return;
       const textarea = document.getElementById('val-' + layer);
       if (!textarea) return;
@@ -4564,6 +4993,7 @@
     initGlobalEscHandler(); // V3.0 阶段四：Esc 关闭最上层弹层
     initVariableTooltip(); // P2-A：镜像变量中文自定义 tooltip
     initV4UI(); // V4.0：模板/快捷键/备份 UI 初始化
+    initTabsAndHeader(); // V5.0 阶段二：Tab 初始态 + 顶部用户信息 + 草稿监听
     updateTokenProgress(0); // V3.0 阶段四：Token 进度条初始态
 
     window.onload = fetchData;

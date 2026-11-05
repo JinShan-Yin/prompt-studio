@@ -1065,10 +1065,38 @@ function canAccessOwner(ownerUserId, user) {
   return false;
 }
 /** 校验项目访问权（越权返回 403，不存在返回 404） */
+/** 公共参考项目是否可被当前用户只读访问（global：全员；team：同团队） */
+function canReadPublicProject(project, user) {
+  if (!project || Number(project.is_public) !== 1) return false;
+  const scope = project.public_scope || 'global';
+  if (scope === 'global') return true;
+  if (scope === 'team' && user && user.team_id) {
+    try {
+      const owner = db.prepare('SELECT team_id FROM users WHERE id = ?').get(project.user_id);
+      return !!(owner && owner.team_id && owner.team_id === user.team_id);
+    } catch (e) { return false; }
+  }
+  return false;
+}
 function requireProjectAccess(projectId, user) {
   const project = projectId ? db.prepare('SELECT * FROM projects WHERE id = ?').get(String(projectId)) : null;
   if (!project) throw httpError(404, '项目不存在或无权访问');
-  if (!canAccessOwner(project.user_id, user)) throw httpError(403, '无权访问该项目');
+  if (!canAccessOwner(project.user_id, user) && !canReadPublicProject(project, user)) throw httpError(403, '无权访问该项目');
+  return project;
+}
+/** 写操作校验：公共参考项目禁止修改（超管管理场景除外） */
+function requireProjectWritable(projectId, user) {
+  const project = requireProjectAccess(projectId, user);
+  if (Number(project.is_public) === 1 && (!user || user.role !== 'superadmin')) {
+    throw httpError(403, '公共项目禁止修改');
+  }
+  return project;
+}
+/** 已有项目行时的写保护（KB 等通过 project 行校验的场景） */
+function assertProjectWritableByRow(project, user) {
+  if (project && Number(project.is_public) === 1 && (!user || user.role !== 'superadmin')) {
+    throw httpError(403, '公共项目禁止修改');
+  }
   return project;
 }
 /** 校验公司访问权 */
@@ -1083,11 +1111,12 @@ function requireSnapshotAccess(snapshotId, user) {
   const snapshot = snapshotId ? db.prepare('SELECT * FROM snapshots WHERE id = ?').get(String(snapshotId)) : null;
   if (!snapshot) throw httpError(404, '快照不存在或无权访问');
   let ownerId = snapshot.user_id;
-  if (!ownerId && snapshot.project_id) {
-    const project = db.prepare('SELECT user_id FROM projects WHERE id = ?').get(snapshot.project_id);
-    ownerId = project ? project.user_id : '';
+  let projectRow = null;
+  if (snapshot.project_id) {
+    projectRow = db.prepare('SELECT * FROM projects WHERE id = ?').get(snapshot.project_id) || null;
+    if (!ownerId && projectRow) ownerId = projectRow.user_id;
   }
-  if (!canAccessOwner(ownerId, user)) throw httpError(403, '无权访问该快照');
+  if (!canAccessOwner(ownerId, user) && !(projectRow && canReadPublicProject(projectRow, user))) throw httpError(403, '无权访问该快照');
   return snapshot;
 }
 /** 校验知识库条目访问权（回落到所属项目） */
@@ -1294,7 +1323,7 @@ route(['POST'], '/api/context/save', async (req, res) => {
   const projectId = body.project_id || req.query.project_id || '';
   if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
   const user = currentSessionUser(req);
-  requireProjectAccess(projectId, user);
+  requireProjectWritable(projectId, user);
   const context = normalizeContext(body.context_data);
   const info = db.prepare('UPDATE projects SET context_json = ? WHERE id = ?').run(JSON.stringify(context), projectId);
   logAction(user.id, 'context_save', 'project', projectId, '');
@@ -1349,7 +1378,7 @@ route(['POST'], '/api/kb/save', async (req, res) => {
   if (!project_id) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
   if (!Array.isArray(pairs)) return sendJson(res, 400, { success: false, error: 'pairs 必须是数组' });
   const user = currentSessionUser(req);
-  const project = requireProjectAccess(project_id, user);
+  const project = requireProjectWritable(project_id, user);
   const ownerId = project.user_id || user.id;
   const insertItem = db.prepare('INSERT INTO kb_items (id, project_id, question, answer, user_id) VALUES (?, ?, ?, ?, ?)');
   const insertVer = db.prepare('INSERT INTO kb_item_versions (id, item_id, version_hash, content, is_deleted, user_id) VALUES (?, ?, ?, ?, 0, ?)');
@@ -1379,7 +1408,8 @@ route(['POST'], '/api/kb/delete', async (req, res) => {
   const body = req.body || {};
   if (!body.id) return sendJson(res, 400, { error: '缺少 ID' });
   const user = currentSessionUser(req);
-  requireKbAccess(body.id, user);
+  const kbAccess = requireKbAccess(body.id, user);
+  assertProjectWritableByRow(kbAccess.project, user);
   db.prepare('DELETE FROM kb_items WHERE id = ?').run(body.id);
   db.prepare('UPDATE kb_item_versions SET is_deleted = 1 WHERE item_id = ?').run(body.id);
   logAction(user.id, 'kb_delete', 'kb', body.id, '');
@@ -1396,7 +1426,8 @@ route(['POST'], '/api/kb/update', async (req, res) => {
   if (!question || !answer) return sendJson(res, 400, { success: false, error: 'question 和 answer 必须是非空字符串' });
 
   const kbUser = currentSessionUser(req);
-  requireKbAccess(id, kbUser);
+  const kbAccess = requireKbAccess(id, kbUser);
+  assertProjectWritableByRow(kbAccess.project, kbUser);
   const existing = db.prepare('SELECT id FROM kb_items WHERE id = ?').get(id);
   if (!existing) return sendJson(res, 404, { success: false, error: '知识条目不存在' });
 
@@ -1420,7 +1451,7 @@ route(['POST'], '/api/snapshots/create', async (req, res) => {
   if (!project_id || typeof project_id !== 'string') return sendJson(res, 400, { success: false, error: '缺少 project_id' });
   if (!Array.isArray(layers)) return sendJson(res, 400, { success: false, error: 'layers 必须是数组' });
   const snapshotUser = currentSessionUser(req);
-  requireProjectAccess(project_id, snapshotUser);
+  requireProjectWritable(project_id, snapshotUser);
 
   // 语境来源：body.context_data（对象且非空）优先；否则安全读取 DB projects.context_json；默认 {}
   const useBodyContext = isUsableContextData(context_data);
@@ -1554,9 +1585,10 @@ route(['GET'], '/api/companies', async (req, res) => {
   if (ids === null) {
     return sendJson(res, 200, { success: true, data: db.prepare('SELECT * FROM companies').all() });
   }
-  if (ids.length === 0) return sendJson(res, 200, { success: true, data: [] });
-  const placeholders = ids.map(() => '?').join(', ');
-  const rows = db.prepare(`SELECT * FROM companies WHERE user_id IN (${placeholders})`).all(...ids);
+  const publicCompanySql = "id IN (SELECT company_id FROM projects WHERE is_public = 1 AND (public_scope = 'global' OR public_scope IS NULL OR public_scope = ''))";
+  const rows = ids.length === 0
+    ? db.prepare(`SELECT * FROM companies WHERE ${publicCompanySql}`).all()
+    : db.prepare(`SELECT * FROM companies WHERE user_id IN (${ids.map(() => '?').join(', ')}) OR ${publicCompanySql}`).all(...ids);
   sendJson(res, 200, { success: true, data: rows });
 });
 
@@ -1598,9 +1630,10 @@ route(['GET'], '/api/projects', async (req, res) => {
   if (ids === null) {
     return sendJson(res, 200, { success: true, data: db.prepare('SELECT * FROM projects').all() });
   }
-  if (ids.length === 0) return sendJson(res, 200, { success: true, data: [] });
-  const placeholders = ids.map(() => '?').join(', ');
-  const rows = db.prepare(`SELECT * FROM projects WHERE user_id IN (${placeholders})`).all(...ids);
+  const publicProjectSql = "is_public = 1 AND (public_scope = 'global' OR public_scope IS NULL OR public_scope = '')";
+  const rows = ids.length === 0
+    ? db.prepare(`SELECT * FROM projects WHERE ${publicProjectSql}`).all()
+    : db.prepare(`SELECT * FROM projects WHERE user_id IN (${ids.map(() => '?').join(', ')}) OR (${publicProjectSql})`).all(...ids);
   sendJson(res, 200, { success: true, data: rows });
 });
 
@@ -1620,10 +1653,16 @@ route(['POST'], '/api/projects/create', async (req, res) => {
 route(['POST'], '/api/projects/update', async (req, res) => {
   const body = req.body || {};
   const user = currentSessionUser(req);
-  requireProjectAccess(body.id, user);
+  requireProjectWritable(body.id, user);
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   if (!name) return sendJson(res, 400, { success: false, error: '名称不能为空' });
-  db.prepare('UPDATE projects SET name = ? WHERE id = ?').run(name, body.id);
+  if (body.is_public !== undefined && ['superadmin', 'teamadmin'].includes(user.role)) {
+    const isPublic = body.is_public === true || body.is_public === 1 || body.is_public === '1' ? 1 : 0;
+    const scope = typeof body.public_scope === 'string' && body.public_scope.trim() ? body.public_scope.trim() : 'global';
+    db.prepare('UPDATE projects SET name = ?, is_public = ?, public_scope = ? WHERE id = ?').run(name, isPublic, scope, body.id);
+  } else {
+    db.prepare('UPDATE projects SET name = ? WHERE id = ?').run(name, body.id);
+  }
   logAction(user.id, 'project_update', 'project', body.id, name);
   sendJson(res, 200, { success: true, message: '修改成功' });
 });
@@ -1631,7 +1670,7 @@ route(['POST'], '/api/projects/update', async (req, res) => {
 route(['POST'], '/api/projects/delete', async (req, res) => {
   const body = req.body || {};
   const user = currentSessionUser(req);
-  requireProjectAccess(body.id, user);
+  requireProjectWritable(body.id, user);
   db.prepare('DELETE FROM projects WHERE id = ?').run(body.id);
   logAction(user.id, 'project_delete', 'project', body.id, '');
   sendJson(res, 200, { success: true, message: '删除成功' });
