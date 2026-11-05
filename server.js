@@ -31,7 +31,7 @@ import { ZipArchive } from 'archiver'; // archiver@8 纯 ESM：无 default expor
 // 一、常量与运行环境
 // ============================================================
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const HOST = '127.0.0.1';
 const ROOT_DIR = process.cwd();
 const DATA_DIR = path.join(ROOT_DIR, 'data');
@@ -116,6 +116,7 @@ function initDb() {
     CREATE TABLE IF NOT EXISTS kb_item_versions ( id TEXT PRIMARY KEY, item_id TEXT, version_hash TEXT, content TEXT, is_deleted INTEGER DEFAULT 0 );
     CREATE TABLE IF NOT EXISTS snapshots ( id TEXT PRIMARY KEY, project_id TEXT, module_versions_json TEXT, kb_versions_json TEXT, final_prompt_content TEXT, eval_run_id TEXT, p0_validation_log TEXT, created_at TEXT, exported_at TEXT, eval_pass INTEGER DEFAULT 0, eval_score REAL DEFAULT 0 );
     CREATE TABLE IF NOT EXISTS eval_runs ( id TEXT PRIMARY KEY, snapshot_id TEXT, l1_pass_rate REAL, l2_avg_score REAL, status TEXT );
+    CREATE TABLE IF NOT EXISTS prompt_templates ( id TEXT PRIMARY KEY, name TEXT NOT NULL, l0_content TEXT DEFAULT '', l1_content TEXT DEFAULT '', l3_content TEXT DEFAULT '', created_at TEXT DEFAULT '' );
   `);
 
   // 兼容旧库：snapshots 缺 eval_pass / eval_score 时补列
@@ -1250,6 +1251,254 @@ route(['POST'], '/api/models/test', async (req, res) => {
   if (result.success) console.log(`[models] 连接测试成功: provider=${provider || '-'} model=${modelName}`);
   else console.warn(`[models] 连接测试失败: provider=${provider || '-'} model=${modelName} reason=${result.message}`);
   sendJson(res, 200, result);
+});
+
+// ============================================================
+// 4.5 V4.0：提示词模板库 / AI 润色 / 备份恢复 / 项目克隆
+// ============================================================
+
+/** 备份涉及的全部数据表（顺序无关，导入前先 DELETE 全部再 INSERT） */
+const BACKUP_TABLES = [
+  'model_configs', 'companies', 'projects', 'modules', 'module_versions',
+  'kb_items', 'kb_item_versions', 'snapshots', 'eval_runs', 'prompt_templates',
+];
+
+/** 去除大模型输出里的 Markdown 代码围栏 */
+function stripCodeFence(text) {
+  let s = String(text == null ? '' : text).trim();
+  s = s.replace(/^```[a-zA-Z0-9_-]*\s*\r?\n?/, '').replace(/\r?\n?```\s*$/, '');
+  return s.trim();
+}
+
+/** 导出全部表为 JSON 快照对象 */
+function buildBackupSnapshot() {
+  const snapshot = {
+    success: true,
+    app: 'prompt-studio',
+    version: 1,
+    exported_at: new Date().toISOString(),
+    tables: {},
+  };
+  for (const table of BACKUP_TABLES) snapshot.tables[table] = db.prepare(`SELECT * FROM ${table}`).all();
+  return snapshot;
+}
+
+/** 备份导入严格校验：表名白名单 / 必须包含全部表 / 每行对象 / 字段白名单 / 基本类型校验 */
+function validateBackupPayload(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('备份内容必须是 JSON 对象');
+  const tables = payload.tables;
+  if (!tables || typeof tables !== 'object' || Array.isArray(tables)) throw new Error('备份缺少 tables 对象');
+  const unknownTables = Object.keys(tables).filter((name) => !BACKUP_TABLES.includes(name));
+  if (unknownTables.length > 0) throw new Error(`备份包含未知数据表：${unknownTables.join(', ')}`);
+  const missingTables = BACKUP_TABLES.filter((name) => !Object.prototype.hasOwnProperty.call(tables, name));
+  if (missingTables.length > 0) throw new Error(`备份缺少数据表：${missingTables.join(', ')}`);
+
+  const columnCache = new Map();
+  const rowsByTable = {};
+  for (const table of BACKUP_TABLES) {
+    const rows = tables[table];
+    if (!Array.isArray(rows)) throw new Error(`表 ${table} 必须是数组`);
+    if (!columnCache.has(table)) {
+      columnCache.set(table, db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+    }
+    const allowedColumns = columnCache.get(table);
+    rowsByTable[table] = rows.map((row, index) => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error(`表 ${table} 第 ${index + 1} 行必须是对象`);
+      const keys = Object.keys(row);
+      if (keys.length === 0) throw new Error(`表 ${table} 第 ${index + 1} 行是空对象`);
+      const unknownColumns = keys.filter((key) => !allowedColumns.includes(key));
+      if (unknownColumns.length > 0) throw new Error(`表 ${table} 第 ${index + 1} 行存在未知字段：${unknownColumns.join(', ')}`);
+      const normalized = {};
+      for (const key of keys) {
+        const value = row[key];
+        if (value !== null && !['string', 'number', 'boolean'].includes(typeof value)) {
+          throw new Error(`表 ${table} 第 ${index + 1} 行字段 ${key} 类型非法`);
+        }
+        normalized[key] = typeof value === 'boolean' ? (value ? 1 : 0) : value;
+      }
+      return normalized;
+    });
+  }
+  return rowsByTable;
+}
+
+// ---------- 阶段一：提示词模板库 ----------
+
+route(['GET'], '/api/templates', async (req, res) => {
+  const rows = db.prepare('SELECT * FROM prompt_templates ORDER BY created_at DESC, rowid DESC').all();
+  sendJson(res, 200, { success: true, data: rows });
+});
+
+route(['POST'], '/api/templates/save', async (req, res) => {
+  const body = req.body || {};
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const l0 = typeof body.l0_content === 'string' ? body.l0_content : '';
+  const l1 = typeof body.l1_content === 'string' ? body.l1_content : '';
+  const l3 = typeof body.l3_content === 'string' ? body.l3_content : '';
+  if (!name) return sendJson(res, 400, { success: false, error: '模板名称不能为空' });
+  if (name.length > 100) return sendJson(res, 400, { success: false, error: '模板名称过长（≤100 字符）' });
+  if (!l0.trim() && !l1.trim() && !l3.trim()) return sendJson(res, 400, { success: false, error: '模板三层内容不能全为空' });
+  const incomingId = typeof body.id === 'string' ? body.id.trim() : '';
+  const existing = incomingId ? db.prepare('SELECT id FROM prompt_templates WHERE id = ?').get(incomingId) : null;
+  const id = incomingId || 'tpl-' + crypto.randomUUID().split('-')[0];
+  const now = new Date().toISOString();
+  if (existing) {
+    db.prepare('UPDATE prompt_templates SET name = ?, l0_content = ?, l1_content = ?, l3_content = ? WHERE id = ?')
+      .run(name, l0, l1, l3, id);
+    return sendJson(res, 200, { success: true, message: '模板已更新', id });
+  }
+  db.prepare('INSERT INTO prompt_templates (id, name, l0_content, l1_content, l3_content, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, name, l0, l1, l3, now);
+  sendJson(res, 200, { success: true, message: '模板已保存', id });
+});
+
+route(['POST'], '/api/templates/delete', async (req, res) => {
+  const id = typeof (req.body || {}).id === 'string' ? req.body.id.trim() : '';
+  if (!id) return sendJson(res, 400, { success: false, error: '缺少模板 id' });
+  const info = db.prepare('DELETE FROM prompt_templates WHERE id = ?').run(id);
+  if (info.changes === 0) return sendJson(res, 404, { success: false, error: '模板不存在' });
+  sendJson(res, 200, { success: true, message: '模板已删除' });
+});
+
+/** 分析接口：把当前 L0/L1/L3 提炼为可复用模板（保留 {{变量}}，去除项目专属信息） */
+route(['POST'], '/api/templates/extract', async (req, res) => {
+  const body = req.body || {};
+  const l0 = typeof body.l0_content === 'string' ? body.l0_content.trim() : '';
+  const l1 = typeof body.l1_content === 'string' ? body.l1_content.trim() : '';
+  const l3 = typeof body.l3_content === 'string' ? body.l3_content.trim() : '';
+  if (!l0 && !l1 && !l3) return sendJson(res, 400, { success: false, error: '当前三层内容为空，无法提取模板' });
+  const systemPrompt = [
+    '你是提示词模板提炼助手。用户会给出当前项目的三层提示词（L0 全局安全基座 / L1 语音基座 / L3 项目话术）。',
+    '请把它们提炼为可复用的通用模板：',
+    '1) 保留 {{industry}} / {{business_scene}} / {{core_goal}} 等变量占位符，绝不替换成具体值；',
+    '2) 去除项目专属的业务细节，保留可复用结构与指令；',
+    '3) 三层分别输出，保持原有层级语义，语言与输入一致（中文输入输出中文）；',
+    '4) 只输出 JSON，不要 Markdown 代码块、不要解释。格式：',
+    '{"name":"模板名称（≤20字）","l0_content":"...","l1_content":"...","l3_content":"..."}',
+  ].join('\n');
+  const userPrompt = `L0 全局安全基座：\n${l0 || '（空）'}\n\nL1 语音基座：\n${l1 || '（空）'}\n\nL3 项目专属话术：\n${l3 || '（空）'}`;
+  const rawReply = await chatCompletion(DEFAULT_LLM_CONFIG, [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt },
+  ]);
+  const parsed = safeParseJson(rawReply);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return sendJson(res, 500, { success: false, error: '大模型返回内容无法解析为模板 JSON，请重试' });
+  }
+  const data = {
+    name: String(parsed.name || '').trim().slice(0, 100) || `模板-${new Date().toISOString().slice(0, 10)}`,
+    l0_content: typeof parsed.l0_content === 'string' ? parsed.l0_content.trim() : l0,
+    l1_content: typeof parsed.l1_content === 'string' ? parsed.l1_content.trim() : l1,
+    l3_content: typeof parsed.l3_content === 'string' ? parsed.l3_content.trim() : l3,
+  };
+  if (!data.l0_content && !data.l1_content && !data.l3_content) {
+    return sendJson(res, 500, { success: false, error: '大模型返回的模板内容为空，请重试' });
+  }
+  sendJson(res, 200, { success: true, data, message: '模板提取成功' });
+});
+
+// ---------- 阶段二：AI 润色 ----------
+
+route(['POST'], '/api/ai/polish', async (req, res) => {
+  const body = req.body || {};
+  const layer = typeof body.layer === 'string' ? body.layer.trim().toUpperCase() : '';
+  const content = typeof body.content === 'string' ? body.content.trim() : '';
+  if (!['L0', 'L1', 'L3'].includes(layer)) return sendJson(res, 400, { success: false, error: 'layer 必须是 L0 / L1 / L3' });
+  if (!content) return sendJson(res, 400, { success: false, error: 'content 不能为空' });
+  if (content.length > 20000) return sendJson(res, 400, { success: false, error: 'content 过长（≤20000 字符）' });
+  const layerPrompts = {
+    L0: '你是资深语音 AI 提示词工程师。请润色【L0 全局安全基座】：精简冗余、提升指令密度与安全性约束的可执行性；保留所有 {{变量}} 占位符原样，不改变业务含义。只输出润色后的正文，不要解释、不要 Markdown、不要代码块。',
+    L1: '你是资深语音 AI 提示词工程师。请润色【L1 语音基座】：让表达更适合语音交互与 TTS 播报（自然口语、短句、节奏清晰），精简冗余；保留所有 {{变量}} 占位符原样。只输出润色后的正文，不要解释、不要 Markdown、不要代码块。',
+    L3: '你是资深语音 AI 提示词工程师。请润色【L3 项目专属话术】：保留业务事实与关键信息，精简冗余、优化话术结构与表达一致性；保留所有 {{变量}} 占位符原样。只输出润色后的正文，不要解释、不要 Markdown、不要代码块。',
+  };
+  const rawReply = await chatCompletion(DEFAULT_LLM_CONFIG, [
+    { role: 'system', content: layerPrompts[layer] },
+    { role: 'user', content },
+  ]);
+  const polished = stripCodeFence(rawReply);
+  if (!polished) return sendJson(res, 500, { success: false, error: '大模型返回内容为空，请重试' });
+  sendJson(res, 200, { success: true, layer, content: polished, message: `${layer} 润色完成` });
+});
+
+// ---------- 阶段三：备份恢复 ----------
+
+route(['GET'], '/api/backup/export', async (req, res) => {
+  sendJson(res, 200, buildBackupSnapshot());
+});
+
+route(['POST'], '/api/backup/import', async (req, res) => {
+  let rowsByTable;
+  try {
+    rowsByTable = validateBackupPayload(req.body);
+  } catch (e) {
+    return sendJson(res, 400, { success: false, error: `备份校验失败：${e.message}` });
+  }
+
+  // 导入前自动落盘当前全量 JSON 备份（失败即中止，绝不冒险破坏数据）
+  let safetyBackupPath = '';
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    safetyBackupPath = path.join(DATA_DIR, `backup-before-import-${Date.now()}.json`);
+    fs.writeFileSync(safetyBackupPath, JSON.stringify(buildBackupSnapshot()), 'utf8');
+  } catch (e) {
+    return sendJson(res, 500, { success: false, error: `导入前安全备份失败，已中止导入：${e.message}` });
+  }
+
+  const importedCounts = {};
+  try {
+    const runImport = db.transaction(() => {
+      for (const table of BACKUP_TABLES) db.prepare(`DELETE FROM ${table}`).run();
+      for (const table of BACKUP_TABLES) {
+        const rows = rowsByTable[table];
+        importedCounts[table] = rows.length;
+        for (const row of rows) {
+          const columns = Object.keys(row);
+          if (columns.length === 0) continue;
+          const placeholders = columns.map(() => '?').join(', ');
+          db.prepare(`INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`)
+            .run(...columns.map((column) => row[column]));
+        }
+      }
+    });
+    runImport();
+  } catch (e) {
+    console.error('[backup] 导入失败，事务已回滚:', e.message, '安全备份:', safetyBackupPath);
+    return sendJson(res, 500, { success: false, error: `备份导入失败，事务已回滚：${e.message}`, backup_file: safetyBackupPath });
+  }
+  console.log('[backup] 备份导入成功:', JSON.stringify(importedCounts), '安全备份:', safetyBackupPath);
+  sendJson(res, 200, { success: true, message: '备份导入成功（全部表已替换）', imported: importedCounts, backup_file: safetyBackupPath });
+});
+
+// ---------- 阶段三：项目深拷贝克隆 ----------
+
+route(['POST'], '/api/projects/clone', async (req, res) => {
+  const sourceId = typeof (req.body || {}).id === 'string' ? req.body.id.trim() : '';
+  if (!sourceId) return sendJson(res, 400, { success: false, error: '缺少项目 id' });
+  const source = db.prepare('SELECT * FROM projects WHERE id = ?').get(sourceId);
+  if (!source) return sendJson(res, 404, { success: false, error: '源项目不存在' });
+  const newProjectId = 'proj-' + crypto.randomUUID().split('-')[0];
+  const newName = `${source.name || '未命名项目'}（副本）`;
+  const kbRows = db.prepare('SELECT * FROM kb_items WHERE project_id = ?').all(sourceId);
+  const clone = db.transaction(() => {
+    db.prepare('INSERT INTO projects (id, company_id, name, target_agent_id, context_json) VALUES (?, ?, ?, ?, ?)')
+      .run(newProjectId, source.company_id, newName, source.target_agent_id || '', source.context_json || '{}');
+    const kbIds = [];
+    for (const row of kbRows) {
+      const newKbId = 'kb-' + crypto.randomUUID().split('-')[0];
+      db.prepare('INSERT INTO kb_items (id, project_id, question, answer) VALUES (?, ?, ?, ?)')
+        .run(newKbId, newProjectId, row.question ?? '', row.answer ?? '');
+      kbIds.push(newKbId);
+    }
+    return kbIds;
+  });
+  const newKbIds = clone();
+  sendJson(res, 200, {
+    success: true,
+    message: `克隆成功：项目 + ${newKbIds.length} 条知识库记录已复制（全新 id）`,
+    project_id: newProjectId,
+    name: newName,
+    kb_count: newKbIds.length,
+  });
 });
 
 // ============================================================
