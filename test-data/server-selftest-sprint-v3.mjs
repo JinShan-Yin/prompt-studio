@@ -1,4 +1,4 @@
-﻿// test-data/server-selftest-sprint-v3.mjs
+// test-data/server-selftest-sprint-v3.mjs
 //
 // V3.0 阶段一 · server.js 静态自检（无服务器，只读文件 + node --check）
 // 运行：node test-data/server-selftest-sprint-v3.mjs
@@ -79,8 +79,8 @@ test('使用 express / cors / better-sqlite3 / dotenv / p-limit', () => {
   }
 });
 
-test('监听 3000 端口，启动时打印 URL', () => {
-  assert(/const PORT = 3000/.test(source), 'PORT 应为 3000');
+test('监听 3000 端口（支持 PORT env 覆盖），启动时打印 URL', () => {
+  assert(/const PORT = (Number\(process\.env\.PORT\) \|\| )?3000/.test(source), 'PORT 默认为 3000（V4 支持 PORT env 覆盖）');
   assert(/服务已启动: http:\/\//.test(source), '启动日志应打印 URL');
 });
 
