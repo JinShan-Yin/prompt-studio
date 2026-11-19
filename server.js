@@ -944,7 +944,7 @@ async function chatCompletion(config, messages) {
     // 3) 超管无激活模型：直接使用 .env 系统 Key（不消耗试用）
     if (!route && isSuperadmin) {
       const envConfig = buildEnvLlmConfig(callerConfig.temperature);
-      if (!envConfig.api_key) throw new Error('未配置系统 API Key（管理员可在右上角 ⚙️ 设置 .env Key）');
+      if (!envConfig.api_key) throw new Error('未配置系统 API Key（管理员可在右上角设置页配置 .env Key）');
       route = { kind: 'admin-env', row: null, key: envConfig.api_key };
     }
     if (!route) throw new Error('没有可用的模型路由');
@@ -2751,7 +2751,7 @@ function forceKillPid(pid) {
 function exitWithManualHint(reason) {
   console.error('');
   console.error('========================================');
-  console.error(' ❌ 端口启动失败 / Failed to bind port ' + PORT);
+  console.error(' [X] 端口启动失败 / Failed to bind port ' + PORT);
   console.error(' 原因:', reason);
   console.error(' 请手动释放端口后重试 / Please free the port and retry:');
   console.error(`   Windows:  netstat -ano | findstr :${PORT}   然后  taskkill /PID <占用PID> /F /T`);
@@ -2769,7 +2769,7 @@ function startServer() {
       server.once('error', (error) => {
         if (error.code === 'EADDRINUSE' && !isRetry) {
           console.warn('');
-          console.warn(`⚠️  端口 ${PORT} 已被占用 / Port ${PORT} is already in use. 正在尝试自动释放...`);
+          console.warn(`[!] 端口 ${PORT} 已被占用 / Port ${PORT} is already in use. 正在尝试自动释放...`);
           const pids = findListeningPids(PORT);
           if (pids.length === 0) {
             return exitWithManualHint('EADDRINUSE 但未能定位占用进程');
@@ -2810,8 +2810,8 @@ let httpServer = null;
   console.log('');
 
   httpServer = await startServer();
-  console.log(`[server] ✅ 服务已启动: http://${HOST}:${PORT}`);
-  console.log(`[server] 🌐 浏览器访问: http://${HOST}:${PORT}`);
+  console.log(`[server] [OK] 服务已启动: http://${HOST}:${PORT}`);
+  console.log(`[server] [WEB] 浏览器访问: http://${HOST}:${PORT}`);
   console.log('[server] 按 Ctrl+C 停止服务');
 })();
 
@@ -2838,3 +2838,4 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (error) => {
   console.error('[server] 未捕获异常:', error && error.message ? error.message : error);
 });
+//（注：内容由AI生成）

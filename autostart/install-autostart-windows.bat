@@ -1,47 +1,73 @@
 @echo off
-chcp 65001 >nul
-setlocal enabledelayedexpansion
-title 安装/卸载 NewRock 开机自启
+setlocal
+title NewRock Autostart Manager
 
 set TASK_NAME=NewRockAIWorkbench
 set START_BAT=%~dp0start-newrock.bat
+set SILENT_VBS=%~dp0start-newrock-silent.vbs
 
+REM ---- Administrator rights check ----
 net session >nul 2>&1
 if errorlevel 1 (
-  echo [错误] 需要管理员权限。请右键本文件，选择"以管理员身份运行"。
+  echo [ERROR] Administrator rights required. Right-click this file and choose Run as administrator.
   pause
   exit /b 1
 )
 
+REM Command-line compatibility: "uninstall" goes straight to removal
 if /i "%~1"=="uninstall" goto UNINSTALL
 
-:INSTALL
+:MENU
+cls
 echo ============================================
-echo  安装 NewRock 开机自启（任务计划程序）
+echo   NewRock Autostart - Please choose
+echo ============================================
+echo.
+echo    [1] Install autostart
+echo    [2] Uninstall autostart
+echo    [3] Exit
+echo.
+echo --------------------------------------------
+set "CHOICE="
+set /p CHOICE=Enter option [1/2/3]:
+if "%CHOICE%"=="1" goto INSTALL
+if "%CHOICE%"=="2" goto UNINSTALL
+if "%CHOICE%"=="3" exit /b 0
+echo.
+echo [INFO] Invalid option, please try again.
+pause
+goto MENU
+
+:INSTALL
+cls
+echo ============================================
+echo  Install NewRock autostart (Task Scheduler)
 echo ============================================
 schtasks /query /tn "%TASK_NAME%" >nul 2>&1
 if not errorlevel 1 (
-  echo [提示] 已存在同名任务，先删除旧任务 ...
+  echo [INFO] Existing task found, removing old one ...
   schtasks /delete /tn "%TASK_NAME%" /f >nul 2>&1
 )
-schtasks /create /tn "%TASK_NAME%" /tr "\"%START_BAT%\"" /sc onlogon /rl highest /f
+schtasks /create /tn "%TASK_NAME%" /tr "wscript.exe \"%SILENT_VBS%\"" /sc onlogon /rl highest /f
 if errorlevel 1 (
-  echo [错误] 创建任务失败。
+  echo [ERROR] Failed to create task.
   pause
-  exit /b 1
+  goto MENU
 )
 echo.
-echo [成功] 已安装。下次登录 Windows 时自动启动 NewRock AI Workbench。
-echo         也可手动运行：schtasks /run /tn "%TASK_NAME%"
-echo         卸载自启：  右键以管理员运行本文件，然后执行 install-autostart-windows.bat uninstall
+echo [OK] Installed. NewRock will start silently at logon with no console window.
+echo      Log file: logs\service.log (inside the project folder)
+echo.
 pause
-exit /b 0
+goto MENU
 
 :UNINSTALL
-echo 正在卸载任务 "%TASK_NAME%" ...
+cls
+echo Removing task NewRockAIWorkbench ...
 schtasks /delete /tn "%TASK_NAME%" /f
-if errorlevel 1 ( echo [提示] 任务不存在或删除失败。 ) else ( echo [成功] 已取消开机自启。 )
+if errorlevel 1 ( echo [INFO] Task not found or removal failed. ) else ( echo [OK] Autostart removed. )
 taskkill /f /im node.exe >nul 2>&1
-echo [提示] 已尝试结束所有 node 进程（如有其它 node 服务请自行恢复）。
+echo [INFO] Attempted to stop all node processes. If you have other node services, restart them.
+echo.
 pause
-exit /b 0
+goto MENU
