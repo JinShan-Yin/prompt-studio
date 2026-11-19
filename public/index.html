@@ -2,30 +2,34 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>Prompt Studio - 完整工作台</title>
+  <title>NewRock AI Workbench - 完整工作台</title>
+  <link rel="icon" type="image/png" href="/logo.png" />
   <style>
     /* ==================== Sprint3：UI 规范 v2.0 设计变量 ==================== */
     :root {
       /* 品牌主色 / 语义色 */
-      --primary: #4f46e5;
-      --primary-hover: #4338ca;
-      --primary-light: #eef2ff;
-      --primary-ring: rgba(79, 70, 229, 0.18);
+      --primary: #1a1a1a;
+      --primary-hover: #333333;
+      --primary-light: #eef3f9;
+      --primary-soft: rgba(0, 0, 0, 0.04);
+      --primary-check: rgba(0, 0, 0, 0.05);
+      --primary-ring: rgba(0, 0, 0, 0.12);
       --success: #16a34a;
       --success-light: #ecfdf5;
-      --danger: #ef4444;
-      --danger-light: #fef2f2;
+      --danger: #c0392b;
+      --danger-border: rgba(192, 57, 43, 0.3);
+      --danger-light: #fdf3f2;
       --warning: #f59e0b;
       --warning-strong: #b45309; /* 按钮类 warning：白字对比度 ≥4.5:1；变量高亮仍用 --warning */
       /* 中性色 */
       --text-main: #1f2937;
       --text-secondary: #6b7280;
       --text-muted: #6b7280;
-      --border: #e5e7eb;
+      --border: #ebeef5;
       --border-strong: #d1d5db;
-      --bg-page: #f8fafc;
+      --bg-page: #f4f7f9;
       --bg-card: #ffffff;
-      --bg-soft: #f8fafc;
+      --bg-soft: #f4f7f9;
       /* 侧边栏深色主题 */
       --sidebar-bg: #1e1b4b;
       --sidebar-bg-soft: #2b2642;
@@ -36,7 +40,7 @@
       --radius-card: 12px;
       --radius-md: 8px;
       --radius-sm: 6px;
-      --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 28px -18px rgba(15, 23, 42, 0.18);
+      --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.04);
       --shadow-modal: 0 24px 60px -20px rgba(15, 23, 42, 0.45);
       --font-mono: Consolas, Monaco, "Courier New", monospace;
       --transition: all 0.18s ease;
@@ -51,11 +55,13 @@
 
     /* 侧边栏 */
     .sidebar { width: 260px; background: #fff; border-right: 1px solid #e4e7ed; display: flex; flex-direction: column; z-index: 10; }
-    .logo-area { height: 60px; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid #e4e7ed; }
+    .logo-area { display: flex; align-items: center; justify-content: center; padding: 20px 0; border-bottom: 1px solid #e4e7ed; }
     .logo-area img { height: 28px; max-width: 100%; object-fit: contain; }
+    /* 模块一：品牌名深空灰，居中 */
+    .logo-area .brand-name { text-align: center; }
     
     .btn-new { margin: 16px; padding: 10px; background: #fff; border: 1px solid #dcdfe6; border-radius: 6px; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 14px; color: #606266; transition: all 0.3s; }
-    .btn-new:hover { color: #409eff; border-color: #c6e2ff; background-color: #ecf5ff; }
+    .btn-new:hover { color: #1a1a1a; border-color: #d1d5db; background-color: #f3f4f6; }
 
     .tree-container { flex: 1; overflow-y: auto; padding-bottom: 20px; position: relative; }
     .menu-parent { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; cursor: pointer; color: #606266; transition: background 0.2s; user-select: none; position: relative; }
@@ -63,23 +69,45 @@
     
     .menu-child { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px 8px 36px; margin: 2px 12px; border-radius: 6px; cursor: pointer; color: #606266; transition: all 0.2s; position: relative; user-select: none; }
     .menu-child:hover { background: #f5f7fa; }
-    .menu-child.active { background: #ecf5ff; color: #409eff; font-weight: 500; }
+    .menu-child.active { background: #f3f4f6; color: #1a1a1a; font-weight: 600; }
     
     .more-btn { padding: 4px; border-radius: 4px; color: #909399; opacity: 0.5; transition: all 0.2s; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
     .menu-parent:hover .more-btn, .menu-child:hover .more-btn { opacity: 1; background: #e4e7ed; }
     
     /* 下拉菜单 */
     .custom-dropdown { position: fixed; background: #fff; border: 1px solid #ebeef5; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); z-index: 9999; min-width: 130px; padding: 6px 0; display: none; }
+    .custom-dropdown.open { display: block; }
     .dropdown-item { padding: 8px 16px; cursor: pointer; font-size: 13px; color: #606266; display: flex; align-items: center; gap: 8px; transition: background 0.2s; }
-    .dropdown-item:hover { background: #f5f7fa; color: #409eff; }
+    .dropdown-item:hover { background: #f3f4f6; color: #1a1a1a; }
     .dropdown-item.danger { color: var(--danger); }
     .dropdown-divider { height: 1px; background: #ebeef5; margin: 4px 0; }
 
     /* 主区域 */
     .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    .header { height: 60px; background: #fff; border-bottom: 1px solid #e4e7ed; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 5; }
+    .header { height: 60px; background: #fff; border-bottom: 1px solid #e4e7ed; display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; padding: 0 24px; position: relative; z-index: 1000; }
     .header-title { font-size: 16px; color: #303133; display: flex; gap: 8px; align-items: center; }
-    .header-title span { font-weight: bold; color: #409eff; font-size: 18px; }
+    .header-title span { font-weight: bold; color: #1a1a1a; font-size: 18px; }
+
+    /* v1.60 品牌区与纯 CSS 下拉菜单（仅追加） */
+    .brand-nav { display: flex; align-items: center; flex-wrap: nowrap; flex-shrink: 0; gap: 14px; margin-right: 20px; }
+    .brand-name { font-size: 16px; font-weight: 600; color: #1a1a1a; white-space: nowrap; }
+    .brand-dropdown { position: relative; flex-shrink: 0; }
+    .brand-dropdown-trigger { background: transparent; color: #1a1a1a; border: none;
+      border-radius: 8px; padding: 4px 6px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .brand-dropdown-trigger:hover { background: #f1f5f9; }
+    .brand-dropdown-menu { display: none; position: absolute; top: calc(100% + 6px); left: 0; min-width: 168px;
+      z-index: 9999; background-color: #ffffff !important;
+      border: 1px solid #e5e7eb !important; border-radius: 10px;
+      box-shadow: 0 10px 15px rgba(0,0,0,0.1) !important;
+      padding: 6px; }
+    .brand-dropdown-menu a { display: block; padding: 8px 12px; font-size: 13px; color: var(--text-primary);
+      border-radius: 6px; text-decoration: none; white-space: nowrap; }
+    .brand-dropdown-menu a:hover { background: var(--primary-light); color: var(--primary); }
+    .brand-dropdown-menu a.disabled { color: #9ca3af; cursor: not-allowed; }
+    .brand-dropdown-menu a.disabled:hover { background: transparent; color: #9ca3af; }
+    /* 模块四：改为点击触发——仅当 .brand-dropdown 带 .open 类时展开，移除 hover/focus-within，避免与点击逻辑打架 */
+    .brand-dropdown.open .brand-dropdown-menu { display: block; }
+    .brand-dropdown.open .brand-dropdown-trigger { border-color: var(--primary); }
     
     .content-area { flex: 1; overflow-y: auto; padding: 24px; }
     
@@ -92,17 +120,17 @@
     .form-group { margin-bottom: 16px; }
     .form-label { display: block; font-size: 14px; color: #606266; margin-bottom: 8px; font-weight: 500; }
     .form-textarea, .form-input { width: 100%; padding: 10px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 14px; color: #606266; font-family: inherit; resize: vertical; transition: border-color 0.2s; }
-    .form-textarea:focus, .form-input:focus { outline: none; border-color: #409eff; }
+    .form-textarea:focus, .form-input:focus { outline: none; border-color: #1a1a1a; }
     
     /* 按钮 */
     .btn { padding: 8px 16px; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; transition: all 0.3s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-    .btn-primary { background: #409eff; color: #fff; }
-    .btn-primary:hover { background: #66b1ff; }
+    .btn-primary { background: #1a1a1a; color: #fff; }
+    .btn-primary:hover { background: #333333; }
     .btn-success { background: #67c23a; color: #fff; }
     .btn-success:hover { background: #85ce61; }
     .btn-warning { background: var(--warning-strong); color: #fff; }
     .btn-warning:hover { background: #92400e; }
-    .btn-link { background: transparent; color: #409eff; padding: 0; border: none; font-size: 13px; cursor: pointer; }
+    .btn-link { background: transparent; color: #1a1a1a; padding: 0; border: none; font-size: 13px; cursor: pointer; }
     .btn-link:hover { text-decoration: underline; }
     
     /* 历史快照表格 */
@@ -110,15 +138,49 @@
     .table th, .table td { padding: 12px; border-bottom: 1px solid #ebeef5; color: #606266; }
     .table th { background: #fafafa; font-weight: bold; color: #909399; }
     .table tr:hover { background: #f5f7fa; }
+
+    /* 模块二：历史快照标准 HTML Table 规范，table-layout:fixed 锁定列宽，表头数据严格对齐 */
+    table.snapshot-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+    table.snapshot-table th:nth-child(1), table.snapshot-table td:nth-child(1) { width: 40px; }
+    table.snapshot-table th:nth-child(2), table.snapshot-table td:nth-child(2) { width: 25%; }
+    table.snapshot-table th:nth-child(3), table.snapshot-table td:nth-child(3) { width: 20%; }
+    table.snapshot-table th:nth-child(4), table.snapshot-table td:nth-child(4) { width: 20%; }
+    table.snapshot-table th:nth-child(5), table.snapshot-table td:nth-child(5) { width: 10%; }
+    table.snapshot-table th:nth-child(6), table.snapshot-table td:nth-child(6) { width: 25%; }
+    table.snapshot-table th, table.snapshot-table td {
+      padding: 12px 8px; border-bottom: 1px solid #ebeef5;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    table.snapshot-table .snap-check-col { text-align: center; padding-left: 8px; padding-right: 8px; }
+    table.snapshot-table .snap-row-actions { display: flex; flex-wrap: nowrap; gap: 4px; justify-content: flex-end; }
+    table.snapshot-table .snap-row-actions .snap-btn { padding: 3px 6px; font-size: 12px; white-space: nowrap; }
+    /* 三态优先级：普通行 hover 极浅灰 */
+    table.snapshot-table tbody tr { transition: background-color 0.15s ease; }
+    table.snapshot-table tbody tr:hover { background: #f5f7fa; }
+    /* 勾选行锁定浅蓝；显式写 :hover 保证 hover 不覆盖 checked（防脏灰蓝） */
+    table.snapshot-table tbody tr:has(input:checked),
+    table.snapshot-table tbody tr:has(input:checked):hover { background: rgba(0, 0, 0, 0.05); }
+    /* 单行“下载 ▾”下拉：相对定位容器 + 绝对定位菜单，z-index 防表格截断 */
+    .snap-download-wrap { display: inline-block; }
+    /* 下载菜单挂到 body 用 fixed 定位，避免被 td 的 overflow:hidden 裁剪 */
+    #snap-download-portal, #snap-batch-download-portal, .portal-menu {
+      position: fixed; z-index: 9999; min-width: 96px;
+      background: #fff; border: 1px solid #ebeef5; border-radius: 6px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      padding: 4px 0; display: none;
+    }
+    #snap-download-portal.open, #snap-batch-download-portal.open, .portal-menu.open { display: block; }
+    #snap-download-portal button, #snap-batch-download-portal button, .portal-menu button { display: block; width: 100%; text-align: left; padding: 6px 12px; background: transparent; border: 0; cursor: pointer; font-size: 13px; color: #303133; }
+    #snap-download-portal button:hover, #snap-batch-download-portal button:hover, .portal-menu button:hover { background: #f3f4f6; }
     
     /* 状态标签 */
     .tag { padding: 2px 8px; border-radius: 12px; font-size: 12px; }
     .tag-success { background: #f0f9eb; color: #67c23a; border: 1px solid #e1f3d8; }
-    .tag-danger { background: var(--danger-light); color: var(--danger); border: 1px solid #fee2e2; }
+    .tag-danger { background: var(--danger-light); color: var(--danger); border: 1px solid rgba(192, 57, 43, 0.2); }
 
     /* 知识库列表 */
     .kb-item { padding: 12px; background: #f8f9fa; border-radius: 6px; margin-bottom: 12px; border: 1px solid #ebeef5; display: flex; justify-content: space-between; align-items: flex-start; }
     .kb-q { font-weight: bold; color: #303133; margin-bottom: 4px; }
+    .kb-q-raw-title { font-size: 15px; font-weight: 700; color: #0a2d6e; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #ebeef5; }
     .kb-a { color: #606266; font-size: 13px; }
     
     /* 弹窗 */
@@ -154,7 +216,7 @@
       word-break: break-word;
       min-height: 66px;
     }
-    #val-L3, #mirror-L3 { min-height: 88px; }
+    #val-system, #mirror-system { min-height: 88px; }
     .editor-mirror {
       position: absolute;
       top: 0;
@@ -180,34 +242,34 @@
       color: transparent;
       caret-color: #333;
     }
-    textarea.editor-input:focus { border-color: #409eff; }
-    textarea.editor-input::selection { background: rgba(64, 158, 255, 0.25); }
+    textarea.editor-input:focus { border-color: #1a1a1a; }
+    textarea.editor-input::selection { background: rgba(0, 0, 0, 0.12); }
 
     /* Token / 字符统计条（组装按钮上方） */
     .editor-stats { display: flex; align-items: center; gap: 12px; padding: 8px 12px; margin-bottom: 12px; background: #f8f9fa; border: 1px dashed #dcdfe6; border-radius: 4px; font-size: 13px; color: #606266; }
-    .editor-stats .stat-strong { color: #409eff; font-weight: bold; font-family: Consolas, Monaco, monospace; }
+    .editor-stats .stat-strong { color: #1a1a1a; font-weight: bold; font-family: Consolas, Monaco, monospace; }
     .editor-stats .stat-token { color: #67c23a; font-weight: bold; font-family: Consolas, Monaco, monospace; }
 
     /* ==================== 模块二：语境配置 Tag 输入 ==================== */
     .var-hint { color: #f59e0b; font-weight: normal; font-size: 12px; margin-left: 4px; font-family: Consolas, Monaco, monospace; }
     .tag-input-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 40px; padding: 6px 8px; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; cursor: text; transition: border-color 0.2s; }
-    .tag-input-wrap:focus-within { border-color: #409eff; }
+    .tag-input-wrap:focus-within { border-color: #1a1a1a; }
     .tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
-    .tag-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px; background: #ecf5ff; color: #409eff; border: 1px solid #d9ecff; border-radius: 12px; font-size: 12px; line-height: 18px; }
+    .tag-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px; background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; border-radius: 12px; font-size: 12px; line-height: 18px; }
     .tag-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
-    .tag-chip-del { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: none; border-radius: 50%; background: transparent; color: #409eff; font-size: 14px; line-height: 1; cursor: pointer; transition: all 0.2s; }
-    .tag-chip-del:hover { background: #409eff; color: #fff; }
+    .tag-chip-del { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: none; border-radius: 50%; background: transparent; color: #6b7280; font-size: 14px; line-height: 1; cursor: pointer; transition: all 0.2s; }
+    .tag-chip-del:hover { background: #1a1a1a; color: #fff; }
     .tag-input { flex: 1 1 140px; min-width: 120px; padding: 4px 0; border: none; outline: none; background: transparent; font-family: inherit; font-size: 14px; color: #606266; }
     .btn[disabled], .btn.loading { opacity: 0.6; cursor: not-allowed; }
 
     /* ==================== 模块三：知识库增强（搜索 / 冲突检测 / 批量导入） ==================== */
     .kb-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
     .kb-search-input { flex: 1 1 240px; max-width: 380px; padding: 8px 10px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px; color: #606266; font-family: inherit; outline: none; transition: border-color 0.2s; }
-    .kb-search-input:focus { border-color: #409eff; }
+    .kb-search-input:focus { border-color: #1a1a1a; }
     .kb-count { font-size: 12px; color: #909399; }
-    .kb-count b { color: #409eff; }
+    .kb-count b { color: #1a1a1a; }
     .kb-import-status { font-size: 12px; color: #e6a23c; }
-    .kb-banner { display: none; margin-bottom: 12px; padding: 10px 30px 10px 12px; background: var(--danger-light); border: 1px solid #fee2e2; border-radius: 4px; color: var(--danger); font-size: 13px; line-height: 1.6; position: relative; }
+    .kb-banner { display: none; margin-bottom: 12px; padding: 10px 30px 10px 12px; background: var(--danger-light); border: 1px solid rgba(192, 57, 43, 0.2); border-radius: 4px; color: var(--danger); font-size: 13px; line-height: 1.6; position: relative; }
     .kb-banner-close { position: absolute; top: 6px; right: 8px; border: none; background: transparent; color: var(--danger); font-size: 15px; cursor: pointer; line-height: 1; padding: 2px; }
     .kb-banner-close:hover { color: #c45656; }
     .kb-empty { text-align: center; color: #909399; font-size: 13px; padding: 12px 0; }
@@ -218,13 +280,13 @@
     .chat-messages { display: flex; flex-direction: column; gap: 10px; max-height: 360px; overflow-y: auto; padding: 12px; background: #f8f9fa; border: 1px solid #ebeef5; border-radius: 6px; margin-bottom: 12px; min-height: 80px; }
     .chat-empty { text-align: center; color: #909399; font-size: 13px; padding: 18px 0; }
     .chat-bubble { max-width: 78%; padding: 9px 12px; border-radius: 10px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
-    .chat-bubble.user { align-self: flex-end; background: #409eff; color: #fff; border-bottom-right-radius: 2px; }
+    .chat-bubble.user { align-self: flex-end; background: #f3f4f6; color: #1a1a1a; border-bottom-right-radius: 2px; }
     .chat-bubble.assistant { align-self: flex-start; background: #fff; color: #303133; border: 1px solid #e4e7ed; border-bottom-left-radius: 2px; }
-    .chat-bubble.error { align-self: flex-start; background: var(--danger-light); color: var(--danger); border: 1px solid #fee2e2; }
+    .chat-bubble.error { align-self: flex-start; background: var(--danger-light); color: var(--danger); border: 1px solid rgba(192, 57, 43, 0.2); }
     .chat-bubble.thinking { align-self: flex-start; background: #fff; color: #909399; border: 1px dashed #dcdfe6; font-style: italic; }
     .chat-input-row { display: flex; gap: 10px; align-items: flex-end; }
     .chat-input { flex: 1; min-height: 56px; max-height: 140px; padding: 10px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 14px; color: #606266; font-family: inherit; resize: vertical; line-height: 1.5; outline: none; transition: border-color 0.2s; }
-    .chat-input:focus { border-color: #409eff; }
+    .chat-input:focus { border-color: #1a1a1a; }
 
     /* ==================== 模块四：批处理回归测试 ==================== */
     .batch-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -233,7 +295,7 @@
     .batch-hint code { background: #f8f9fa; border: 1px solid #ebeef5; border-radius: 3px; padding: 1px 4px; font-family: Consolas, Monaco, monospace; color: #e6a23c; }
     .batch-progress { display: none; margin-bottom: 12px; }
     .batch-progress-track { height: 10px; background: #ebeef5; border-radius: 5px; overflow: hidden; }
-    .batch-progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, #409eff, #67c23a); border-radius: 5px; transition: width 0.25s ease; }
+    .batch-progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, #1a1a1a, #4b5563); border-radius: 5px; transition: width 0.25s ease; }
     .batch-progress-text { font-size: 12px; color: #606266; margin-top: 6px; }
     .batch-report { display: none; }
     .batch-rate { font-size: 15px; font-weight: bold; margin-bottom: 10px; }
@@ -255,8 +317,8 @@
     .menu-parent:hover { background: var(--sidebar-hover); color: var(--sidebar-text-strong); }
     .menu-child { color: var(--sidebar-text); border-radius: var(--radius-md); transition: var(--transition); }
     .menu-child:hover { background: var(--sidebar-hover); color: var(--sidebar-text-strong); }
-    .menu-child.active { background: var(--primary); color: #fff; font-weight: 600; box-shadow: inset 3px 0 0 #fff; }
-    .menu-child.active:hover { background: var(--primary-hover); }
+    .menu-child.active { background: #f3f4f6; color: #1a1a1a; font-weight: 600; box-shadow: none; }
+    .menu-child.active:hover { background: #f3f4f6; }
     .more-btn { color: var(--sidebar-text); }
     .menu-parent:hover .more-btn, .menu-child:hover .more-btn { opacity: 1; background: rgba(255, 255, 255, 0.16); color: #fff; }
     /* 深色侧边栏下，renderTree 生成的 inline 浅色文字/分割线适配 */
@@ -270,13 +332,13 @@
     .header-right { display: flex; align-items: center; gap: 12px; }
     .env-badge { color: var(--success); background: var(--success-light); padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 500; border: 1px solid #d1fae5; }
     .icon-btn { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-card); color: var(--text-secondary); cursor: pointer; transition: var(--transition); }
-    .icon-btn:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-light); transform: rotate(20deg); }
+    .icon-btn:hover { color: var(--text-main); border-color: var(--border-strong); background: #f4f7f9; }
     .icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--primary-ring); }
 
     /* ---- 内容区 / 卡片：圆角、阴影、间距呼吸感 ---- */
     .content-area { padding: 24px; }
-    .card { border-radius: var(--radius-card); border: 1px solid var(--border); box-shadow: var(--shadow-card); margin-bottom: 24px; overflow: hidden; transition: box-shadow 0.2s ease; }
-    .card:hover { box-shadow: 0 2px 4px rgba(15, 23, 42, 0.04), 0 18px 36px -18px rgba(15, 23, 42, 0.2); }
+    .card { border-radius: var(--radius-card); background: var(--bg-card); border: 1px solid var(--border); box-shadow: var(--shadow-card); margin-bottom: 24px; overflow: hidden; transition: box-shadow 0.2s ease, transform 0.2s ease; }
+    .card:hover { box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08); }
     .card-header { padding: 16px 24px; background: var(--bg-card); color: var(--text-main); font-size: 15px; border-bottom: 1px solid var(--border); }
     .card-body { padding: 24px; }
     .card-header-actions { display: flex; align-items: center; gap: 16px; }
@@ -311,15 +373,19 @@
     .table tbody tr:hover { background: var(--bg-soft); }
     .table tbody tr:last-child td { border-bottom: none; }
     .table td a, .table td .btn-link { white-space: nowrap; }
+    /* 通用单元格省略号防溢出；审计表保留换行 */
+    .table th, .table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .audit-table th, .audit-table td { white-space: normal; word-break: break-all; overflow: visible; text-overflow: clip; }
 
     /* ---- Tag / 状态标识 ---- */
     .tag { border-radius: 999px; font-weight: 500; }
     .tag-success { background: var(--success-light); color: var(--success); border: 1px solid #d1fae5; }
-    .tag-danger { background: var(--danger-light); color: var(--danger); border: 1px solid #fee2e2; }
+    .tag-danger { background: var(--danger-light); color: var(--danger); border: 1px solid rgba(192, 57, 43, 0.2); }
 
     /* ---- 知识库 / Tag 输入 / 下拉菜单 ---- */
     .kb-item { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius-md); transition: var(--transition); }
-    .kb-item:hover { border-color: #c7d2fe; background: var(--primary-light); }
+    .kb-item:hover { border-color: #d1d5db; background: #f3f4f6; }
+    .kb-item.tree-item-selected, .kb-item.tree-item-selected:hover { border-color: #d1d5db; background: #f3f4f6; }
     .kb-q { color: var(--text-main); }
     .kb-a { color: var(--text-secondary); }
     .kb-search-input { border-radius: var(--radius-sm); border-color: var(--border-strong); }
@@ -347,9 +413,9 @@
 
     /* ---- 聊天模拟器 ---- */
     .chat-messages { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius-md); }
-    .chat-bubble.user { background: var(--primary); color: #fff; }
+    .chat-bubble.user { background: #f3f4f6; color: #1a1a1a; }
     .chat-bubble.assistant { background: #fff; color: var(--text-main); border: 1px solid var(--border); }
-    .chat-bubble.error { background: var(--danger-light); color: var(--danger); border: 1px solid #fee2e2; }
+    .chat-bubble.error { background: var(--danger-light); color: var(--danger); border: 1px solid rgba(192, 57, 43, 0.2); }
     .chat-bubble.thinking { color: var(--text-muted); border: 1px dashed var(--border-strong); background: #fff; }
     .chat-input { border-color: var(--border-strong); border-radius: var(--radius-sm); color: var(--text-main); }
     .chat-input:hover { border-color: #b6bcc8; }
@@ -357,10 +423,10 @@
 
     /* ---- 进度条 / 报告（功能色保留：主色进度、绿通过、红失败） ---- */
     .batch-progress-track { background: #e5e7eb; }
-    .batch-progress-fill { background: linear-gradient(90deg, var(--primary), #818cf8); }
+    .batch-progress-fill { background: linear-gradient(90deg, #1a1a1a, #4b5563); }
     .batch-rate.pass { color: var(--success); }
     .batch-rate.fail { color: var(--danger); }
-    .batch-fail-item { background: var(--danger-light); border-color: #fee2e2; border-radius: var(--radius-md); }
+    .batch-fail-item { background: var(--danger-light); border-color: rgba(192, 57, 43, 0.2); border-radius: var(--radius-md); }
     .batch-fail-item .batch-fail-title { color: var(--danger); }
     .batch-all-pass { background: var(--success-light); border-color: #d1fae5; color: var(--success); border-radius: var(--radius-md); }
     .kb-banner { border-radius: var(--radius-sm); }
@@ -373,7 +439,7 @@
     .toast { background: rgba(31, 41, 55, 0.96); border-radius: var(--radius-md); box-shadow: var(--shadow-modal); font-size: 13px; }
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
-    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
     ::-webkit-scrollbar-track { background: transparent; }
     .sidebar ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.22); }
     /* 响应式：避免横向溢出 */
@@ -425,6 +491,9 @@
     /* ==================== V3.0 阶段四：功能样式 ==================== */
     /* 2) 左侧树搜索（深色侧边栏适配） */
     .tree-search-wrap { padding: 0 12px 10px; }
+    .tree-search-box { position: relative; display: flex; align-items: center; }
+    .tree-search-box .search-icon { position: absolute; left: 10px; width: 15px; height: 15px; color: #6b7280; pointer-events: none; z-index: 1; }
+    .tree-search-box .tree-search-input { padding-left: 32px; }
     .tree-search-input { width: 100%; padding: 7px 10px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.06); color: var(--sidebar-text-strong); font-size: 13px; font-family: inherit; outline: none; transition: var(--transition); }
     .tree-search-input::placeholder { color: rgba(199, 201, 228, 0.75); }
     .tree-search-input:hover { border-color: rgba(255, 255, 255, 0.32); }
@@ -453,6 +522,11 @@
     .gen-q-row.answer { color: var(--text-secondary); margin-top: 4px; }
     .gen-q-row.reply { color: var(--text-secondary); margin-top: 4px; font-size: 12px; }
     .gen-q-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-strong, #d1d5db); }
+    .btn-ghost:hover { background: var(--bg-soft, #f5f7fa); color: var(--danger, #c0392b); border-color: var(--danger, #c0392b); }
+    .test-progress-text { font-size: 13px; font-weight: 600; color: var(--primary); min-width: 90px; }
+    #regression-run-btn { flex: 0 0 auto; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
 
     /* 1) 知识库编辑弹窗 */
     .kb-edit-box { width: 640px; max-width: calc(100vw - 32px); }
@@ -479,7 +553,7 @@
     .diff-cell { padding: 1px 12px; white-space: pre-wrap; word-break: break-word; min-height: 22px; color: var(--text-main); }
     .diff-cell.left { border-right: 1px solid var(--border); }
     .diff-cell.same { background: #fff; }
-    .diff-cell.removed { background: #fef2f2; color: #b91c1c; }
+    .diff-cell.removed { background: #fdf3f2; color: #c0392b; }
     .diff-cell.added { background: #ecfdf5; color: #15803d; }
     .diff-cell.empty { background: #f8fafc; }
     .diff-loading { padding: 30px; text-align: center; color: var(--text-muted); }
@@ -489,12 +563,12 @@
        —— 末尾覆盖层：统一颜色层级 / 防溢出 / 原生焦点清理 / 层级 z-index
        ============================================================ */
     :root {
-      --ui-primary: #4d6bfe;
-      --ui-primary-hover: #3b5bdf;
+      --ui-primary: #1a1a1a;
+      --ui-primary-hover: #333333;
       --ui-sidebar-bg: #f9fafb;
-      --ui-main-bg: #fcfcfc;
+      --ui-main-bg: #f4f7f9;
       --ui-card-bg: #ffffff;
-      --ui-border: #e5e7eb;
+      --ui-border: #ebeef5;
       --ui-text: #334155;
       --ui-text-secondary: #64748b;
     }
@@ -508,16 +582,16 @@
     .btn-new { background: #ffffff !important; border: 1px solid var(--ui-border) !important; color: var(--ui-text) !important; }
     .btn-new:hover { background: #f1f5f9 !important; border-color: #cbd5e1 !important; color: var(--ui-primary) !important; }
     .menu-parent { color: var(--ui-text-secondary) !important; }
-    .menu-parent:hover { background: #eef2ff !important; color: var(--ui-primary) !important; }
+    .menu-parent:hover { background: rgba(0, 0, 0, 0.05) !important; color: var(--ui-text-secondary) !important; }
     .menu-child { color: var(--ui-text) !important; }
-    .menu-child:hover { background: #f1f5f9 !important; color: var(--ui-primary) !important; }
-    .menu-child.active { background: #eef2ff !important; color: var(--ui-primary) !important; font-weight: 600; box-shadow: inset 3px 0 0 var(--ui-primary) !important; }
-    .menu-child.active:hover { background: #e0e7ff !important; }
+    .menu-child:hover { background: rgba(0, 0, 0, 0.05) !important; color: var(--ui-text) !important; }
+    .menu-child.active { background: #f3f4f6 !important; color: #1a1a1a !important; font-weight: 600; box-shadow: none !important; }
+    .menu-child.active:hover { background: #f3f4f6 !important; color: #1a1a1a !important; }
     .sidebar [style*="color: #909399"] { color: var(--ui-text-secondary) !important; }
-    .more-btn { color: #94a3b8 !important; flex: 0 0 auto; }
+    .more-btn { color: #6b7280 !important; flex: 0 0 auto; }
     .menu-parent:hover .more-btn, .menu-child:hover .more-btn { background: #e2e8f0 !important; color: var(--ui-text) !important; opacity: 1; }
     .tree-search-input { background: #ffffff !important; border: 1px solid var(--ui-border) !important; color: var(--ui-text) !important; }
-    .tree-search-input::placeholder { color: #94a3b8 !important; }
+    .tree-search-input::placeholder { color: #999999 !important; }
     .tree-search-input:hover { border-color: #cbd5e1 !important; }
     .tree-search-input:focus { border-color: var(--ui-primary) !important; box-shadow: 0 0 0 3px rgba(77, 107, 254, 0.15) !important; background: #ffffff !important; }
     .tree-empty { color: var(--ui-text-secondary) !important; }
@@ -556,19 +630,32 @@
     *:focus { outline: none !important; }
     input:focus, textarea:focus, select:focus {
       outline: none !important;
-      border-color: var(--ui-primary) !important;
-      box-shadow: 0 0 0 3px rgba(77, 107, 254, 0.15) !important;
+      border-color: #1a1a1a !important;
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1) !important;
     }
     input, textarea { -webkit-appearance: none; appearance: none; }
-    input::placeholder, textarea::placeholder { color: #94a3b8; opacity: 1; }
-    ::selection { background: rgba(77, 107, 254, 0.18); color: #0f172a; }
+    input::placeholder, textarea::placeholder { color: #999999; opacity: 1; }
+    ::selection { background: rgba(0, 0, 0, 0.12); color: #1a1a1a; }
     /* 全局滚动条：6px、透明轨道、浅灰圆角滑块、悬浮加深 */
-    * { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+    * { scrollbar-width: thin; scrollbar-color: #c0c4cc transparent; }
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
-    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    ::-webkit-scrollbar-thumb { background: #c0c4cc; border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
     ::-webkit-scrollbar-corner { background: transparent; }
+
+    /* 复选框统一：保留原生外观（appearance:auto 防消失），深空灰 accent + 16px */
+    input[type="checkbox"] {
+      -webkit-appearance: auto;
+      appearance: auto;
+      accent-color: #1a1a1a;
+      width: 16px;
+      height: 16px;
+      min-width: 16px;
+      min-height: 16px;
+      flex: 0 0 auto;
+      cursor: pointer;
+    }
 
     /* ---------- 四、结构与交互精修 ---------- */
     /* 子级项目左侧极淡引导线 + 层级缩进 */
@@ -614,7 +701,7 @@
     body { color-scheme: light; }
     button { -webkit-tap-highlight-color: transparent; }
     select { background-color: #ffffff; color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 6px; }
-    button:disabled, .btn:disabled { cursor: not-allowed; opacity: 0.6; }
+    button:disabled, .btn:disabled { cursor: not-allowed; opacity: 0.5; }
 
     /* ============================================================
        V3.0 ULTIMATE · 极简商业级 UI 精修（按钮瘦身 / 去色 / 防塌陷 / 防丑）
@@ -622,8 +709,8 @@
        ============================================================ */
     /* ---------- 一、主操作按钮：DeepSeek 亮蓝、瘦身、物理微交互 ---------- */
     .btn-primary {
-      background-color: #4d6bfe !important;
-      border: 1px solid #4d6bfe !important;
+      background-color: #1a1a1a !important;
+      border: 1px solid #1a1a1a !important;
       color: #ffffff !important;
       width: auto !important;
       min-width: 0 !important;
@@ -631,35 +718,32 @@
       flex: 0 0 auto !important;
       padding: 10px 24px !important;
       border-radius: 8px !important;
-      box-shadow: none !important;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12) !important;
       font-weight: 500 !important;
       line-height: 1.4 !important;
     }
     .btn-primary:hover:not(:disabled) {
-      background-color: #3b5bdb !important;
-      border-color: #3b5bdb !important;
+      background-color: #333333 !important;
+      border-color: #333333 !important;
       color: #ffffff !important;
-      box-shadow: 0 4px 12px rgba(77, 107, 254, 0.2) !important;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.14) !important;
     }
     .btn-primary:active:not(:disabled) {
-      transform: scale(0.98) !important;
-      box-shadow: 0 2px 6px rgba(77, 107, 254, 0.18) !important;
+      transform: translateY(1px) !important;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12) !important;
     }
     .btn-primary:focus-visible {
       outline: none !important;
-      box-shadow: 0 0 0 3px rgba(77, 107, 254, 0.18) !important;
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12) !important;
     }
     .btn-primary:disabled {
-      background-color: #a5b4fc !important;
-      border-color: #a5b4fc !important;
-      color: #ffffff !important;
-      box-shadow: none !important;
-      opacity: 1 !important;
+      opacity: 0.5 !important;
       cursor: not-allowed !important;
+      box-shadow: none !important;
     }
     /* ---------- 二、次要按钮 / 辅助操作去色：白底细灰边、深灰文字 ---------- */
     .btn-secondary, .btn-success, .btn-warning,
-    #batch-select-btn, #copy-prompt-btn, #chat-clear-btn {
+    #copy-prompt-btn, #chat-clear-btn {
       background: #ffffff !important;
       background-color: #ffffff !important;
       color: #4b5563 !important;
@@ -672,7 +756,7 @@
       font-weight: 500 !important;
     }
     .btn-secondary:hover:not(:disabled), .btn-success:hover:not(:disabled), .btn-warning:hover:not(:disabled),
-    #batch-select-btn:hover:not(:disabled), #copy-prompt-btn:hover:not(:disabled), #chat-clear-btn:hover:not(:disabled) {
+    #copy-prompt-btn:hover:not(:disabled), #chat-clear-btn:hover:not(:disabled) {
       background: #f9fafb !important;
       color: #111827 !important;
       border-color: #e5e7eb !important;
@@ -698,11 +782,18 @@
       gap: 6px;
     }
     .btn-link:hover { background: #f9fafb !important; color: #111827 !important; text-decoration: none !important; }
-    /* AI 智能提取：浅蓝底 + 深蓝字 + 细蓝边（无阴影） */
+    /* 小尺寸危险描边按钮：白底 + 淡红边 + 沉稳红字（仅用于单行/小尺寸） */
+    .btn-danger-outline {
+      background: #ffffff !important;
+      color: #c0392b !important;
+      border: 1px solid rgba(192, 57, 43, 0.3) !important;
+    }
+    .btn-danger-outline:hover { background: #fdf3f2 !important; color: #c0392b !important; border-color: rgba(192, 57, 43, 0.45) !important; }
+    /* AI 智能提取：浅灰底 + 深灰字 + 细灰边（无阴影） */
     #ctx-extract-btn {
-      background: #eff6ff !important;
-      color: #3b5bdb !important;
-      border: 1px solid #c7d2fe !important;
+      background: #f3f4f6 !important;
+      color: #374151 !important;
+      border: 1px solid #e5e7eb !important;
       border-radius: 6px !important;
       box-shadow: none !important;
       width: auto !important;
@@ -711,9 +802,9 @@
       font-size: 13px !important;
     }
     #ctx-extract-btn:hover:not(:disabled) {
-      background: #dbeafe !important;
-      color: #3b5bdb !important;
-      border-color: #a5b4fc !important;
+      background: #e9eaed !important;
+      color: #1a1a1a !important;
+      border-color: #d1d5db !important;
       box-shadow: none !important;
     }
     /* ---------- 三、布局与对齐：按钮区 Flex 右对齐（防全宽塌陷） ---------- */
@@ -732,17 +823,17 @@
     .chat-input-row .btn-primary { flex: 0 0 auto !important; }
     /* ---------- 四、左侧选中态与 Tag 防丑 ---------- */
     .menu-child.active {
-      background: #eef2ff !important;
-      color: #4d6bfe !important;
+      background: #f3f4f6 !important;
+      color: #1a1a1a !important;
       font-weight: 600 !important;
       box-shadow: none !important;
     }
-    .menu-child.active:hover { background: #eef2ff !important; color: #4d6bfe !important; }
-    .menu-child:hover:not(.active) { background: #f3f4f6 !important; color: #374151 !important; }
+    .menu-child.active:hover { background: #f3f4f6 !important; color: #1a1a1a !important; }
+    .menu-child:hover:not(.active) { background: #f3f4f6 !important; color: var(--ui-text) !important; }
     .tag-chip {
-      background: #eff6ff !important;
-      color: #4d6bfe !important;
-      border: 1px solid #c7d2fe !important;
+      background: #f3f4f6 !important;
+      color: #374151 !important;
+      border: 1px solid #e5e7eb !important;
       border-radius: 4px !important;
       max-width: 150px !important;
       min-width: 0 !important;
@@ -758,21 +849,21 @@
       display: block;
       flex: 1 1 auto;
     }
-    .tag-chip-del { flex: 0 0 16px !important; width: 16px !important; height: 16px !important; color: #4d6bfe !important; }
-    .tag-chip-del:hover { background: #4d6bfe !important; color: #ffffff !important; }
-    /* Token 进度条：0-80% 蓝 / >80%-100% 橙 / 满 100% 及超限 红 */
-    .token-progress-fill { background: #4d6bfe !important; transition: width 0.2s ease, background-color 0.2s ease !important; }
+    .tag-chip-del { flex: 0 0 16px !important; width: 16px !important; height: 16px !important; color: #6b7280 !important; }
+    .tag-chip-del:hover { background: #1a1a1a !important; color: #ffffff !important; }
+    /* Token 进度条：0-80% 深空灰 / >80%-100% 橙 / 满 100% 及超限 红 */
+    .token-progress-fill { background: #1a1a1a !important; transition: width 0.2s ease, background-color 0.2s ease !important; }
     .token-progress-fill.warn { background: #f59e0b !important; }
-    .token-progress-fill.warn[style*="width: 100%"] { background: #ef4444 !important; }
-    .token-progress-fill.danger { background: #ef4444 !important; }
-    .token-progress-track { background: #eef2ff !important; }
+    .token-progress-fill.warn[style*="width: 100%"] { background: #c0392b !important; }
+    .token-progress-fill.danger { background: #c0392b !important; }
+    .token-progress-track { background: #f3f4f6 !important; }
     /* ---------- 五、去丑补丁：焦点柔光 / 空数据居中提示 ---------- */
     button:focus, button:active { outline: none !important; }
-    button:focus-visible:not(.btn-primary) { outline: none !important; box-shadow: 0 0 0 3px rgba(77, 107, 254, 0.16) !important; }
+    button:focus-visible:not(.btn-primary) { outline: none !important; box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12) !important; }
     input:focus, textarea:focus, select:focus {
       outline: none !important;
-      border-color: #4d6bfe !important;
-      box-shadow: 0 0 0 3px rgba(77, 107, 254, 0.15) !important;
+      border-color: #1a1a1a !important;
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1) !important;
     }
     #snapshot-tbody td { text-align: center !important; color: #9ca3af !important; padding: 26px 12px !important; font-size: 13px !important; }
     .kb-empty, .chat-empty, .model-empty, #empty-state { text-align: center !important; color: #9ca3af !important; }
@@ -816,15 +907,16 @@
     /* ============================================================
        V5.0 阶段二：Tab 导航 / Header / 知识库批量 / 公共项目只读 / 树多选
        ============================================================ */
-    .header-title { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--text-secondary); }
-    #current-name { color: #4d6bfe; font-weight: 600; font-size: 14px; }
+    .header-title { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--text-secondary); flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; }
+    .header-title #current-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .header-right { flex-shrink: 0; }
+    #current-name { color: #1a1a1a; font-weight: 600; font-size: 14px; }
     .public-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px; background: #fff7ed; color: #b45309; border: 1px solid #fed7aa; font-size: 12px; font-weight: 600; white-space: nowrap; }
-    .trial-badge { font-size: 12px; color: #64748b; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
     .tab-bar { display: flex; align-items: center; gap: 28px; padding: 0 24px; height: 52px; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; z-index: 8; flex-shrink: 0; }
     .tab-item { position: relative; height: 52px; padding: 0 2px; border: none; background: transparent; font-size: 14px; font-weight: 500; color: #6b7280; cursor: pointer; white-space: nowrap; transition: color .2s ease; display: inline-flex; align-items: center; gap: 6px; }
-    .tab-item::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: #4d6bfe; transform: scaleX(0); transition: transform .2s ease; }
+    .tab-item::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: #1a1a1a; transform: scaleX(0); transition: transform .2s ease; }
     .tab-item:hover { color: #111827; }
-    .tab-item.active { color: #4d6bfe; font-weight: 600; }
+    .tab-item.active { color: #1a1a1a; font-weight: 600; }
     .tab-item.active::after { transform: scaleX(1); }
     .tab-bar.disabled { opacity: .45; pointer-events: none; }
     #main-content .card[data-tab] { animation: tabFadeIn .2s ease; }
@@ -835,25 +927,135 @@
     .kb-main-grid { display: grid; grid-template-columns: 7fr 3fr; gap: 20px; align-items: start; }
     .kb-right { border-left: 1px solid #e5e7eb; padding-left: 20px; }
     .kb-right-title { font-size: 14px; font-weight: 600; color: #334155; margin-bottom: 6px; }
-    .kb-right-hint { font-size: 12px; color: #94a3b8; margin-bottom: 10px; line-height: 1.6; }
+    .kb-right-hint { font-size: 12px; color: #6b7280; margin-bottom: 10px; line-height: 1.6; }
+
+    /* 导入模式选择弹窗 */
+    .kb-modal-mask { position: fixed; inset: 0; z-index: 10000; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .kb-modal { width: 440px; max-width: 100%; background: #fff; border-radius: 12px; padding: 22px; box-shadow: 0 20px 50px rgba(15, 23, 42, .25); }
+    .kb-modal-title { font-size: 16px; font-weight: 700; color: #0f172a; }
+    .kb-modal-desc { font-size: 12px; color: #6b7280; margin: 6px 0 16px; }
+    .kb-modal-option { display: block; width: 100%; text-align: left; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; cursor: pointer; transition: border-color .15s, background .15s; }
+    .kb-modal-option:hover { border-color: #1a1a1a; background: #f3f4f6; }
+    .kb-modal-opt-title { display: block; font-size: 14px; font-weight: 600; color: #1e293b; margin-bottom: 4px; }
+    .kb-modal-opt-desc { display: block; font-size: 12px; color: #64748b; line-height: 1.5; }
+    .kb-modal-cancel { width: 100%; margin-top: 4px; padding: 9px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; color: #475569; cursor: pointer; }
+    .kb-modal-cancel:hover { background: #f1f5f9; }
     .kb-right-actions { display: flex; gap: 10px; justify-content: flex-end; }
     .kb-batch-bar { display: flex; align-items: center; gap: 12px; padding: 2px 0 10px; font-size: 12px; color: #64748b; }
+    .snapshot-batch-bar { display: flex; align-items: center; gap: 12px; padding: 2px 0 12px; font-size: 13px; color: #64748b; flex-wrap: wrap; }
+    .snapshot-batch-hint { color: #909399; font-size: 12px; }
+    .card-header-actions .btn-secondary { padding: 6px 14px; font-size: 13px; }
     .kb-select-all-wrap { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
-    .kb-selected-count { margin-left: auto; color: #4d6bfe; font-weight: 600; }
+    .kb-selected-count { margin-left: auto; color: #1a1a1a; font-weight: 600; }
     #kb-batch-delete-btn:disabled { opacity: .5; cursor: not-allowed; }
-    .kb-item-check { flex: 0 0 auto; width: 16px; height: 16px; margin-right: 10px; accent-color: #4d6bfe; cursor: pointer; }
+    .kb-item-checkbox { flex: 0 0 auto; width: 16px; height: 16px; min-width: 16px; min-height: 16px; margin: 2px 10px 0 0; -webkit-appearance: auto; appearance: auto; accent-color: #1a1a1a; cursor: pointer; }
+    .kb-item-check-wrap { flex: 0 0 auto; display: inline-flex; align-items: flex-start; }
     .kb-item-main { flex: 1; min-width: 0; }
     .kb-item-toolbar { display: flex; gap: 8px; flex: 0 0 auto; }
+
+    /* ==================== 模块三：防撑爆边界（padding / max-width / overflow） ==================== */
+    .content-area { padding: 24px; box-sizing: border-box; }
+    .kb-card { max-width: 100%; overflow: hidden; box-sizing: border-box; }
+    .kb-card .card-body { padding: 24px; box-sizing: border-box; }
+    .kb-main-grid { max-width: 100%; box-sizing: border-box; }
+    .kb-left, .kb-right { min-width: 0; max-width: 100%; box-sizing: border-box; }
+    #kb-list-container { max-width: 100%; box-sizing: border-box; }
+    .kb-item { max-width: 100%; box-sizing: border-box; overflow: hidden; }
+    .kb-item-check-wrap { flex: 0 0 auto; }
+
+    /* ==================== v1.61：知识库 Markdown 安全渲染（表格 / 代码块 / 排版） ==================== */
+    .kb-md-body { font-size: 13px; color: var(--text-secondary); line-height: 1.7; word-break: break-word; }
+    .kb-md-body > :first-child { margin-top: 0; }
+    .kb-md-body > :last-child { margin-bottom: 0; }
+    .kb-md-body p { margin: 6px 0; }
+    .kb-md-body h1, .kb-md-body h2, .kb-md-body h3, .kb-md-body h4 { color: var(--text-main); margin: 12px 0 6px; line-height: 1.4; }
+    .kb-md-body h1 { font-size: 18px; }
+    .kb-md-body h2 { font-size: 16px; }
+    .kb-md-body h3 { font-size: 15px; }
+    .kb-md-body ul, .kb-md-body ol { margin: 6px 0; padding-left: 22px; }
+    .kb-md-body li { margin: 3px 0; }
+    .kb-md-body a { color: #1a1a1a; }
+    .kb-md-body blockquote { margin: 8px 0; padding: 6px 12px; border-left: 3px solid #dfe3ea; color: #909399; background: #fafafa; border-radius: 0 4px 4px 0; }
+    .kb-md-body hr { border: none; border-top: 1px solid #ebeef5; margin: 12px 0; }
+    /* 表格外层：限高 + 横向/纵向滚动（红线：overflow-x: auto; width:100%），表头吸附；宽表只在内部滚动，不撑开页面 */
+    .kb-md-table-wrap { width: 100%; max-width: 100%; max-height: 400px; overflow-x: auto; overflow-y: auto; border: 1px solid #ebeef5; border-radius: 6px; margin: 8px 0; }
+    .kb-md-body table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+    .kb-md-body th, .kb-md-body td { border: 1px solid #ebeef5; padding: 6px 10px; text-align: left; white-space: nowrap; vertical-align: top; }
+    .kb-md-body th { background: #f5f7fa; color: #303133; font-weight: 600; position: sticky; top: 0; z-index: 1; }
+    .kb-md-body tr:nth-child(even) td { background: #fcfcfd; }
+    /* JSON / 代码块：高亮底色 + 等宽字体 + 清晰边框 */
+    .kb-md-body pre { background: #f8f9fa; border: 1px solid #ebeef5; border-radius: 6px; padding: 12px; margin: 8px 0; overflow-x: auto; }
+    .kb-md-body pre code { background: transparent; border: none; padding: 0; }
+    .kb-md-body code { background: #f1f3f5; border: 1px solid #ebeef5; border-radius: 4px; padding: 1px 5px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 12px; }
     .fullscreen-loading { position: fixed; inset: 0; z-index: 10120; background: rgba(15, 23, 42, .34); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; }
     .loading-card { background: #fff; border-radius: 14px; box-shadow: 0 20px 60px rgba(15, 23, 42, .18); padding: 22px 28px; display: flex; align-items: center; gap: 12px; font-size: 14px; color: #334155; }
-    .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #dbeafe; border-top-color: #4d6bfe; animation: spin .7s linear infinite; display: inline-block; }
+    .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #d1d5db; border-top-color: #1a1a1a; animation: spin .7s linear infinite; display: inline-block; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .multi-select-bar { position: sticky; top: 0; z-index: 6; margin: 0 12px 8px; padding: 8px 10px; border-radius: 10px; background: #eff6ff; border: 1px solid #c7d2fe; color: #3b5bdb; font-size: 12px; display: flex; align-items: center; gap: 8px; }
-    .multi-select-btn { border: 1px solid #c7d2fe; background: #fff; color: #3b5bdb; border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
-    .multi-select-btn.danger { border-color: #fecaca; color: #dc2626; background: #fff; }
+
+    /* ==================== v1.60 重构：历史快照（吸附操作条 / 分页 / 预览 / 按钮） ==================== */
+    /* 表头选择列：文字横排、居中，与 tbody 勾选框绝对对齐（列宽由 snapshot-table nth-child 统一控制） */
+    .snap-check-col { text-align: center; white-space: nowrap; }
+    .snap-check-col input, .snapshot-checkbox { display: inline-block; width: 16px; height: 16px; -webkit-appearance: auto; appearance: auto; accent-color: #1a1a1a; cursor: pointer; vertical-align: middle; margin: 0; flex: 0 0 auto; }
+    .snapshot-checkbox:disabled { cursor: not-allowed; opacity: .45; }
+
+    /* 吸附式批量操作条：浅灰底，勾选时显示，sticky 吸附在表格上方 */
+    .snap-action-bar {
+      display: none; position: sticky; top: 0; z-index: 20; align-items: center; gap: 12px; flex-wrap: wrap;
+      background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, .06);
+    }
+    .snap-action-bar.show { display: flex; }
+    .snap-action-count { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+    .snap-action-bar .snap-ab-spacer { flex: 1; }
+    .snap-ab-btn { border: 1px solid transparent; border-radius: 7px; padding: 6px 13px; font-size: 12.5px; cursor: pointer; white-space: nowrap; transition: filter .15s, background .15s, border-color .15s; }
+    .snap-ab-btn:hover { filter: brightness(.97); }
+    .snap-ab-danger { background: #fff; color: #c0392b; border-color: rgba(192, 57, 43, 0.3); }
+    .snap-ab-danger:hover { background: #fdf3f2; }
+    .snap-ab-primary { background: #1a1a1a; color: #fff; }
+    .snap-ab-ghost { background: #fff; color: #475569; border: 1px solid #cbd5e1; }
+
+    /* 单行操作按钮：txt 主色 / md 次色 / 预览·复制 纯文字 */
+    .snap-row-actions { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .snap-btn { border: none; border-radius: 7px; padding: 6px 11px; font-size: 12.5px; cursor: pointer; transition: filter .15s, background .15s; }
+    .snap-btn:hover { filter: brightness(.95); }
+    .snap-btn-txt { background: #fff; color: #374151; border: 1px solid #d8dde5; }
+    .snap-btn-txt:hover { background: #f3f4f6; color: #1a1a1a; border-color: #d1d5db; }
+    .snap-btn-md { background: #f1f5f9; color: #475569; }
+    .snap-btn-text { background: transparent; color: #64748b; padding: 6px 8px; }
+    .snap-btn-text:hover { background: #f1f5f9; color: #334155; }
+    .snap-btn:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+
+    /* 备注列 */
+    .snap-remark-cell { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #475569; font-size: 12.5px; }
+    .snap-remark-empty { color: #cbd5e1; }
+
+    /* 原生分页器 */
+    .snap-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+    .snap-page-btn { min-width: 34px; border: 1px solid #d1d5db; background: #fff; color: #374151; border-radius: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+    .snap-page-btn:hover:not(:disabled) { border-color: #1a1a1a; color: #1a1a1a; }
+    .snap-page-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .snap-page-info { font-size: 13px; color: #6b7280; }
+
+    /* 预览 Modal */
+    .snap-preview-mask { position: fixed; inset: 0; z-index: 10300; background: rgba(15, 23, 42, .5); display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .snap-preview-box { background: #fff; border-radius: 14px; width: min(860px, 94vw); max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 70px rgba(15,23,42,.3); }
+    .snap-preview-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #e5e7eb; }
+    .snap-preview-title { font-weight: 700; color: #1f2937; font-size: 15px; }
+    .snap-preview-close { border: none; background: #f1f5f9; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 15px; color: #475569; }
+    .snap-preview-close:hover { background: #e2e8f0; }
+    .snap-preview-body { padding: 18px 20px; overflow: auto; }
+    .snap-preview-pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: Consolas, Monaco, "Courier New", monospace; font-size: 13px; line-height: 1.75; color: #334155; }
+    .snap-preview-tip { padding: 8px 20px; font-size: 12px; color: #6b7280; border-top: 1px solid #f1f5f9; }
+
+    /* 评测页：题目列表「填入对话」按钮 */
+    .gen-q-fill-btn { margin-top: 8px; border: 1px solid #1a1a1a; background: #fff; color: #1a1a1a; border-radius: 7px; padding: 5px 12px; font-size: 12.5px; cursor: pointer; }
+    .gen-q-fill-btn:hover { background: #1a1a1a; color: #fff; }
+    .multi-select-bar { position: sticky; top: 0; z-index: 6; margin: 0 12px 8px; padding: 8px 10px; border-radius: 10px; background: #f3f4f6; border: 1px solid #e5e7eb; color: #374151; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+    .multi-select-btn { border: 1px solid #e5e7eb; background: #fff; color: #374151; border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
+    .multi-select-btn.danger { border-color: rgba(192, 57, 43, 0.3); color: #c0392b; background: #fff; }
     .tree-check-wrap { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; margin-right: 8px; }
-    .tree-checkbox { width: 15px; height: 15px; accent-color: #4d6bfe; cursor: pointer; }
-    .tree-item-selected { background: #eef2ff !important; }
+    .tree-checkbox { width: 15px; height: 15px; accent-color: #1a1a1a; cursor: pointer; }
+    .tree-item-selected { background: #f3f4f6 !important; }
     body.public-readonly .editor-input, body.public-readonly .form-textarea { background: #f8fafc; }
     body.public-readonly .btn-primary,
     body.public-readonly .polish-btn,
@@ -872,22 +1074,52 @@
     .audit-table th { position: sticky; top: 0; background: #f8fafc; z-index: 1; white-space: nowrap; }
     .audit-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; word-break: break-all; }
     .audit-table tr.audit-row-warn td { background: #fffbeb; }
-    .audit-table tr.audit-row-danger td { background: #fef2f2; }
+    .audit-table tr.audit-row-danger td { background: #fdf3f2; }
     .audit-level { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
     .audit-level-info { background: #ecfdf5; color: #16a34a; border: 1px solid #bbf7d0; }
     .audit-level-warn { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
-    .audit-level-danger { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .audit-level-danger { background: #fdf3f2; color: #c0392b; border: 1px solid rgba(192, 57, 43, 0.3); }
     .audit-ip { font-family: var(--font-mono); color: #475569; white-space: nowrap; }
-    .audit-hint { font-size: 12px; color: #94a3b8; line-height: 1.6; }
+    .audit-hint { font-size: 12px; color: #6b7280; line-height: 1.6; }
     /* Tab1 顶部 Token 进度工具栏 */
     .token-toolbar { margin-bottom: 16px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f8fafc; }
     .token-toolbar-head { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #64748b; margin-bottom: 8px; }
     .token-toolbar-head > span:first-child { font-weight: 600; color: #334155; }
     /* Tab3 评测：左对话模拟器 / 右评测数据面板（双栏） */
-    #main-content[data-active-tab="eval"] { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); gap: 20px; align-items: start; }
-    #main-content[data-active-tab="eval"] > .card[data-tab="eval"] { margin-bottom: 0; }
-    @media (max-width: 1100px) { #main-content[data-active-tab="eval"] { grid-template-columns: 1fr; } }
+    /* v1.60 重构：删除右侧批处理回归卡片后，左侧多轮对话卡片占满整行（单列） */
+    #main-content[data-active-tab="eval"] { display: block; }
+    #main-content[data-active-tab="eval"] > .card[data-tab="eval"] { width: 100%; margin-bottom: 0; }
+
+    /* ===== V1.61 极简白底按钮体系（替代蓝底次级按钮） ===== */
+    .btn-plain {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      background: #ffffff; color: #374151; border: 1px solid #d8dde5;
+      border-radius: 4px; padding: 8px 16px; font-size: 13px; font-weight: 500;
+      line-height: 1.4; cursor: pointer; white-space: nowrap;
+      transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+    }
+    .btn-plain:hover { background: #f3f4f6; color: #1a1a1a; border-color: #d1d5db; }
+    .btn-plain:active { transform: translateY(1px); }
+    .btn-plain:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+    .btn-plain.btn-plain-lg { padding: 10px 22px; font-size: 14px; }
+    .btn-text {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: transparent; border: none; color: #6b7280;
+      padding: 6px 8px; font-size: 13px; cursor: pointer; white-space: nowrap;
+      transition: color .15s ease, background-color .15s ease;
+    }
+    .btn-text:hover { color: #1a1a1a; background: #f3f4f6; border-radius: 4px; }
+    .btn-text:active { transform: translateY(1px); }
+    /* 导出/下载按钮组容器：flex 靠右、垂直居中、gap 8 */
+    .export-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
   </style>
+
+  <!-- v1.61：Markdown 渲染（marked 9.1.6，bootcdn 国内源）+ 本地 vendor 兜底，保证离线/CDN 故障时仍可用 -->
+  <script src="https://cdn.bootcdn.net/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <script>if (typeof marked === 'undefined') { document.write('<script src="/vendor/marked.min.js"><\/script>'); }</script>
+  <!-- v1.61：XSS 净化（DOMPurify 3.0.6，bootcdn 国内源）+ 本地 vendor 兜底 -->
+  <script src="https://cdn.bootcdn.net/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+  <script>if (typeof DOMPurify === 'undefined') { document.write('<script src="/vendor/purify.min.js"><\/script>'); }</script>
 </head>
 <body>
   <div class="app-container">
@@ -895,15 +1127,17 @@
     <!-- 侧边栏 -->
     <div class="sidebar">
       <div class="logo-area">
-        <img src="/logo.png" onerror="this.style.display='none'; document.getElementById('fallback').style.display='flex';" />
-        <div id="fallback" style="display:none; font-size: 18px; font-weight: bold; color: #303133;">Prompt Studio</div>
+        <span class="brand-name">NewRock AI Workbench</span>
       </div>
       <button class="btn-new" onclick="openCreateModal('project')">
         <svg width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
         开启新项目
       </button>
       <div class="tree-search-wrap">
-        <input id="tree-search" class="tree-search-input" type="text" placeholder="🔍 搜索项目/场景" autocomplete="off" oninput="renderTree()" />
+        <div class="tree-search-box">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input id="tree-search" class="tree-search-input" type="text" placeholder="搜索项目/场景" autocomplete="off" oninput="renderTree()" />
+        </div>
       </div>
       <div class="multi-select-bar" id="multi-select-bar" style="display:none;">
         <span>已选中 <b id="multi-selected-count">0</b> 项</span>
@@ -916,9 +1150,18 @@
     <!-- 主内容区 -->
     <div class="main-content">
       <div class="header">
+        <!-- v1.60 品牌区（仅追加，不改动原有 DOM）：品牌名 + 纯 CSS 下拉菜单 -->
+        <div class="brand-nav">
+          <div class="brand-dropdown">
+            <button type="button" class="brand-dropdown-trigger" aria-haspopup="true" aria-expanded="false" onclick="toggleBrandDropdown(event)">功能导航 ▾</button>
+            <div class="brand-dropdown-menu" role="menu">
+              <a role="menuitem" href="#" onclick="switchTab('edit');closeBrandDropdown();return false;">提示词工程</a>
+              <a role="menuitem" class="disabled" aria-disabled="true" href="#" onclick="closeBrandDropdown();return false;">项目管理（开发中）</a>
+            </div>
+          </div>
+        </div>
         <div class="header-title">当前项目： <span id="current-name">请选择左侧项目</span><span id="public-badge" class="public-badge" style="display:none;">公共参考项目 · 只读</span></div>
         <div class="header-right">
-          <span class="trial-badge" id="trial-badge">剩余试用：–</span>
           <button type="button" class="icon-btn" id="audit-log-btn" onclick="openAuditLogPanel()" title="审计日志（黑匣子）" aria-label="审计日志" style="display:none;">📜</button>
           <button type="button" class="icon-btn" id="shortcuts-btn" onclick="openShortcutsModal()" title="快捷键面板" aria-label="快捷键面板">⌨️</button>
           <button type="button" class="icon-btn" id="backup-export-btn" onclick="exportBackup()" title="导出备份 JSON" aria-label="导出备份 JSON">💾</button>
@@ -958,17 +1201,17 @@
               <div class="token-toolbar-head">
                 <span>Token 进度</span>
                 <span id="token-progress-label">Token 占用 0%</span>
-                <span class="limit-warning" id="token-limit-warning" style="display: none;">⚠️ 超出 4000 Token 上限</span>
+                <span class="limit-warning" id="token-limit-warning" style="display: none;">⚠️ 超出 1,000,000 Token 上限</span>
               </div>
-              <div class="token-progress-track" id="token-progress-track" title="Token 上限 4000">
+              <div class="token-progress-track" id="token-progress-track" title="Token 上限 1,000,000">
                 <div class="token-progress-fill" id="token-progress-bar"></div>
               </div>
             </div>
             <div class="form-group">
               <div class="label-row">
-                <label class="form-label" for="val-L0">L0 全局安全基座</label>
+                <label class="form-label" for="val-system">系统提示词</label>
                 <div class="label-actions">
-                  <button class="btn-link polish-btn" id="polish-L0" type="button" onclick="polishLayer('L0')">✨ AI 润色</button>
+                  <button class="btn-link polish-btn" id="polish-system" type="button" onclick="polishLayer('SYSTEM')">✨ AI 润色</button>
                   <select id="insert-var-select" class="insert-var-select" title="插入变量占位符（中文选项 → 英文变量，插入到光标处）">
                   <option value="">➕ 插入变量</option>
                   <option value="{{industry}}">行业/公司名（{{industry}}）</option>
@@ -982,32 +1225,8 @@
                 </div>
               </div>
               <div class="editor-wrap">
-                <div class="editor-mirror" id="mirror-L0" aria-hidden="true"></div>
-                <textarea id="val-L0" class="form-textarea editor-input" rows="2" spellcheck="false"></textarea>
-              </div>
-            </div>
-            <div class="form-group">
-              <div class="label-row">
-                <label class="form-label" for="val-L1">L1 语音基座</label>
-                <div class="label-actions">
-                  <button class="btn-link polish-btn" id="polish-L1" type="button" onclick="polishLayer('L1')">✨ AI 润色</button>
-                </div>
-              </div>
-              <div class="editor-wrap">
-                <div class="editor-mirror" id="mirror-L1" aria-hidden="true"></div>
-                <textarea id="val-L1" class="form-textarea editor-input" rows="2" spellcheck="false"></textarea>
-              </div>
-            </div>
-            <div class="form-group">
-              <div class="label-row">
-                <label class="form-label" for="val-L3">L3 项目专属话术</label>
-                <div class="label-actions">
-                  <button class="btn-link polish-btn" id="polish-L3" type="button" onclick="polishLayer('L3')">✨ AI 润色</button>
-                </div>
-              </div>
-              <div class="editor-wrap">
-                <div class="editor-mirror" id="mirror-L3" aria-hidden="true"></div>
-                <textarea id="val-L3" class="form-textarea editor-input" rows="3" spellcheck="false"></textarea>
+                <div class="editor-mirror" id="mirror-system" aria-hidden="true"></div>
+                <textarea id="val-system" class="form-textarea editor-input" rows="12" spellcheck="false"></textarea>
               </div>
             </div>
             <div class="editor-stats" id="editor-stats">
@@ -1017,54 +1236,25 @@
               <span style="margin-left:auto; color:#c0c4cc; font-size:12px;">Token ≈ 字符数 × 0.6（向上取整）</span>
             </div>
             <div class="editor-actions">
-              <button class="btn btn-primary" id="generate-snapshot-btn" onclick="generateSnapshot()" style="flex: 1;">生成为历史快照</button>
-              <button class="btn btn-secondary" id="copy-prompt-btn" type="button" onclick="copyPromptAsText()">📋 复制为 NewLync Text</button>
+              <input type="text" id="snapshot-remark-input" placeholder="填写版本备注" maxlength="200" autocomplete="off"
+                style="flex: 1; min-width: 180px; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; color: #374151; outline: none;" />
+              <button class="btn btn-primary" id="generate-snapshot-btn" onclick="generateSnapshot()">生成历史快照</button>
+              <button class="btn btn-secondary" id="copy-prompt-btn" type="button" onclick="copyPromptAsText()">复制为txt</button>
             </div>
           </div>
         </div>
 
-        <!-- 语境配置卡片（Tab1 折叠面板） -->
-        <div class="card context-card collapsed" data-tab="edit" id="context-card">
-          <div class="card-header">
-            <span>🎯 语境配置</span>
-            <div class="context-header-actions">
-              <button class="btn btn-link" type="button" id="ctx-toggle-btn" onclick="toggleContextPanel()">展开</button>
-              <button class="btn btn-primary" id="ctx-extract-btn" type="button" onclick="aiExtractContext()" style="padding: 6px 14px; font-size: 13px;">
-                <span class="ctx-extract-label">✨ AI 智能提取</span>
-              </button>
-            </div>
-          </div>
-          <div class="card-body" id="context-card-body">
-            <div class="form-group">
-              <label class="form-label">行业 <span class="var-hint">{{industry}}</span></label>
-              <input id="ctx-industry" class="form-input" type="text" placeholder="例如：汽车服务 / 金融 / 电商零售" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">业务场景 <span class="var-hint">{{business_scene}}</span></label>
-              <div class="tag-input-wrap" id="ctx-scene-wrap">
-                <div class="tag-list" id="ctx-scene-tags"></div>
-                <input id="ctx-scene-input" class="tag-input" type="text" placeholder="输入后按回车添加，可添加多个" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">核心目标 <span class="var-hint">{{core_goal}}</span></label>
-              <div class="tag-input-wrap" id="ctx-goal-wrap">
-                <div class="tag-list" id="ctx-goal-tags"></div>
-                <input id="ctx-goal-input" class="tag-input" type="text" placeholder="输入后按回车添加，可添加多个" />
-              </div>
-            </div>
-            <div style="font-size: 12px; color: #909399;">提示：生成快照时会用这些字段替换 L0/L1/L3 中的 <span style="color:#f59e0b; font-family: Consolas, Monaco, monospace;">{{变量}}</span> 并持久化到快照中。</div>
-          </div>
-        </div>
+        <!-- v1.60：语境配置面板已移除（提示词扁平化，变量仍可通过「插入变量」按钮使用） -->
 
         <!-- 卡片2：知识库列表（Tab2：左右 7:3 布局 + 批量管理） -->
-        <div class="card" data-tab="kb" id="kb-card">
+        <div class="card kb-card" data-tab="kb" id="kb-card">
           <div class="card-header">
             <span>📚 知识库管理</span>
             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
               <button class="btn-link" onclick="loadKbList()">刷新列表</button>
               <button class="btn-link" id="kb-conflict-btn" onclick="detectKbConflicts()">⚠️ 冲突检测</button>
-              <button class="btn-link" id="kb-import-btn" onclick="document.getElementById('kb-import-files').click()">📥 批量导入 TXT</button>
+              <button class="btn-link" id="kb-import-btn" onclick="openKbImportModal()">📥 导入知识库</button>
+              <button class="btn-plain" data-dropdown data-portal-anchor type="button" onclick="toggleExportMenu(this, event, 'kb')">⬇️ 导出 ▾</button>
             </div>
           </div>
           <div class="card-body kb-main-grid">
@@ -1075,11 +1265,27 @@
                 <span class="kb-import-status" id="kb-import-status"></span>
               </div>
               <div class="kb-batch-bar">
-                <label class="kb-select-all-wrap"><input type="checkbox" id="kb-select-all" onchange="toggleSelectAllKb(this.checked)" /> 全选</label>
-                <button class="btn btn-link" type="button" id="kb-batch-delete-btn" onclick="batchDeleteKb()" disabled>🧹 批量删除</button>
+                <label class="kb-select-all-wrap"><input type="checkbox" id="select-all-kb" onchange="toggleSelectAllKb(this.checked)" /> 全选</label>
+                <button class="btn btn-link" type="button" id="kb-batch-delete-btn" onclick="batchDeleteKb()" disabled>🗑️ 删除</button>
                 <span class="kb-selected-count" id="kb-selected-count">已选 0 项</span>
               </div>
-              <input type="file" id="kb-import-files" accept=".txt,text/plain" multiple style="display: none;" onchange="handleKbImport(event.target.files)" />
+              <input type="file" id="kb-import-files" accept=".md,.markdown,.txt,.doc,.docx,.xls,.xlsx,.pdf,text/markdown,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple style="display: none;" onchange="handleKbImport(event.target.files)" />
+              <!-- 导入模式选择弹窗 -->
+              <div id="kb-import-modal" class="kb-modal-mask" style="display:none;" onclick="if(event.target===this)closeKbImportModal()">
+                <div class="kb-modal" role="dialog" aria-modal="true" aria-label="选择导入模式">
+                  <div class="kb-modal-title">选择导入模式</div>
+                  <div class="kb-modal-desc">请选择知识库文件的解析方式</div>
+                  <button type="button" class="kb-modal-option" onclick="chooseKbImportMode('raw')">
+                    <span class="kb-modal-opt-title">保留原结构（智能分块）</span>
+                    <span class="kb-modal-opt-desc">按 Markdown 标题正则切分，不调用大模型，标题直接作为卡片大标题</span>
+                  </button>
+                  <button type="button" class="kb-modal-option" onclick="chooseKbImportMode('qa')">
+                    <span class="kb-modal-opt-title">提取为 Q/A 问答对</span>
+                    <span class="kb-modal-opt-desc">由大模型把内容改写为标准问答对（Q/A）</span>
+                  </button>
+                  <button type="button" class="kb-modal-cancel" onclick="closeKbImportModal()">取消</button>
+                </div>
+              </div>
               <div class="kb-banner" id="kb-banner">
                 <span id="kb-banner-text"></span>
                 <button type="button" class="kb-banner-close" title="关闭" onclick="hideKbConflictBanner()">×</button>
@@ -1089,12 +1295,12 @@
               </div>
             </div>
             <div class="kb-right">
-              <div class="kb-right-title">TXT 解析入库</div>
-              <div class="kb-right-hint">粘贴 FAQ 文本（每段一问一答），解析后点击「确认入库」。</div>
+              <div class="kb-right-title" id="kb-right-title">txt 解析入库</div>
+              <div class="kb-right-hint" id="kb-right-hint">粘贴 FAQ 文本（每段一问一答），解析后点击「确认入库」。</div>
               <textarea id="kb-text" class="form-textarea" rows="12" placeholder="在此粘贴 FAQ 文本..." style="margin-bottom: 10px;"></textarea>
               <div class="kb-right-actions">
                 <button class="btn btn-success" onclick="parseKb()">解析文本</button>
-                <button class="btn btn-primary" id="save-kb-btn" onclick="saveKb()" style="display: none;">确认入库</button>
+                <button class="btn-plain" id="save-kb-btn" onclick="saveKb()" style="display: none;">确认入库</button>
               </div>
             </div>
           </div>
@@ -1108,15 +1314,18 @@
           </div>
           <div class="card-body">
             <div class="gen-question-toolbar">
-              <button class="btn btn-secondary" id="gen-questions-btn" type="button" onclick="generateAdversarialQuestions()">✨ AI 生成刁钻测试题</button>
+              <button class="btn btn-secondary" id="gen-questions-btn" type="button" onclick="generateAdversarialQuestions()">AI 生成测试用例</button>
               <span class="gen-question-status" id="gen-questions-status"></span>
             </div>
             <div class="gen-q-actions" id="gen-questions-actions" style="display: none;">
-              <button class="btn btn-primary" id="gen-fill-batch-btn" type="button" onclick="fillBatchCasesFromQuestions()">📥 填入批量回归</button>
+              <button class="btn-plain" id="eval-export-btn" data-dropdown data-portal-anchor type="button" onclick="toggleExportMenu(this, event, 'eval')">⬇️ 导出 ▾</button>
+              <button class="btn-plain btn-plain-lg" id="regression-run-btn" type="button" onclick="runRegressionTest()">⚡ 一键执行回归测试</button>
+              <button class="btn btn-ghost" id="clear-cases-btn" type="button" onclick="clearTestCases()">🗑️ 清除测试用例</button>
+              <span class="test-progress-text" id="test-progress-text"></span>
               <span class="gen-question-status" id="gen-questions-hint"></span>
             </div>
             <div class="gen-questions-result" id="gen-questions-result"></div>
-            <div class="chat-hint">使用当前 L0 / L1 / L3 与语境配置组装 System Prompt，每次发送都会请求 DeepSeek 生成回复。Enter 发送，Shift+Enter 换行（中文输入法组合态下回车不会误发送）。</div>
+            <div class="chat-hint">使用当前系统提示词组装 System Prompt，每次发送都会请求大模型生成回复。Enter 发送，Shift+Enter 换行（中文输入法组合态下回车不会误发送）。</div>
             <div id="chat-messages" class="chat-messages">
               <div class="chat-empty">暂无对话，输入消息开始多轮测试</div>
             </div>
@@ -1127,52 +1336,50 @@
           </div>
         </div>
 
-        <!-- 卡片4：批处理回归测试（Tab3） -->
-        <div class="card" data-tab="eval">
-          <div class="card-header">
-            <span>🧪 批处理回归测试</span>
-          </div>
-          <div class="card-body">
-            <div class="batch-hint">
-              JSON 格式：数组，元素包含 <code>user_query</code>、<code>standard_answer</code>，可选 <code>bot_reply</code>（缺省时先调用 /api/chat/reply 自动生成回复）。也兼容 <code>question/query</code>、<code>answer/expected</code>、<code>reply</code> 字段。
-            </div>
-            <div class="batch-toolbar">
-              <input type="file" id="batch-file" accept=".json,application/json" style="display: none;" onchange="handleBatchFile(event.target.files)" />
-              <button class="btn btn-warning" id="batch-select-btn" type="button" onclick="document.getElementById('batch-file').click()">📂 选择用例 JSON</button>
-              <button class="btn btn-primary" id="batch-run-btn" type="button" onclick="runBatchRegression()" disabled>▶ 开始回归测试</button>
-              <span class="batch-file-name" id="batch-file-name">尚未选择文件</span>
-            </div>
-            <div class="batch-progress" id="batch-progress">
-              <div class="batch-progress-track"><div class="batch-progress-fill" id="batch-progress-bar"></div></div>
-              <div class="batch-progress-text" id="batch-progress-text">已完成 0/0（0%）</div>
-            </div>
-            <div class="batch-report" id="batch-report"></div>
-          </div>
-        </div>
-
-        <!-- 卡片5：历史快照（Tab4） -->
+        <!-- 卡片5：历史快照（Tab4，v1.60 重构：吸附操作条 + 前端分页 + 预览） -->
         <div class="card" data-tab="snapshot">
           <div class="card-header">
             <span>🕒 历史快照</span>
             <div class="card-header-actions">
               <button class="btn-link" onclick="loadSnapshots()">刷新列表</button>
-              <button class="btn-link" id="export-zip-btn" onclick="exportProjectZip()">📦 批量导出 Zip</button>
             </div>
           </div>
           <div class="card-body">
-            <table class="table">
+            <!-- 吸附式批量操作条：勾选时显示 -->
+            <div class="snap-action-bar" id="snap-action-bar">
+              <span class="snap-action-count" id="snap-action-count">已选 0 项</span>
+              <span class="snap-ab-spacer"></span>
+              <button type="button" class="snap-ab-btn snap-ab-danger" onclick="deleteSelectedSnapshots()">🗑️ 删除选中</button>
+              <span class="snap-batch-download-wrap" style="display: inline-block;">
+                <button type="button" class="snap-ab-btn snap-ab-ghost" onclick="toggleBatchDownloadMenu(this, event)">下载 ▾</button>
+              </span>
+              <button type="button" class="snap-ab-btn snap-ab-ghost" onclick="clearSnapshotSelection()">取消选择</button>
+            </div>
+
+            <div style="overflow-x: auto; width: 100%;">
+            <table class="table snapshot-table">
               <thead>
                 <tr>
-                  <th>快照 ID</th>
-                  <th>生成时间</th>
-                  <th>评测状态</th>
-                  <th style="text-align: right;">操作</th>
+                  <th class="snap-check-col" style="width: 40px; text-align: center;"><input type="checkbox" id="select-all-snapshots" title="全选当前页" style="display: inline-block; appearance: auto; -webkit-appearance: auto;" onchange="toggleSelectAllCurrentPage(this.checked)" aria-label="全选当前页" /></th>
+                  <th style="width: 25%; text-align: left; padding-left: 16px;">快照 ID</th>
+                  <th style="width: 20%; text-align: left;">备注</th>
+                  <th style="width: 20%; text-align: left;">生成时间</th>
+                  <th style="width: 10%; text-align: center;">评测状态</th>
+                  <th style="width: 25%; text-align: right; padding-right: 16px;">操作</th>
                 </tr>
               </thead>
               <tbody id="snapshot-tbody">
-                <tr><td colspan="4" style="text-align: center; color: #909399;">暂无历史快照</td></tr>
+                <tr><td colspan="6" style="text-align: center; color: #909399;">暂无历史快照</td></tr>
               </tbody>
             </table>
+            </div>
+
+            <!-- 原生分页器 -->
+            <div class="snap-pagination" id="snap-pagination">
+              <button type="button" class="snap-page-btn" id="snap-prev-btn" onclick="goSnapshotPage(currentSnapshotPage-1)">上一页</button>
+              <span class="snap-page-info" id="snap-page-info">第 1 / 1 页</span>
+              <button type="button" class="snap-page-btn" id="snap-next-btn" onclick="goSnapshotPage(currentSnapshotPage+1)">下一页</button>
+            </div>
           </div>
         </div>
 
@@ -1182,6 +1389,20 @@
       <div class="content-area" id="empty-state" style="display: flex; align-items: center; justify-content: center; color: #909399;">
         <p>请在左侧选择一个项目开始工作</p>
       </div>
+    </div>
+  </div>
+
+  <!-- v1.60 重构：快照预览 Modal（pre 保留换行，Esc 关闭） -->
+  <div id="snap-preview-modal" class="snap-preview-mask" style="display:none;" onclick="if (event.target === this) closeSnapshotPreview();">
+    <div class="snap-preview-box" role="dialog" aria-modal="true" aria-label="快照预览">
+      <div class="snap-preview-header">
+        <span class="snap-preview-title" id="snap-preview-title">快照预览</span>
+        <button type="button" class="snap-preview-close" onclick="closeSnapshotPreview()" aria-label="关闭">✕</button>
+      </div>
+      <div class="snap-preview-body">
+        <pre class="snap-preview-pre" id="snap-preview-pre"></pre>
+      </div>
+      <div class="snap-preview-tip">按 Esc 键可关闭预览</div>
     </div>
   </div>
 
@@ -1240,7 +1461,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-link" style="color:#606266;" onclick="closeModal()">取消</button>
-        <button class="btn btn-primary" id="modal-confirm-btn">确定</button>
+        <button class="btn-plain" id="modal-confirm-btn">确定</button>
       </div>
     </div>
   </div>
@@ -1303,7 +1524,7 @@
           <div class="model-test-result" id="model-test-result"></div>
           <div class="model-actions">
             <button class="btn btn-secondary" id="model-test-btn" type="button" onclick="testModelConnection()">🔌 测试连通性</button>
-            <button class="btn btn-primary" id="model-save-btn" type="button" onclick="saveModelConfig()">💾 保存配置</button>
+            <button class="btn-plain" id="model-save-btn" type="button" onclick="saveModelConfig()">💾 保存配置</button>
             <button class="model-quick-link" id="model-quick-key-btn" type="button" onclick="openQuickApiKeyFromModel()">⚙️ 快速设置 .env Key</button>
           </div>
         </div>
@@ -1328,14 +1549,14 @@
           <textarea id="kb-edit-question" class="form-textarea" rows="3" placeholder="请输入问题..."></textarea>
         </div>
         <div class="form-group" style="margin-bottom: 0;">
-          <label class="form-label" for="kb-edit-answer">答案（A）</label>
-          <textarea id="kb-edit-answer" class="form-textarea" rows="4" placeholder="请输入答案..."></textarea>
+          <label class="form-label" for="kb-edit-answer">答案（A，原始 Markdown 源码）</label>
+          <textarea id="kb-edit-answer" class="form-textarea" rows="14" placeholder="请输入 Markdown 源码（如 | 字段 | 铜锣湾 |）..."></textarea>
         </div>
         <div id="kb-edit-error" class="model-test-result" style="min-height: 0;"></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-link" style="color: #606266;" type="button" onclick="closeKbEditModal()">取消</button>
-        <button class="btn btn-primary" id="kb-edit-save-btn" type="button" onclick="saveKbEdit()">💾 保存修改</button>
+        <button class="btn-plain" id="kb-edit-save-btn" type="button" onclick="saveKbEdit()">💾 保存修改</button>
       </div>
     </div>
   </div>
@@ -1380,23 +1601,15 @@
           <input type="text" id="template-name-input" class="form-input" placeholder="给模板起个名字（如：客服通用基座）" />
         </div>
         <div class="form-group" style="margin: 0;">
-          <label class="form-label" for="template-l0-input">L0 全局安全基座</label>
-          <textarea id="template-l0-input" class="form-textarea" rows="4" placeholder="L0 内容..."></textarea>
+          <label class="form-label" for="template-system-input">系统提示词</label>
+          <textarea id="template-system-input" class="form-textarea" rows="10" placeholder="系统提示词内容..."></textarea>
         </div>
-        <div class="form-group" style="margin: 0;">
-          <label class="form-label" for="template-l1-input">L1 语音基座</label>
-          <textarea id="template-l1-input" class="form-textarea" rows="3" placeholder="L1 内容..."></textarea>
-        </div>
-        <div class="form-group" style="margin: 0;">
-          <label class="form-label" for="template-l3-input">L3 项目专属话术</label>
-          <textarea id="template-l3-input" class="form-textarea" rows="4" placeholder="L3 内容..."></textarea>
-        </div>
-        <div class="tpl-hint">提示：可自由微调后再保存；{{变量}} 占位符会原样保留，应用时按项目语境替换。</div>
+        <div class="tpl-hint">提示：可自由微调后再保存；{{变量}} 占位符会原样保留。</div>
         <div id="template-extract-error" class="model-test-result" style="min-height: 0;"></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-link" style="color: #606266;" type="button" onclick="closeTemplateExtractModal()">取消</button>
-        <button class="btn btn-primary" id="template-save-btn" type="button" onclick="saveTemplateFromModal()">💾 保存模板</button>
+        <button class="btn-plain" id="template-save-btn" type="button" onclick="saveTemplateFromModal()">💾 保存模板</button>
       </div>
     </div>
   </div>
@@ -1411,7 +1624,7 @@
       <div class="modal-body tpl-body">
         <input type="text" id="template-search" class="form-input tpl-search" placeholder="🔍 按模板名称搜索..." autocomplete="off" oninput="renderTemplateList()" />
         <div class="tpl-list" id="template-list"></div>
-        <div class="tpl-hint">点击「应用」会将模板内容填入当前 L0 / L1 / L3；应用后可用「↩️ 恢复初始模板」回退。</div>
+        <div class="tpl-hint">点击「应用」会将模板内容填入当前系统提示词；应用后可用「↩️ 恢复初始模板」回退。</div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-link" style="color: #606266;" type="button" onclick="closeTemplateApplyModal()">关闭</button>
@@ -1462,8 +1675,36 @@
       }
     }
 
+    /**
+     * v1.61 修复：严格 JSON 请求。
+     * 与 safeFetchJson 不同，这里在「网络异常 / HTTP 非 2xx / body.success===false」时
+     * 直接抛出带 HTTP 状态与后端 error 的真实 Error，杜绝静默吞错（供知识库导入使用）。
+     */
+    async function fetchJsonStrict(url, options = {}) {
+      let res;
+      try {
+        res = await fetch(url, options);
+      } catch (netErr) {
+        throw new Error(`网络请求异常：${netErr.message}`);
+      }
+      const text = await res.text();
+      let body = null;
+      if (text) {
+        try { body = JSON.parse(text); }
+        catch { throw new Error(`接口返回非 JSON（HTTP ${res.status} ${res.statusText}）`); }
+      }
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} ${(body && body.error) || res.statusText}`);
+      }
+      if (!body || body.success === false) {
+        throw new Error((body && body.error) || `请求失败（HTTP ${res.status}）`);
+      }
+      return body;
+    }
+
     // --- 数据获取与左侧渲染 ---
     async function fetchData() {
+      updateKbRightPanel(getKbImportMode()); // 初始化右侧提示与默认导入模式（raw）一致
       try {
         const cJson = await safeFetchJson(`/api/companies`);
         const pJson = await safeFetchJson(`/api/projects`);
@@ -1472,6 +1713,8 @@
           renderTree();
         }
       } catch (e) { console.error(e); }
+      // 模块四：初始化时恢复 localStorage 持久化的测试用例并同步按钮显隐
+      try { restoreTestCasesOnInit(); } catch (e) { console.error(e); }
     }
 
     /** 左侧树实时搜索：读取 #tree-search 关键字（小写 trim） */
@@ -1530,11 +1773,11 @@
     }
     window.switchTab = switchTab;
 
-    /** Tab 1 重新显示后强制刷新双层高亮布局 */
+    /** Tab 1 重新显示后强制刷新高亮布局 */
     function refreshEditorLayoutAfterTabShow() {
-      ['L0', 'L1', 'L3'].forEach((layer) => {
-        const textarea = document.getElementById('val-' + layer);
-        const mirror = document.getElementById('mirror-' + layer);
+      ['SYSTEM'].forEach((layer) => {
+        const textarea = document.getElementById('val-' + layer.toLowerCase());
+        const mirror = document.getElementById('mirror-' + layer.toLowerCase());
         if (!textarea || !mirror) return;
         textarea.style.height = 'auto';
         textarea.style.height = textarea.scrollHeight + 'px';
@@ -1568,8 +1811,8 @@
         card.style.display = card.getAttribute('data-tab') === 'edit' ? '' : 'none';
       });
       setTabsEnabled(false);
-      ['L0', 'L1', 'L3'].forEach((layer) => {
-        const el = document.getElementById('val-' + layer);
+      ['SYSTEM'].forEach((layer) => {
+        const el = document.getElementById('val-' + layer.toLowerCase());
         if (el) el.addEventListener('input', () => saveEditorDrafts(activeProjectId));
       });
       // 审计日志面板 Esc 关闭（独立于其他弹窗，避免干扰）
@@ -1584,7 +1827,7 @@
     }
     window.initTabsAndHeader = initTabsAndHeader;
 
-    /** 顶部登录用户信息 / 剩余试用 / 退出登录 */
+    /** 顶部登录用户信息 / 退出登录（v1.60 已移除“剩余试用”组件） */
     async function loadCurrentUser() {
       try {
         const res = await fetch('/api/auth/me');
@@ -1592,12 +1835,6 @@
         const d = await res.json();
         if (!d || !d.success) return;
         currentUserInfo = d.user;
-        const badge = document.getElementById('trial-badge');
-        if (badge) {
-          const left = Math.max(0, 3 - Number(d.user.trial_count || 0));
-          const roleText = d.user.role === 'superadmin' ? '超管' : (d.user.role === 'teamadmin' ? '团管' : '');
-          badge.innerText = '剩余试用：' + left + '/3' + (roleText ? ' · ' + roleText : '');
-        }
         const auditBtn = document.getElementById('audit-log-btn');
         if (auditBtn) auditBtn.style.display = d.user.role === 'superadmin' ? 'inline-flex' : 'none';
       } catch (e) { /* 静默 */ }
@@ -1607,6 +1844,30 @@
       window.location.href = '/login.html';
     }
     window.logoutSession = logoutSession;
+
+    // ---------- 模块四：功能导航下拉（点击展开/收起，点击选项或空白处自动收起） ----------
+    function setBrandDropdownOpen(dd, open) {
+      dd.classList.toggle('open', open);
+      const trigger = dd.querySelector('.brand-dropdown-trigger');
+      if (trigger) trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    function toggleBrandDropdown(ev) {
+      ev.stopPropagation();
+      const dd = ev.currentTarget.closest('.brand-dropdown');
+      setBrandDropdownOpen(dd, !dd.classList.contains('open'));
+    }
+    function closeBrandDropdown() {
+      document.querySelectorAll('.brand-dropdown.open').forEach((dd) => setBrandDropdownOpen(dd, false));
+    }
+    window.toggleBrandDropdown = toggleBrandDropdown;
+    window.closeBrandDropdown = closeBrandDropdown;
+    // 点击 .brand-dropdown 之外的空白区域即收起；Esc 键同样收起
+    document.addEventListener('click', (ev) => {
+      if (!ev.target.closest('.brand-dropdown')) closeBrandDropdown();
+    });
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') closeBrandDropdown();
+    });
 
     // ---------- V5 终极 QA F3：审计日志（黑匣子）面板 ----------
     function openAuditLogPanel() {
@@ -1656,7 +1917,7 @@
         }).join('');
       } catch (e) {
         if (status) status.innerText = '';
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#dc2626;">' + escapeHtml(e.message || '加载失败') + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#c0392b;">' + escapeHtml(e.message || '加载失败') + '</td></tr>';
       }
     }
     window.openAuditLogPanel = openAuditLogPanel;
@@ -1670,11 +1931,11 @@
       document.body.classList.toggle('public-readonly', isPublic);
       const badge = document.getElementById('public-badge');
       if (badge) badge.style.display = isPublic ? 'inline-flex' : 'none';
-      ['val-L0', 'val-L1', 'val-L3'].forEach((id) => {
+      ['val-system'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.readOnly = isPublic;
       });
-      ['generate-snapshot-btn', 'ctx-extract-btn', 'clean-format-btn', 'polish-L0', 'polish-L1', 'polish-L3'].forEach((id) => {
+      ['generate-snapshot-btn', 'clean-format-btn', 'polish-system'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.disabled = isPublic;
       });
@@ -1694,9 +1955,7 @@
       if (!projectId) return;
       try {
         const drafts = {
-          L0: document.getElementById('val-L0').value,
-          L1: document.getElementById('val-L1').value,
-          L3: document.getElementById('val-L3').value,
+          SYSTEM: document.getElementById('val-system').value,
         };
         localStorage.setItem('ps_draft_' + projectId, JSON.stringify(drafts));
       } catch (e) { /* storage 不可用时忽略 */ }
@@ -1708,7 +1967,7 @@
         if (!raw) return false;
         const drafts = JSON.parse(raw);
         if (!drafts || typeof drafts !== 'object') return false;
-        setEditorLayerValues({ L0: drafts.L0 || '', L1: drafts.L1 || '', L3: drafts.L3 || '' });
+        setEditorLayerValues({ SYSTEM: drafts.SYSTEM || '' });
         return true;
       } catch (e) { return false; }
     }
@@ -1871,7 +2130,13 @@
       // 切换项目前先备份上一项目草稿（localStorage 实时草稿，防丢）
       if (activeProjectId && activeProjectId !== id) saveEditorDrafts(activeProjectId);
       activeProjectId = id;
-      document.getElementById('current-name').innerText = name;
+      // 未显式传 name 时，从已加载项目数据中查找，避免显示 undefined
+      let displayName = name;
+      if (displayName == null || displayName === '') {
+        const matched = findProjectById(id);
+        displayName = matched ? matched.name : id;
+      }
+      document.getElementById('current-name').innerText = displayName;
       // 清除内联 display，让 Tab3 的 CSS grid 双栏布局生效
       document.getElementById('main-content').style.display = '';
       document.getElementById('empty-state').style.display = 'none';
@@ -1883,16 +2148,18 @@
       
       // 选中项目后，清空旧数据并重新拉取该项目的知识库和快照
       document.getElementById('kb-list-container').innerHTML = '<div class="kb-empty">加载中...</div>';
-      document.getElementById('snapshot-tbody').innerHTML = '<tr><td colspan="4" style="text-align: center; color: #909399;">加载中...</td></tr>';
+      document.getElementById('snapshot-tbody').innerHTML = '<tr><td colspan="6" style="text-align: center; color: #909399;">加载中...</td></tr>';
+      // v1.60 重构：切换项目重置快照分页到第 1 页并清空跨页选中
+      currentSnapshotPage = 1;
+      selectedSnapshotIds = [];
       // 模块三：清空搜索关键字 / 缓存 / 冲突横幅 / 导入进度
       currentKbData = [];
       const kbSearchEl = document.getElementById('kb-search');
       if (kbSearchEl) kbSearchEl.value = '';
       hideKbConflictBanner();
       setKbImportStatus('');
-      // 模块四：重置多轮对话与批量回归状态（替换原单轮评测的 eval-result 重置）
+      // 模块四：重置多轮对话状态
       resetChatState();
-      resetBatchState();
       // 模块五：切换项目使在途的快照回滚失效，避免旧项目 layers 写入新项目编辑器
       rollbackSeq++;
       currentKbPairs = [];
@@ -1931,9 +2198,9 @@
         return;
       }
       snapshotPending = true;
-      const l0 = document.getElementById('val-L0').value;
-      const l1 = document.getElementById('val-L1').value;
-      const l3 = document.getElementById('val-L3').value;
+      const systemPrompt = document.getElementById('val-system').value;
+      const remarkInput = document.getElementById('snapshot-remark-input');
+      const remarkText = remarkInput ? remarkInput.value.trim() : '';
 
       try {
         const d = await safeFetchJson(`/api/snapshots/create`, {
@@ -1941,16 +2208,16 @@
           body: JSON.stringify({
             project_id: activeProjectId,
             layers: [
-              { layer: "L0", name: "全局安全", content: l0 },
-              { layer: "L1", name: "语音基座", content: l1 },
-              { layer: "L3", name: "项目话术", content: l3 }
+              { layer: "SYSTEM", name: "系统提示词", content: systemPrompt }
             ],
             evalData: { user_query: '测试', standard_answer: '测试', bot_reply: '<speak>测试</speak>' },
-            context_data: getContextDataForSnapshot()
+            context_data: getContextDataForSnapshot(),
+            remark: remarkText
           })
         });
         if (d.success) {
           showToast(`快照生成成功！`);
+          if (remarkInput) remarkInput.value = '';
           loadSnapshots(); // 刷新表格
         } else {
           showToast('生成失败: ' + d.error);
@@ -1983,14 +2250,14 @@
     function updateKbSelectionUI() {
       const countEl = document.getElementById('kb-selected-count');
       const batchBtn = document.getElementById('kb-batch-delete-btn');
-      const selectAll = document.getElementById('kb-select-all');
+      const selectAll = document.getElementById('select-all-kb');
       if (countEl) countEl.innerText = '已选 ' + selectedKbIds.length + ' 项';
       if (batchBtn) batchBtn.disabled = selectedKbIds.length === 0 || window.isPublicProject;
       if (selectAll) {
-        const visibleIds = Array.from(document.querySelectorAll('#kb-list-container .kb-item-check')).map((cb) => cb.getAttribute('data-id'));
+        const visibleIds = Array.from(document.querySelectorAll('#kb-list-container .kb-item-checkbox')).map((cb) => cb.getAttribute('data-id'));
         selectAll.checked = visibleIds.length > 0 && visibleIds.every((id) => selectedKbIds.indexOf(id) >= 0);
       }
-      document.querySelectorAll('#kb-list-container .kb-item-check').forEach((cb) => {
+      document.querySelectorAll('#kb-list-container .kb-item-checkbox').forEach((cb) => {
         cb.checked = selectedKbIds.indexOf(cb.getAttribute('data-id')) >= 0;
         const item = cb.closest('.kb-item');
         if (item) item.classList.toggle('tree-item-selected', cb.checked);
@@ -2003,7 +2270,7 @@
       updateKbSelectionUI();
     }
     function toggleSelectAllKb(checked) {
-      const visibleIds = Array.from(document.querySelectorAll('#kb-list-container .kb-item-check')).map((cb) => cb.getAttribute('data-id'));
+      const visibleIds = Array.from(document.querySelectorAll('#kb-list-container .kb-item-checkbox')).map((cb) => cb.getAttribute('data-id'));
       if (checked) {
         visibleIds.forEach((id) => { if (selectedKbIds.indexOf(id) === -1) selectedKbIds.push(id); });
       } else {
@@ -2090,20 +2357,54 @@
       container.innerHTML = matched.map((item) => `
         <div class="kb-item">
           <label class="kb-item-check-wrap" onclick="event.stopPropagation()">
-            <input type="checkbox" class="kb-item-check" data-id="${escapeHtml(String(item.id))}" ${selectedKbIds.indexOf(item.id) >= 0 ? 'checked' : ''} onchange="toggleKbSelection(this.getAttribute('data-id'))" aria-label="选择知识条目" />
+            <input type="checkbox" class="kb-item-checkbox" data-id="${escapeHtml(String(item.id))}" style="display: inline-block; appearance: auto; -webkit-appearance: auto;" ${selectedKbIds.indexOf(item.id) >= 0 ? 'checked' : ''} onchange="toggleKbSelection(this.getAttribute('data-id'))" aria-label="选择知识条目" />
           </label>
           <div class="kb-item-main">
-            <div class="kb-q">Q: ${escapeHtml(item.question)}</div>
-            <div class="kb-a">A: ${escapeHtml(item.answer)}</div>
+            ${item.structure_mode === 'raw'
+              ? `<div class="kb-q kb-q-raw-title">${escapeHtml(item.question)}</div>`
+              : `<div class="kb-q">Q: ${escapeHtml(item.question)}</div>`}
+            <div class="kb-a kb-md-body" data-kb-id="${escapeHtml(String(item.id))}"></div>
           </div>
           <div class="kb-item-toolbar">
             <button class="btn btn-link" onclick='editKb(${escapeHtml(JSON.stringify(String(item.id)))})'>编辑</button>
-            <button class="btn btn-link" style="color: var(--danger);" onclick='deleteKb(${escapeHtml(JSON.stringify(String(item.id)))})'>删除</button>
+            <button class="btn btn-link btn-danger-outline" onclick='deleteKb(${escapeHtml(JSON.stringify(String(item.id)))})'>删除</button>
           </div>
         </div>`).join('');
+      // v1.61：对每个挂载点做 marked + DOMPurify 安全渲染（带降级兜底），绝不直接塞未净化 HTML
+      container.querySelectorAll('.kb-md-body').forEach((el) => {
+        const id = el.getAttribute('data-kb-id');
+        const item = (currentKbData || []).find((row) => String(row.id) === String(id));
+        renderMarkdownInto(el, item ? item.answer : '');
+      });
       updateKbSelectionUI();
     }
     window.renderKbList = renderKbList;
+
+    /** v1.61：安全 Markdown 渲染：marked.parse -> DOMPurify.sanitize -> innerHTML；任何异常降级纯文本防白屏 */
+    function renderMarkdownInto(container, mdSource) {
+      if (!container) return;
+      const source = String(mdSource == null ? '' : mdSource);
+      try {
+        if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
+          container.innerText = source; // 库未加载的极端兜底
+          return;
+        }
+        const rawHtml = marked.parse(source);
+        const safeHtml = DOMPurify.sanitize(rawHtml);
+        container.innerHTML = safeHtml;
+        // 为每个表格包裹限高、可横向滚动的容器（overflow-x: auto 红线）
+        container.querySelectorAll('table').forEach((table) => {
+          const wrap = document.createElement('div');
+          wrap.className = 'kb-md-table-wrap';
+          table.parentNode.insertBefore(wrap, table);
+          wrap.appendChild(table);
+        });
+      } catch (e) {
+        console.error('Markdown 渲染失败，降级为纯文本', e);
+        container.innerText = source;
+      }
+    }
+    window.renderMarkdownInto = renderMarkdownInto;
 
     /** 规范化问题：trim + 空白折叠 + 去掉末尾 ? / ？ / 。 */
     function normalizeKbQuestion(text) {
@@ -2160,8 +2461,11 @@
       document.getElementById('modal-input-container').style.display = 'none';
       document.getElementById('modal-company-select-container').style.display = 'none';
       const confirmBtn = document.getElementById('modal-confirm-btn');
-      confirmBtn.className = 'btn btn-primary';
-      confirmBtn.style.background = 'var(--danger)';
+      confirmBtn.className = 'btn-plain';
+      confirmBtn.style.background = '#ffffff';
+      confirmBtn.style.color = '#c0392b';
+      confirmBtn.style.border = '1px solid rgba(192, 57, 43, 0.3)';
+      confirmBtn.style.boxShadow = 'none';
       modalCallback = () => closeModal();
       modal.style.display = 'flex';
     }
@@ -2194,8 +2498,45 @@
       const el = document.getElementById('kb-import-status');
       if (el) el.innerText = text || '';
     }
+    /** 当前导入模式：raw=保留原结构（默认）；qa=提取为 Q/A。由弹窗选择，持久在本次会话变量 */
+    let kbImportMode = 'raw';
+    function getKbImportMode() {
+      return kbImportMode === 'qa' ? 'qa' : 'raw';
+    }
+    function openKbImportModal() {
+      document.getElementById('kb-import-modal').style.display = 'flex';
+    }
+    function closeKbImportModal() {
+      document.getElementById('kb-import-modal').style.display = 'none';
+    }
+    /** 弹窗里选定模式：更新变量 → 联动右侧提示 → 关闭弹窗 → 打开文件选择 */
+    function chooseKbImportMode(mode) {
+      kbImportMode = mode === 'qa' ? 'qa' : 'raw';
+      updateKbRightPanel(kbImportMode);
+      closeKbImportModal();
+      const input = document.getElementById('kb-import-files');
+      if (input) input.click();
+    }
+    /** 按模式动态修改右侧“txt 解析入库”标题、提示与占位文本 */
+    function updateKbRightPanel(mode) {
+      const title = document.getElementById('kb-right-title');
+      const hint = document.getElementById('kb-right-hint');
+      const ta = document.getElementById('kb-text');
+      if (mode === 'raw') {
+        if (title) title.innerText = 'Markdown 智能分块入库';
+        if (hint) hint.innerText = '粘贴 Markdown 文本，按标题智能切分（不调用大模型），解析后点击「确认入库」。';
+        if (ta) ta.placeholder = '在此粘贴 Markdown 文本...';
+      } else {
+        if (title) title.innerText = 'txt 解析入库';
+        if (hint) hint.innerText = '粘贴 FAQ 文本（每段一问一答），由大模型解析后点击「确认入库」。';
+        if (ta) ta.placeholder = '在此粘贴 FAQ 文本...';
+      }
+    }
+    window.openKbImportModal = openKbImportModal;
+    window.closeKbImportModal = closeKbImportModal;
+    window.chooseKbImportMode = chooseKbImportMode;
 
-    /** 📥 批量导入 TXT：串行 file.text() → /api/kb/parse → /api/kb/save（不用任何外部库）
+    /** 📥 批量导入 txt：串行 file.text() → /api/kb/parse → /api/kb/save（不用任何外部库）
      *  竞态修复：开头捕获 projectIdAtImport，入库固定用该 id；每个 await 后校验项目未变，变则中止提示。 */
     async function handleKbImport(fileList) {
       const files = Array.from(fileList || []);
@@ -2214,29 +2555,47 @@
       let failedFiles = 0;
       let skippedFiles = 0;
       let aborted = false;
+      const errors = []; // v1.61：收集每个文件的真实错误，结束时用 alert 暴露，不再静默
       try {
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
           setKbImportStatus(`正在解析 ${i + 1}/${files.length}：${file.name}`);
           try {
-            const text = await file.text();
+            // v1.61：.md/.txt 直接读纯文本；doc/docx/xls/xlsx/pdf 先调后端 extract-text 提取纯文本
+            const ext = (file.name || '').toLowerCase().split('.').pop();
+            let text;
+            if (ext === 'txt' || ext === 'md' || ext === 'markdown') {
+              text = await file.text();
+            } else {
+              const base64 = await fileToBase64(file);
+              const extractRes = await fetchJsonStrict(`/api/kb/extract-text`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file_name: file.name, file_base64: base64 })
+              });
+              text = extractRes.raw_text || '';
+            }
             if (activeProjectId !== projectIdAtImport) { aborted = true; break; }
             if (!text || !text.trim()) { skippedFiles++; continue; } // 空文件跳过
-            const parsed = await safeFetchJson(`/api/kb/parse`, {
+            // 模块三：按导入模式路由——raw=本地 parse-markdown 智能分块（纯正则，不调大模型）；qa=旧 LLM 提取问答对
+            const importMode = getKbImportMode();
+            const endpoint = importMode === 'qa' ? '/api/kb/parse' : '/api/kb/parse-markdown';
+            const parsed = await fetchJsonStrict(endpoint, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ raw_text: text })
             });
             if (activeProjectId !== projectIdAtImport) { aborted = true; break; }
-            const pairs = parsed && parsed.success && Array.isArray(parsed.data) ? parsed.data : [];
-            if (pairs.length === 0) { failedFiles++; continue; }
-            const saved = await safeFetchJson(`/api/kb/save`, {
+            // 给每条 pair 打上结构标记，供后端入库与前端渲染区分
+            const pairs = (Array.isArray(parsed.data) ? parsed.data : []).map((p) => ({ ...p, structure_mode: importMode }));
+            if (pairs.length === 0) { failedFiles++; errors.push(`${file.name}：解析结果为空`); continue; }
+            const saved = await fetchJsonStrict(`/api/kb/save`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ project_id: projectIdAtImport, pairs }) // 固定写入发起导入时的项目
             });
             if (activeProjectId !== projectIdAtImport) { aborted = true; break; }
-            if (saved && saved.success) { successFiles++; totalPairs += pairs.length; } else { failedFiles++; }
+            successFiles++; totalPairs += pairs.length;
           } catch (e) {
             failedFiles++;
+            errors.push(`${file.name}：${(e && e.message) ? e.message : String(e)}`);
           }
         }
       } finally {
@@ -2252,9 +2611,45 @@
       if (failedFiles > 0) msg += `，失败 ${failedFiles} 个`;
       if (skippedFiles > 0) msg += `，跳过空文件 ${skippedFiles} 个`;
       showToast(msg);
+      // v1.61 修复：任何文件失败都用 alert 弹出真实错误（HTTP 状态/后端 error），严禁静默
+      if (errors.length > 0) {
+        alert("导入失败：" + errors.join("；"));
+      }
       loadKbList();
     }
     window.handleKbImport = handleKbImport;
+
+    /** 读取文件为 Base64（不含 data: 前缀），用于二进制文档上传解析 */
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || '');
+          const commaIdx = result.indexOf(',');
+          resolve(commaIdx >= 0 ? result.slice(commaIdx + 1) : result);
+        };
+        reader.onerror = () => reject(reader.error || new Error('文件读取失败'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    /** v1.60：知识库导出（浏览器直接下载后端生成的带 BOM 文件） */
+    function exportKb(format) {
+      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
+      const safeFormat = format === 'md' ? 'md' : 'txt';
+      const url = `/api/kb/export?project_id=${encodeURIComponent(activeProjectId)}&format=${safeFormat}`;
+      try {
+        const a = document.createElement('a');
+        a.href = url;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } catch (e) {
+        window.open(url);
+      }
+    }
+    window.exportKb = exportKb;
 
     /** 删除单条知识（复用 #global-modal 确认弹窗，替代原生 confirm；刷新列表时保留搜索关键字） */
     function deleteKb(id) {
@@ -2272,8 +2667,11 @@
       document.getElementById('modal-input-container').style.display = 'none';
       document.getElementById('modal-company-select-container').style.display = 'none';
       const confirmBtn = document.getElementById('modal-confirm-btn');
-      confirmBtn.className = 'btn btn-primary';
-      confirmBtn.style.background = 'var(--danger)';
+      confirmBtn.className = 'btn-plain';
+      confirmBtn.style.background = '#ffffff';
+      confirmBtn.style.color = '#c0392b';
+      confirmBtn.style.border = '1px solid rgba(192, 57, 43, 0.3)';
+      confirmBtn.style.boxShadow = 'none';
       modal.style.display = 'flex';
       modalCallback = async () => {
         try {
@@ -2419,12 +2817,10 @@
     let chatPending = false;
     let chatSeq = 0; // 请求序号：切项目 / 重置时递增，用于丢弃在途响应，防跨项目污染
 
-    /** 当前 L0/L1/L3 层数据（与生成快照的 layers 结构一致） */
+    /** v1.60：当前系统提示词（与生成快照的 layers 结构一致） */
     function getCurrentLayers() {
       return [
-        { layer: 'L0', name: '全局安全', content: document.getElementById('val-L0').value },
-        { layer: 'L1', name: '语音基座', content: document.getElementById('val-L1').value },
-        { layer: 'L3', name: '项目话术', content: document.getElementById('val-L3').value }
+        { layer: 'SYSTEM', name: '系统提示词', content: document.getElementById('val-system').value }
       ];
     }
 
@@ -2476,7 +2872,7 @@
     }
     window.clearChat = clearChat;
 
-    /** 发送一条消息：组装当前 L0/L1/L3 + 语境 + 历史 → POST /api/chat/reply
+    /** 发送一条消息：组装当前系统提示词 + 历史 → POST /api/chat/reply
      *  竞态修复：chatSeq + projectId 双守卫，切项目/重置后在途响应一律丢弃。 */
     async function sendChatMessage() {
       if (!activeProjectId) { showToast('请先选择一个项目'); return; }
@@ -2534,252 +2930,12 @@
     }
     window.sendChatMessage = sendChatMessage;
 
-    // ---------- 模块四：批处理回归测试 ----------
-    let batchCases = [];
-    let batchRunning = false;
-    let batchLastReport = null;
-    let batchRunSeq = 0; // 运行序号：resetBatchState 递增，使在途旧循环立即失效
-
-    /** 重置批量测试状态与报告（切换项目 / 重新选文件时调用） */
-    function resetBatchState() {
-      batchRunSeq++; // 使在途的批量运行失效（运行中切项目 / 重新选文件时调用）
-      batchCases = [];
-      batchRunning = false;
-      batchLastReport = null;
-      const fileInput = document.getElementById('batch-file');
-      if (fileInput) fileInput.value = '';
-      const nameEl = document.getElementById('batch-file-name');
-      if (nameEl) nameEl.innerText = '尚未选择文件';
-      const runBtn = document.getElementById('batch-run-btn');
-      if (runBtn) { runBtn.disabled = true; runBtn.innerText = '▶ 开始回归测试'; }
-      const selectBtn = document.getElementById('batch-select-btn');
-      if (selectBtn) selectBtn.disabled = false;
-      const prog = document.getElementById('batch-progress');
-      if (prog) prog.style.display = 'none';
-      const fill = document.getElementById('batch-progress-bar');
-      if (fill) fill.style.width = '0%';
-      const txt = document.getElementById('batch-progress-text');
-      if (txt) txt.innerText = '已完成 0/0（0%）';
-      const report = document.getElementById('batch-report');
-      if (report) { report.style.display = 'none'; report.innerHTML = ''; }
-    }
-    window.resetBatchState = resetBatchState;
-
-    /** 兼容多种字段名解析单条用例；非法返回 null */
-    function normalizeBatchCase(raw) {
-      if (!raw || typeof raw !== 'object') return null;
-      const query = raw.user_query != null ? raw.user_query : (raw.question != null ? raw.question : raw.query);
-      const standard = raw.standard_answer != null ? raw.standard_answer : (raw.answer != null ? raw.answer : raw.expected);
-      const reply = raw.bot_reply != null ? raw.bot_reply : (raw.reply != null ? raw.reply : '');
-      if (typeof query !== 'string' || !query.trim()) return null;
-      if (typeof standard !== 'string' || !standard.trim()) return null;
-      return {
-        no: 1,
-        user_query: query.trim(),
-        standard_answer: standard.trim(),
-        bot_reply: typeof reply === 'string' ? reply.trim() : ''
-      };
-    }
-
-    /** 选择 JSON 用例文件：解析 → 校验数组 → 跳过非法条目 → 启用开始按钮 */
-    async function handleBatchFile(fileList) {
-      const files = Array.from(fileList || []);
-      const file = files[0];
-      const fileInput = document.getElementById('batch-file');
-      if (!file) return;
-      if (batchRunning) {
-        // 运行中禁止重选文件：清空本次选择并提示
-        if (fileInput) fileInput.value = '';
-        showToast('批量测试运行中，请等待结束后再选择文件');
-        return;
-      }
-      resetBatchState();
-      try {
-        const text = await file.text();
-        let parsed;
-        try { parsed = JSON.parse(text); } catch (e) { throw new Error('JSON 解析失败：' + e.message); }
-        if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('JSON 必须是非空数组');
-        const cases = [];
-        let skipped = 0;
-        parsed.forEach((item) => {
-          const c = normalizeBatchCase(item);
-          if (c) { c.no = cases.length + 1; cases.push(c); } else { skipped++; }
-        });
-        if (cases.length === 0) throw new Error('没有合法用例（需包含 user_query 与 standard_answer）');
-        batchCases = cases;
-        batchLastReport = null;
-        const nameEl = document.getElementById('batch-file-name');
-        if (nameEl) nameEl.innerText = `${file.name} · ${cases.length} 条用例` + (skipped ? `（跳过 ${skipped} 条非法）` : '');
-        const runBtn = document.getElementById('batch-run-btn');
-        if (runBtn) runBtn.disabled = false;
-        showToast(`已加载 ${cases.length} 条用例` + (skipped ? `，跳过 ${skipped} 条非法条目` : ''));
-      } catch (e) {
-        if (fileInput) fileInput.value = '';
-        resetBatchState();
-        showToast('加载失败：' + ((e && e.message) || e));
-      }
-    }
-    window.handleBatchFile = handleBatchFile;
-
-    /** 渲染批量回归报告（通过率 + 失败用例明细，全部 HTML 转义） */
-    function renderBatchReport(report) {
-      const el = document.getElementById('batch-report');
-      if (!el || !report) return;
-      const total = report.total || 0;
-      const passed = report.passed || 0;
-      const failed = report.failed || 0;
-      const rate = total ? Math.round((passed / total) * 100) : 0;
-      let html = `<div class="batch-rate ${failed === 0 ? 'pass' : 'fail'}">通过率：${passed}/${total}（${rate}%）</div>`;
-      if (failed === 0) {
-        html += '<div class="batch-all-pass">🎉 全部用例通过！</div>';
-      } else {
-        html += (report.failures || []).map((f) => {
-          const reasons = [];
-          if (f.error) reasons.push(`接口错误：${escapeHtml(f.error)}`);
-          if (f.l1_errors && f.l1_errors.length) reasons.push(`L1 违规：${escapeHtml(f.l1_errors.join('；'))}`);
-          if (f.l2_violations && f.l2_violations.length) reasons.push(`L2 违规：${escapeHtml(f.l2_violations.join('；'))}`);
-          if (f.l2_comment) reasons.push(`点评：${escapeHtml(f.l2_comment)}`);
-          if (reasons.length === 0) reasons.push('综合得分未达 4 分或未通过判定');
-          return `<div class="batch-fail-item">
-            <div class="batch-fail-title">#${Number(f.no) || 0} 未通过（score: ${Number.isFinite(Number(f.score)) ? Number(f.score) : 0}）</div>
-            <div><span class="batch-k">问题：</span>${escapeHtml(f.user_query)}</div>
-            <div><span class="batch-k">标准答案：</span>${escapeHtml(f.standard_answer)}</div>
-            <div><span class="batch-k">实际回复：</span>${escapeHtml(f.bot_reply)}</div>
-            <div><span class="batch-k">扣分原因：</span>${reasons.join('<br>')}</div>
-          </div>`;
-        }).join('');
-      }
-      el.innerHTML = html;
-      el.style.display = 'block';
-    }
-    window.renderBatchReport = renderBatchReport;
-
-    /** 🧪 批处理回归：手动 for 顺序循环（禁止外部测试库/并发框架），逐条更新进度条
-     *  竞态修复：运行时 cases 快照 + runId 失效机制 + 整段 try/finally 收尾 + 运行中禁用选择文件。 */
-    async function runBatchRegression() {
-      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
-      if (!Array.isArray(batchCases) || batchCases.length === 0) { showToast('请先选择用例 JSON 文件'); return; }
-      if (batchRunning) return;
-      const projectIdAtRun = activeProjectId;
-      const cases = batchCases.slice(); // 运行时快照：运行中 resetBatchState 清空 batchCases 也不影响本次循环
-      const total = cases.length;
-      const runId = ++batchRunSeq;
-      batchRunning = true;
-      const runBtn = document.getElementById('batch-run-btn');
-      const selectBtn = document.getElementById('batch-select-btn');
-      const prog = document.getElementById('batch-progress');
-      const fill = document.getElementById('batch-progress-bar');
-      const progressText = document.getElementById('batch-progress-text');
-      const reportEl = document.getElementById('batch-report');
-      if (runBtn) { runBtn.disabled = true; runBtn.innerText = '测试中...'; }
-      if (selectBtn) selectBtn.disabled = true; // 运行中禁止重选文件
-      if (prog) prog.style.display = 'block';
-      if (fill) fill.style.width = '0%';
-      if (progressText) progressText.innerText = `已完成 0/${total}（0%）`;
-      if (reportEl) { reportEl.style.display = 'none'; reportEl.innerHTML = ''; }
-
-      let passed = 0;
-      const failures = [];
-      const layers = getCurrentLayers();
-      const contextData = getContextDataForSnapshot();
-      let aborted = false;
-      let reportData = null;
-
-      try {
-        for (let i = 0; i < total; i++) {
-          // 每轮开头校验：运行中切换项目 / 被重置 → 立即中止，避免 item undefined
-          if (runId !== batchRunSeq || activeProjectId !== projectIdAtRun) { aborted = true; break; }
-          const item = cases[i];
-          if (!item) break;
-          let botReply = '';
-          let evalResult = null;
-          let errorMsg = '';
-          try {
-            botReply = item.bot_reply || '';
-            // 1) 缺省 bot_reply 时先调对话接口自动生成回复
-            if (!botReply) {
-              const chat = await safeFetchJson(`/api/chat/reply`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  project_id: projectIdAtRun,
-                  layers,
-                  context_data: contextData,
-                  messages: [{ role: 'user', content: item.user_query }]
-                })
-              });
-              if (runId !== batchRunSeq || activeProjectId !== projectIdAtRun) { aborted = true; break; }
-              if (chat && chat.success && typeof chat.reply === 'string') botReply = chat.reply;
-              else throw new Error((chat && (chat.error || chat.message)) || '自动生成回复失败');
-            }
-            // 2) 调评测接口
-            const d = await safeFetchJson(`/api/eval/run`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ user_query: item.user_query, standard_answer: item.standard_answer, bot_reply: botReply })
-            });
-            if (runId !== batchRunSeq || activeProjectId !== projectIdAtRun) { aborted = true; break; }
-            if (!d || !d.success) throw new Error((d && (d.error || d.message)) || '评测接口返回失败');
-            evalResult = d;
-          } catch (e) {
-            if (aborted) break;
-            errorMsg = (e && e.message) || String(e); // 单条异常计入 failures，不中断循环
-          }
-          if (aborted || runId !== batchRunSeq || activeProjectId !== projectIdAtRun) { aborted = true; break; }
-
-          const l1 = evalResult && evalResult.l1 ? evalResult.l1 : null;
-          const l2 = evalResult && evalResult.l2 ? evalResult.l2 : null;
-          const score = l2 && l2.score != null ? Number(l2.score) : 0;
-          // 3) 判定：L1 通过 && L2 通过 && 得分 >= 4
-          const isPass = !!(l1 && l1.pass === true && l2 && l2.pass === true && score >= 4);
-          if (isPass) {
-            passed++;
-          } else {
-            failures.push({
-              no: item.no,
-              user_query: item.user_query,
-              standard_answer: item.standard_answer,
-              bot_reply: botReply,
-              score: Number.isFinite(score) ? score : 0,
-              l1_errors: l1 && Array.isArray(l1.errors) ? l1.errors : [],
-              l2_violations: l2 && Array.isArray(l2.violations) ? l2.violations : [],
-              l2_comment: (l2 && l2.comment) || '',
-              error: errorMsg
-            });
-          }
-
-          // 4) 更新进度
-          const done = i + 1;
-          const pct = Math.round((done / total) * 100);
-          if (fill) fill.style.width = pct + '%';
-          if (progressText) progressText.innerText = `已完成 ${done}/${total}（${pct}%）`;
-          await new Promise((r) => setTimeout(r, 0)); // 让出主线程，确保进度条与文案渲染
-        }
-        if (!aborted && runId === batchRunSeq && activeProjectId === projectIdAtRun) {
-          reportData = { total, passed, failed: failures.length, failures, allPass: failures.length === 0 };
-        }
-      } finally {
-        // 正常结束 / 中止 / 异常都收尾；仅当本次运行仍是最新运行时才恢复按钮与写报告，
-        // 避免旧循环把新项目（已被 resetBatchState 重置）的 UI 状态改坏
-        if (runId === batchRunSeq) {
-          batchRunning = false;
-          if (runBtn) { runBtn.disabled = false; runBtn.innerText = '▶ 开始回归测试'; }
-          if (selectBtn) selectBtn.disabled = false;
-          if (reportData) {
-            batchLastReport = reportData;
-            renderBatchReport(reportData);
-          }
-        }
-      }
-      if (aborted || runId !== batchRunSeq) {
-        showToast('批量测试已中止（项目已切换或状态已重置）');
-        return;
-      }
-      showToast(`回归测试完成：通过 ${passed}/${total}`);
-    }
-    window.runBatchRegression = runBatchRegression;
-
     // ==================== V3.0 阶段四：AI 生成「刁钻测试题」（红蓝对抗出题机） ====================
-    let generatedQuestions = [];
+    let currentTestCases = [];      // 页面级用例数组（导出/回归/清除共用），模块四作用域红线
     let generatingQuestions = false;
+    let isAborted = false;          // 回归中止标志：每次开始前必须重置为 false
+    let isRunningRegression = false; // 回归进行中标志（防重入）
+    const NL_STORAGE_KEY = 'nl_test_cases';
 
     /** 稳健解析题目数组：已知字段 → 正则 /\[[\s\S]*\]/ 提取 JSON.parse → /\{[\s\S]*\}/ 兜底；失败返回 null（绝不白屏） */
     function parseGeneratedQuestionsPayload(payload) {
@@ -2833,10 +2989,16 @@
       const hint = document.getElementById('gen-questions-hint');
       if (!container) return;
       container.innerHTML = '';
-      const questions = Array.isArray(generatedQuestions) ? generatedQuestions : [];
-      if (actions) actions.style.display = questions.length > 0 ? 'flex' : 'none';
-      if (hint) hint.innerText = questions.length > 0 ? `已生成 ${questions.length} 道刁钻测试题，可一键填入批量回归` : '';
-      if (questions.length === 0) return;
+      const questions = Array.isArray(currentTestCases) ? currentTestCases : [];
+      const hasCases = questions.length > 0;
+      if (actions) actions.style.display = hasCases ? 'flex' : 'none';
+      // 模块三/四：有用例时隐藏「AI生成」按钮，无则显示；操作组（导出/回归/清除）反向显隐
+      const genBtn = document.getElementById('gen-questions-btn');
+      const genToolbar = document.querySelector('.gen-question-toolbar');
+      if (genBtn) genBtn.style.display = hasCases ? 'none' : '';
+      if (genToolbar) genToolbar.style.display = hasCases ? 'none' : '';
+      if (hint) hint.innerText = hasCases ? `已生成 ${questions.length} 道刁钻测试题，可一键填入对话` : '';
+      if (!hasCases) return;
       questions.forEach((q, index) => {
         const card = document.createElement('div');
         card.className = 'gen-q-card';
@@ -2854,12 +3016,44 @@
           rRow.innerHTML = `<span class="gen-q-k">参考回复：</span>${escapeHtml(q.bot_reply)}`;
           card.appendChild(rRow);
         }
+        // 每条用例独立的「填入对话」按钮
+        const btnRow = document.createElement('div');
+        const fillBtn = document.createElement('button');
+        fillBtn.type = 'button';
+        fillBtn.className = 'gen-q-fill-btn';
+        fillBtn.innerText = '👉 填入对话';
+        fillBtn.onclick = function() { fillQuestionToChat(index); };
+        btnRow.appendChild(fillBtn);
+        card.appendChild(btnRow);
         container.appendChild(card);
       });
     }
     window.renderGeneratedQuestions = renderGeneratedQuestions;
 
-    /** ✨ AI 生成刁钻测试题：POST /api/eval/generate_questions {project_id, count:5}，loading/禁用 */
+    /** 把指定用例填入 chat-input 并立即触发发送（不塞进输入框停留） */
+    function fillQuestionToChat(index) {
+      const questions = Array.isArray(currentTestCases) ? currentTestCases : [];
+      const q = questions[index];
+      if (!q) { showToast('用例不存在'); return; }
+      if (chatPending) { showToast('正在等待助手回复，请稍候'); return; }
+      const input = document.getElementById('chat-input');
+      if (!input) return;
+      input.value = q.user_query;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      sendChatMessage();
+    }
+    window.fillQuestionToChat = fillQuestionToChat;
+
+    /** 出题失败统一 Toast：识别无 Key 场景；页面不再写红字 */
+    function toastGenError(msg) {
+      if (msg && /api\s*key|密钥|未配置|没有可用|模型路由/i.test(msg)) {
+        showToast('⚠️ 请先在右上角 ⚙️ 设置中配置 API Key');
+      } else {
+        showToast('生成失败，请检查网络或 API Key');
+      }
+    }
+
+    /** ✨ AI 生成刁钻测试题：POST /api/eval/generate_questions {project_id, count:15}，loading/禁用 */
     async function generateAdversarialQuestions() {
       if (generatingQuestions) return;
       if (!activeProjectId) { showToast('请先选择一个项目'); return; }
@@ -2871,110 +3065,549 @@
       try {
         const d = await safeFetchJson('/api/eval/generate_questions', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project_id: activeProjectId, count: 5 })
+          body: JSON.stringify({ project_id: activeProjectId, count: 15 })
         });
         if (!d || !d.success) {
-          const msg = (d && (d.error || d.message)) || 'AI 出题失败';
-          generatedQuestions = [];
+          const msg = (d && (d.error || d.message)) || '生成失败';
+          currentTestCases = [];
           renderGeneratedQuestions();
-          if (statusEl) statusEl.innerText = msg;
-          showToast(msg);
+          if (statusEl) statusEl.innerText = '';   // 清除红字，改 Toast
+          toastGenError(msg);
           return;
         }
         const raw = d.data || d.questions || d;
         const parsed = parseGeneratedQuestionsPayload(raw);
         const normalized = Array.isArray(parsed) ? parsed.map(normalizeGeneratedQuestion).filter(Boolean) : [];
         if (normalized.length === 0) {
-          generatedQuestions = [];
+          currentTestCases = [];
           renderGeneratedQuestions();
-          if (statusEl) statusEl.innerText = 'AI 返回格式无法解析';
-          showToast('AI 返回格式无法解析为测试题（已安全兜底，未白屏）');
+          if (statusEl) statusEl.innerText = '';
+          showToast('生成失败，请检查网络或 API Key');
           return;
         }
-        generatedQuestions = normalized;
+        currentTestCases = normalized;
+        persistTestCases();              // 模块四：生成成功立刻持久化
         renderGeneratedQuestions();
         if (statusEl) statusEl.innerText = `已生成 ${normalized.length} 道刁钻测试题`;
         showToast(`已生成 ${normalized.length} 道刁钻测试题`);
       } catch (e) {
-        generatedQuestions = [];
+        currentTestCases = [];
         renderGeneratedQuestions();
-        const msg = (e && e.message) || 'AI 出题失败';
-        if (statusEl) statusEl.innerText = msg;
-        showToast(msg);
+        const msg = (e && e.message) || '生成失败';
+        if (statusEl) statusEl.innerText = '';
+        toastGenError(msg);
       } finally {
         generatingQuestions = false;
-        if (btn) { btn.disabled = false; btn.innerText = '✨ AI 生成刁钻测试题'; }
+        if (btn) { btn.disabled = false; btn.innerText = 'AI 生成测试用例'; }
       }
     }
     window.generateAdversarialQuestions = generateAdversarialQuestions;
 
-    /** 📥 把 AI 生成题目转换为 batchCases 并填入批量回归（可直接点开始回归测试） */
-    function fillBatchCasesFromQuestions() {
-      const questions = Array.isArray(generatedQuestions) ? generatedQuestions : [];
-      if (questions.length === 0) { showToast('请先生成测试题'); return; }
-      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
-      const cases = questions.map((q, index) => ({
-        no: index + 1,
-        user_query: q.user_query,
-        standard_answer: q.standard_answer,
-        ...(q.bot_reply ? { bot_reply: q.bot_reply } : {}),
-      }));
-      resetBatchState();
-      batchCases = cases;
-      const fileNameEl = document.getElementById('batch-file-name');
-      if (fileNameEl) fileNameEl.innerText = `AI 生成 · ${cases.length} 条用例`;
-      const runBtn = document.getElementById('batch-run-btn');
-      if (runBtn) runBtn.disabled = false;
-      showToast(`已填入 ${cases.length} 条 AI 生成用例到批量回归`);
+    /** 模块一：纯前端导出（原生 Blob + UTF-8 BOM），废弃后端导出请求；空数组拦截，字段兜底防 undefined */
+    function exportEval(format) {
+      if (!Array.isArray(currentTestCases) || currentTestCases.length === 0) {
+        showToast('暂无用例');
+        return;
+      }
+      const safeFormat = format === 'md' ? 'md' : 'txt';
+      let content = '';
+      if (safeFormat === 'md') {
+        const lines = ['# 测试用例', `> 共 ${currentTestCases.length} 条，导出时间 ${new Date().toLocaleString()}`, ''];
+        currentTestCases.forEach((item, i) => {
+          const q = item.user_query || '空';
+          const a = item.standard_answer || '空';
+          lines.push(`## 用例 ${i + 1}`, `- **用户提问**：${q}`, `- **标准答案**：${a}`, '');
+        });
+        content = lines.join('\n');
+      } else {
+        const lines = [`测试用例（共 ${currentTestCases.length} 条）`, `导出时间 ${new Date().toLocaleString()}`, ''];
+        currentTestCases.forEach((item, i) => {
+          const q = item.user_query || '空';
+          const a = item.standard_answer || '空';
+          lines.push(`用例 ${i + 1}`, `Q: ${q}`, `标准答案: ${a}`, '');
+        });
+        content = lines.join('\n');
+      }
+      // ⚠️ 必须加 ﻿ BOM 头，防记事本中文乱码
+      const blob = new Blob(['\uFEFF' + content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `测试用例_${Date.now()}.${safeFormat}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
-    window.fillBatchCasesFromQuestions = fillBatchCasesFromQuestions;
+    window.exportEval = exportEval;
 
+    // ==================== 模块四：localStorage 持久化（页面级 currentTestCases） ====================
+    function persistTestCases() {
+      try { localStorage.setItem(NL_STORAGE_KEY, JSON.stringify(currentTestCases || [])); } catch (e) { /* 存储失败不阻塞主流程 */ }
+    }
+    /** 页面初始化：读取持久化用例，存在则渲染并同步按钮显隐 */
+    function restoreTestCasesOnInit() {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(NL_STORAGE_KEY) || 'null'); } catch (e) { saved = null; }
+      if (Array.isArray(saved) && saved.length > 0) {
+        currentTestCases = saved;
+        renderGeneratedQuestions();   // 内部已处理：隐藏 AI生成、显示导出/回归/清除
+      } else {
+        currentTestCases = [];
+        renderGeneratedQuestions();
+      }
+    }
+    window.restoreTestCasesOnInit = restoreTestCasesOnInit;
 
-    // 4. 历史快照
-    async function loadSnapshots() {
-      if (!activeProjectId) return;
-      const tbody = document.getElementById('snapshot-tbody');
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #909399;">加载中...</td></tr>';
-      
+    // ==================== 模块二：一键回归测试（防刷 + 中止） ====================
+    const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    async function hasApiKeyConfigured() {
       try {
-        const d = await safeFetchJson(`/api/snapshots/list?project_id=${activeProjectId}`);
-        
-        if (d.success && d.data.length > 0) {
-          tbody.innerHTML = d.data.map(snap => {
-            const isPass = snap.eval_pass === 1;
-            const tagClass = isPass ? 'tag-success' : 'tag-danger';
-            const statusText = isPass ? `✅ 通过 (${snap.eval_score}分)` : `❌ 未通过 (${snap.eval_score}分)`;
-            const disabled = isPass ? '' : 'disabled style="opacity:0.5; cursor:not-allowed;"';
-            
-            return `
-              <tr>
-                <td style="font-family: var(--font-mono); color: var(--primary);">${snap.id}</td>
-                <td>${new Date(snap.created_at).toLocaleString()}</td>
-                <td><span class="tag ${tagClass}">${statusText}</span></td>
-                <td style="text-align: right; white-space: nowrap;">
-                  <button class="btn btn-link" ${disabled} onclick="downloadSnapshot('${snap.id}')">下载 TXT</button>
-                  <button class="btn btn-link" style="margin-left: 12px;" onclick="rollbackSnapshot('${snap.id}')">回滚</button>
-                  <button class="btn btn-link" style="margin-left: 12px;" onclick="openSnapshotDiff('${snap.id}')">对比当前</button>
-                  <button class="btn btn-link" style="margin-left: 12px;" onclick="copySnapshotText('${snap.id}')">📋 复制</button>
-                </td>
-              </tr>
-            `;
-          }).join('');
-        } else {
-          tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #909399;">暂无历史快照</td></tr>';
+        const info = await safeFetchJson('/api/settings/api-key');
+        return !!(info && info.success && info.data && info.data.has_key);
+      } catch (e) { return false; }
+    }
+
+    /** 同一按钮入口：未在跑→开始；正在跑→中止 */
+    async function runRegressionTest() {
+      if (isRunningRegression) { abortRegressionTest(); return; }
+      if (!Array.isArray(currentTestCases) || currentTestCases.length === 0) { showToast('暂无用例'); return; }
+      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
+      if (!(await hasApiKeyConfigured())) { showToast('⚠️ 请先在右上角 ⚙️ 设置中配置 API Key'); return; }
+      const totalRequests = currentTestCases.length * 2; // 每题 chat + eval 两次请求
+      if (!confirm(`将产生 ${totalRequests} 次 AI 请求，是否继续？`)) return;
+      await startRegression();
+    }
+    function abortRegressionTest() {
+      isAborted = true;
+      showToast('正在中止…');
+    }
+    window.runRegressionTest = runRegressionTest;
+    window.abortRegressionTest = abortRegressionTest;
+
+    /** 禁用/恢复「导出」与「清除」（回归按钮保持可点击用于中止） */
+    function setEvalActionButtonsDisabled(disabled) {
+      ['eval-export-btn', 'clear-cases-btn'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = disabled;
+      });
+    }
+
+    async function startRegression() {
+      // ⚠️ 模块二：开始前必须先重置中止标志，保证中止后能重新跑
+      isAborted = false;
+      isRunningRegression = true;
+      const runBtn = document.getElementById('regression-run-btn');
+      const progress = document.getElementById('test-progress-text');
+      if (runBtn) runBtn.innerText = '🛑 中止测试';   // 按钮文字临时切换，保持可点击
+      setEvalActionButtonsDisabled(true);
+      const results = [];
+      const total = currentTestCases.length;
+      try {
+        for (let i = 0; i < total; i++) {
+          if (isAborted) break;
+          const item = currentTestCases[i];
+          const q = item.user_query || '空';
+          const std = item.standard_answer || '空';
+          if (progress) progress.innerText = `测试中 ${i + 1}/${total}`;
+          try {
+            // 1) 调用 /api/chat/reply 获取机器人回答（单轮上下文，避免历史串扰）
+            const chatResp = await safeFetchJson('/api/chat/reply', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                project_id: activeProjectId,
+                layers: getCurrentLayers(),
+                context_data: getContextDataForSnapshot(),
+                messages: [{ role: 'user', content: q }]
+              })
+            });
+            if (isAborted) break;
+            const botReply = chatResp && typeof chatResp.reply === 'string' ? chatResp.reply : '';
+            // 2) 调用 /api/eval/run 打分
+            const evalResp = await safeFetchJson('/api/eval/run', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ user_query: q, standard_answer: std, bot_reply: botReply })
+            });
+            results.push({ user_query: q, standard_answer: std, bot_reply: botReply, l1: evalResp?.l1 || null, l2: evalResp?.l2 || null });
+          } catch (innerErr) {
+            if (isAborted) break;   // 中止导致的请求 reject：静默，不弹错误
+            results.push({ user_query: q, standard_answer: std, bot_reply: '', l1: null, l2: null, error: innerErr.message });
+          }
+          await delay(500);        // 防限流
         }
-      } catch (e) { 
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger);">${e.message}</td></tr>`;
+      } catch (e) {
+        // ⚠️ 模块二：中止场景静默退出，不弹报错窗
+        if (!isAborted) showToast('回归测试异常：' + ((e && e.message) || '未知错误'));
+      } finally {
+        // ⚠️ 模块二：finally 必须恢复按钮文字、解除禁用、清空进度
+        isRunningRegression = false;
+        if (runBtn) runBtn.innerText = '⚡ 一键执行回归测试';
+        setEvalActionButtonsDisabled(false);
+        if (progress) progress.innerText = '';
+      }
+      // 非中止且有结果才弹汇总报告
+      if (!isAborted && results.length > 0) showRegressionReport(results);
+    }
+
+    // ==================== 模块三：清除测试用例（彻底清理，保留输入框/发送按钮） ====================
+    function clearTestCases() {
+      if (!confirm('确认清除全部测试用例？此操作不可撤销。')) return;
+      currentTestCases = [];
+      const resultBox = document.getElementById('gen-questions-result');
+      if (resultBox) resultBox.innerHTML = '';
+      // 只清空聊天消息（resetChatState 仅清空内容与输入框 value，不删除输入框/发送按钮元素）
+      resetChatState();
+      try { localStorage.removeItem(NL_STORAGE_KEY); } catch (e) { /* ignore */ }
+      renderGeneratedQuestions(); // currentTestCases 为空：隐藏导出/回归/清除，重新显示 AI生成
+      const input = document.getElementById('chat-input');
+      if (input) input.value = '';
+      showToast('已清除测试用例');
+    }
+    window.clearTestCases = clearTestCases;
+
+    // ==================== 模块五：Bad Case 联动与报告 ====================
+    function isCasePassed(r) {
+      const l1pass = r.l1 ? !!r.l1.pass : !r.error;
+      const l2pass = r.l2 ? !!r.l2.pass : !r.error;
+      return l1pass && l2pass;
+    }
+    function showRegressionReport(results) {
+      const passed = results.filter(isCasePassed).length;
+      const failed = results.length - passed;
+      const badCases = results.filter((r) => !isCasePassed(r));
+
+      // 移除旧报告（如有）
+      document.getElementById('regression-report-modal')?.remove();
+      const mask = document.createElement('div');
+      mask.id = 'regression-report-modal';
+      mask.className = 'modal-mask';
+      mask.style.display = 'flex';
+      mask.onclick = function(ev) { if (ev.target === mask) mask.remove(); };
+
+      const box = document.createElement('div');
+      box.className = 'modal-box';
+      box.style.maxWidth = '760px';
+      box.style.width = '92vw';
+      box.style.maxHeight = '86vh';
+      box.style.display = 'flex';
+      box.style.flexDirection = 'column';
+
+      const header = document.createElement('div');
+      header.className = 'modal-header';
+      header.innerText = `测试完成，通过 ${passed} 个，未通过 ${failed} 个`;
+      box.appendChild(header);
+
+      const body = document.createElement('div');
+      body.className = 'modal-body';
+      body.style.overflowY = 'auto';
+      if (badCases.length === 0) {
+        const ok = document.createElement('div');
+        ok.style.color = '#16a34a';
+        ok.innerText = '🎉 全部用例通过，无 Bad Case。';
+        body.appendChild(ok);
+      } else {
+        badCases.forEach((r, idx) => {
+          const card = document.createElement('div');
+          card.className = 'gen-q-card';
+          card.style.marginBottom = '10px';
+          const q = document.createElement('div');
+          q.innerHTML = `<b>Q：</b>${escapeHtml(r.user_query)}`;
+          const a = document.createElement('div');
+          a.innerHTML = `<b>标准答案：</b>${escapeHtml(r.standard_answer)}`;
+          card.appendChild(q); card.appendChild(a);
+          if (r.bot_reply) {
+            const br = document.createElement('div');
+            br.innerHTML = `<b>机器人回复：</b>${escapeHtml(r.bot_reply)}`;
+            card.appendChild(br);
+          }
+          // violations（L2 为主，合并 L1 errors）
+          const violations = []
+            .concat(r.l1 && Array.isArray(r.l1.errors) ? r.l1.errors : [])
+            .concat(r.l2 && Array.isArray(r.l2.violations) ? r.l2.violations : []);
+          if (r.error) violations.push('执行异常：' + r.error);
+          if (violations.length) {
+            const v = document.createElement('div');
+            v.style.color = '#c0392b';
+            v.innerHTML = '<b>违规点：</b>' + escapeHtml(violations.join('；'));
+            card.appendChild(v);
+          }
+          if (r.l2 && r.l2.comment) {
+            const c = document.createElement('div');
+            c.style.color = '#6b7280';
+            c.innerHTML = '<b>评价：</b>' + escapeHtml(String(r.l2.comment));
+            card.appendChild(c);
+          }
+          const copyBtn = document.createElement('button');
+          copyBtn.type = 'button';
+          copyBtn.className = 'btn-plain';
+          copyBtn.style.marginTop = '8px';
+          copyBtn.innerText = '📝 复制问题去修改';
+          copyBtn.onclick = function() { copyBadCaseText(r, mask); };
+          card.appendChild(copyBtn);
+          body.appendChild(card);
+        });
+      }
+      box.appendChild(body);
+
+      const footer = document.createElement('div');
+      footer.className = 'modal-footer';
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'btn btn-link';
+      closeBtn.style.color = '#606266';
+      closeBtn.innerText = '关闭';
+      closeBtn.onclick = function() { mask.remove(); };
+      footer.appendChild(closeBtn);
+      box.appendChild(footer);
+
+      mask.appendChild(box);
+      document.body.appendChild(mask);
+    }
+
+    /** 模块五：复制容错——clipboard API 失败则降级 execCommand */
+    async function copyBadCaseText(r, mask) {
+      const text = `用户提问：${r.user_query}\n标准答案：${r.standard_answer}`;
+      let ok = false;
+      try {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      } catch (e) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          ok = document.execCommand('copy');
+          ta.remove();
+        } catch (e2) { ok = false; }
+      }
+      if (ok) {
+        if (mask) mask.remove();
+        showToast('已复制');
+      } else {
+        showToast('复制失败，请手动选择文本');
       }
     }
 
-    function downloadSnapshot(id) {
-      // 生产级下载：优先 <a download>（避免 window.open 被弹窗拦截导致下载失败），异常降级 window.open
-      const url = `/api/gate/export?snapshot_id=${id}`;
+
+    // 4. 历史快照
+    // ==================== v1.60 重构：前端分页 + 跨页勾选 + 预览 + 批量删除 ====================
+    const SNAPSHOT_PAGE_SIZE = 20;
+    let allSnapshots = [];          // 一次性拉取的全部快照
+    let currentSnapshotPage = 1;    // 当前页码（从 1 开始）
+    let selectedSnapshotIds = [];   // 跨页维护的选中 ID（全局数组，翻页不清空）
+
+    async function loadSnapshots() {
+      if (!activeProjectId) return;
+      const tbody = document.getElementById('snapshot-tbody');
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #909399;">加载中...</td></tr>';
+      try {
+        const d = await safeFetchJson(`/api/snapshots/list?project_id=${encodeURIComponent(activeProjectId)}`);
+        allSnapshots = (d && d.success && Array.isArray(d.data)) ? d.data : [];
+        // 清理已不存在的选中项（删除后防止残留）
+        const idSet = new Set(allSnapshots.map((s) => s.id));
+        selectedSnapshotIds = selectedSnapshotIds.filter((id) => idSet.has(id));
+        // 页码越界回退
+        const totalPages = Math.max(1, Math.ceil(allSnapshots.length / SNAPSHOT_PAGE_SIZE));
+        if (currentSnapshotPage > totalPages) currentSnapshotPage = totalPages;
+        renderSnapshotTable();
+      } catch (e) {
+        allSnapshots = [];
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--danger);">${escapeHtml(e.message)}</td></tr>`;
+        renderSnapshotPagination();
+        updateSnapshotActionBar();
+      }
+    }
+    window.loadSnapshots = loadSnapshots;
+
+    /** 当前页切片数据：slice((page-1)*20, page*20) */
+    function getCurrentPageSnapshots() {
+      const start = (currentSnapshotPage - 1) * SNAPSHOT_PAGE_SIZE;
+      return allSnapshots.slice(start, start + SNAPSHOT_PAGE_SIZE);
+    }
+
+    /** 渲染当前页表格 */
+    function renderSnapshotTable() {
+      const tbody = document.getElementById('snapshot-tbody');
+      const pageRows = getCurrentPageSnapshots();
+      if (pageRows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #909399;">暂无历史快照</td></tr>';
+      } else {
+        tbody.innerHTML = pageRows.map((snap) => {
+          const isPass = snap.eval_pass === 1;
+          const tagClass = isPass ? 'tag-success' : 'tag-danger';
+          const statusText = isPass ? `✅ 通过 (${snap.eval_score}分)` : `❌ 未通过 (${snap.eval_score}分)`;
+          const disabled = isPass ? '' : 'disabled';
+          const checked = selectedSnapshotIds.includes(snap.id) ? 'checked' : '';
+          const remark = (snap.remark || '').trim();
+          const remarkHtml = remark
+            ? `<span title="${escapeHtml(remark)}">${escapeHtml(remark)}</span>`
+            : '<span class="snap-remark-empty">—</span>';
+          return `
+            <tr>
+              <td class="snap-check-col" style="text-align: center;"><input type="checkbox" class="snapshot-checkbox" value="${escapeHtml(snap.id)}" style="display: inline-block; appearance: auto; -webkit-appearance: auto;" ${checked} ${disabled} onchange="onSnapshotRowCheck(this)" aria-label="选择快照" /></td>
+              <td style="padding-left: 16px; font-family: var(--font-mono); color: var(--primary);">${escapeHtml(snap.id)}</td>
+              <td>${remarkHtml}</td>
+              <td>${new Date(snap.created_at).toLocaleString()}</td>
+              <td style="text-align: center;"><span class="tag ${tagClass}">${statusText}</span></td>
+              <td style="text-align: right; padding-right: 16px;">
+                <span class="snap-row-actions">
+                  <button type="button" class="snap-btn snap-btn-text" onclick="openSnapshotPreview('${escapeHtml(snap.id)}')">👁️ 预览</button>
+                  <span class="snap-download-wrap">
+                    <button type="button" class="snap-btn snap-btn-txt" data-snap-id="${escapeHtml(snap.id)}" ${disabled} onclick="toggleSnapshotDownloadMenu(this, event)">下载 ▾</button>
+                  </span>
+                  <button type="button" class="snap-btn snap-btn-text" onclick="copySnapshotText('${escapeHtml(snap.id)}')">复制</button>
+                </span>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+      renderSnapshotPagination();
+      updateSnapshotSelectAllState();
+      updateSnapshotActionBar();
+    }
+
+    /** 单行勾选：维护全局数组（跨页） */
+    function onSnapshotRowCheck(cb) {
+      const id = cb.value;
+      if (cb.checked) {
+        if (!selectedSnapshotIds.includes(id)) selectedSnapshotIds.push(id);
+      } else {
+        selectedSnapshotIds = selectedSnapshotIds.filter((x) => x !== id);
+      }
+      updateSnapshotSelectAllState();
+      updateSnapshotActionBar();
+    }
+    window.onSnapshotRowCheck = onSnapshotRowCheck;
+
+    /** 表头全选：把当前页可选项并入数组，绝不清空跨页数据；取消则移除当前页 */
+    function toggleSelectAllCurrentPage(checked) {
+      const pageIds = getCurrentPageSnapshots()
+        .filter((s) => s.eval_pass === 1)
+        .map((s) => s.id);
+      if (checked) {
+        for (const id of pageIds) {
+          if (!selectedSnapshotIds.includes(id)) selectedSnapshotIds.push(id);
+        }
+      } else {
+        selectedSnapshotIds = selectedSnapshotIds.filter((id) => !pageIds.includes(id));
+      }
+      renderSnapshotTable();
+    }
+    window.toggleSelectAllCurrentPage = toggleSelectAllCurrentPage;
+
+    /** 表头全选框状态：当前页可选项全部已选时才勾选 */
+    function updateSnapshotSelectAllState() {
+      const selectAll = document.getElementById('select-all-snapshots');
+      if (!selectAll) return;
+      const enabledPage = getCurrentPageSnapshots().filter((s) => s.eval_pass === 1);
+      selectAll.checked = enabledPage.length > 0 && enabledPage.every((s) => selectedSnapshotIds.includes(s.id));
+    }
+
+    /** 吸附操作条：显示/隐藏与计数 */
+    function updateSnapshotActionBar() {
+      const bar = document.getElementById('snap-action-bar');
+      const countEl = document.getElementById('snap-action-count');
+      if (!bar) return;
+      const n = selectedSnapshotIds.length;
+      if (countEl) countEl.innerText = `已选 ${n} 项`;
+      bar.classList.toggle('show', n > 0);
+    }
+
+    /** 取消选择：清空全局数组并重渲染 */
+    function clearSnapshotSelection() {
+      selectedSnapshotIds = [];
+      renderSnapshotTable();
+    }
+    window.clearSnapshotSelection = clearSnapshotSelection;
+
+    /** 分页器渲染与禁用态 */
+    function renderSnapshotPagination() {
+      const totalPages = Math.max(1, Math.ceil(allSnapshots.length / SNAPSHOT_PAGE_SIZE));
+      const info = document.getElementById('snap-page-info');
+      const prev = document.getElementById('snap-prev-btn');
+      const next = document.getElementById('snap-next-btn');
+      if (info) info.innerText = `第 ${currentSnapshotPage} / ${totalPages} 页（共 ${allSnapshots.length} 条）`;
+      if (prev) prev.disabled = currentSnapshotPage <= 1;
+      if (next) next.disabled = currentSnapshotPage >= totalPages;
+    }
+
+    /** 翻页 */
+    function goSnapshotPage(page) {
+      const totalPages = Math.max(1, Math.ceil(allSnapshots.length / SNAPSHOT_PAGE_SIZE));
+      if (page < 1 || page > totalPages) return;
+      currentSnapshotPage = page;
+      renderSnapshotTable();
+    }
+    window.goSnapshotPage = goSnapshotPage;
+
+    /** 批量删除：强 confirm，循环调用单条删除接口 */
+    async function deleteSelectedSnapshots() {
+      if (selectedSnapshotIds.length === 0) { showToast('请先勾选快照'); return; }
+      const ids = selectedSnapshotIds.slice();
+      if (!window.confirm(`确定要删除选中的 ${ids.length} 个快照吗？此操作不可恢复。`)) return;
+      let ok = 0, fail = 0;
+      for (const id of ids) {
+        try {
+          const d = await safeFetchJson('/api/snapshots/delete', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+          });
+          if (d && d.success) ok++; else fail++;
+        } catch (e) { fail++; }
+      }
+      selectedSnapshotIds = [];
+      showToast(fail === 0 ? `已删除 ${ok} 个快照` : `删除完成：成功 ${ok} 个，失败 ${fail} 个`);
+      await loadSnapshots();
+    }
+    window.deleteSelectedSnapshots = deleteSelectedSnapshots;
+
+    /** 批量下载：串行 Blob + 300ms 间隔，防多文件拦截 */
+    async function batchDownloadSnapshots(format) {
+      if (selectedSnapshotIds.length === 0) return showToast('请先勾选快照');
+      const ids = selectedSnapshotIds.slice();
+      const safeFormat = format === 'md' ? 'md' : 'txt';
+      if (ids.length > 1) showToast('若浏览器拦截，请在地址栏提示中允许“多文件下载”');
+      let okCount = 0, failCount = 0;
+      for (let i = 0; i < ids.length; i++) {
+        try {
+          const resp = await fetch(`/api/gate/export?snapshot_id=${encodeURIComponent(ids[i])}&format=${safeFormat}`);
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const blob = await resp.blob();
+          const objUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = objUrl;
+          a.download = `${ids[i]}.${safeFormat}`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(objUrl), 2000);
+          okCount++;
+        } catch (e) {
+          failCount++;
+        }
+        if (i < ids.length - 1) await new Promise((r) => setTimeout(r, 300));
+      }
+      if (okCount === 0) {
+        showToast('请允许多文件下载');
+      } else if (failCount > 0) {
+        showToast('部分快照下载失败，请允许多文件下载后重试');
+      } else {
+        showToast(`已下载 ${okCount} 个快照（${safeFormat}）`);
+      }
+    }
+    window.batchDownloadSnapshots = batchDownloadSnapshots;
+
+    function downloadSnapshot(id, format) {
+      const safeFormat = format === 'md' ? 'md' : 'txt';
+      const url = `/api/gate/export?snapshot_id=${encodeURIComponent(id)}&format=${safeFormat}`;
       try {
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${id}.txt`;
+        a.download = `${id}.${safeFormat}`;
         a.rel = 'noopener';
         document.body.appendChild(a);
         a.click();
@@ -2983,8 +3616,161 @@
         window.open(url);
       }
     }
+    window.downloadSnapshot = downloadSnapshot;
 
-    /** 历史快照回滚：拉 detail 的 layers 写回 L0/L1/L3，并刷新镜像层与 Token 统计
+    // ==================== 通用 Portal 下拉菜单系统（body 级挂载 / fixed 定位 / 边界翻转 / NaN 兜底） ====================
+    const __openPortals = new Set();
+    function closeAllPortalMenus() { __openPortals.forEach((p) => p.classList.remove('open')); }
+
+    /* 定位：优先 fixed + 边界翻转；坐标异常时降级 absolute 到按钮父容器，绝不白屏 */
+    /* NaN/异常兜底：降级 absolute，在按钮父容器内显示，保证不白屏 */
+    function fallbackAbsolute(portal, anchor) {
+      portal.style.position = 'absolute';
+      const parent = anchor && anchor.parentElement;
+      if (parent && getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+      portal.style.left = '0px';
+      portal.style.top = '100%';
+    }
+
+    function positionPortal(portal, anchor) {
+      const br = anchor.getBoundingClientRect();
+      const pw = portal.offsetWidth, ph = portal.offsetHeight;
+      const bad = !isFinite(br.top) || !isFinite(br.left) || !isFinite(pw) || !isFinite(ph) || pw === 0 || ph === 0;
+      if (bad) { fallbackAbsolute(portal, anchor); return; }
+      portal.style.position = 'fixed';
+      let left = br.right - pw;
+      let top = br.bottom + 2;
+      if (left < 8) left = 8;                                  // 左侧边界保护
+      if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8; // 右侧边界保护
+      if (top + ph > window.innerHeight - 8) top = br.top - ph - 2; // 下方空间不足 → 向上翻转
+      if (top < 8) top = 8;                                    // 上方也不足时贴顶
+      portal.style.left = left + 'px';
+      portal.style.top = top + 'px';
+    }
+
+    /* 工厂：items = [{label, value}]，onPick(value) 回调；菜单整体 append 到 body；extraClass 可附加额外类 */
+    function createPortalMenu(id, items, onPick, extraClass) {
+      const portal = document.createElement('div');
+      portal.id = id;
+      portal.className = extraClass ? ('portal-menu ' + extraClass) : 'portal-menu';
+      portal.innerHTML = items.map((it, i) => `<button type="button" data-index="${i}">${it.label}</button>`).join('');
+      portal.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const b = ev.target.closest('button[data-index]');
+        if (!b) return;
+        onPick(items[Number(b.getAttribute('data-index'))].value);
+        closeAllPortalMenus();
+      });
+      document.body.appendChild(portal);
+      __openPortals.add(portal);
+      return portal;
+    }
+
+    function togglePortal(portal, anchor, event) {
+      if (event) event.stopPropagation();
+      const isOpen = portal.classList.contains('open');
+      closeAllPortalMenus();
+      if (isOpen) return;
+      portal.classList.add('open');   // 先显示再测量
+      try {
+        positionPortal(portal, anchor);
+      } catch (err) {
+        fallbackAbsolute(portal, anchor);  // 定位抛错也绝不白屏
+      }
+    }
+
+    // ---------- 单行“下载 ▾”（保留原 id 与行为，内部走通用工厂） ----------
+    const snapDownloadPortal = createPortalMenu(
+      'snap-download-portal',
+      [{ label: '下载 txt', value: 'txt' }, { label: '下载 md', value: 'md' }],
+      (fmt) => downloadSnapshot(snapDownloadPortal.getAttribute('data-snap-id'), fmt)
+    );
+    function toggleSnapshotDownloadMenu(btn, event) {
+      snapDownloadPortal.setAttribute('data-snap-id', btn.getAttribute('data-snap-id'));
+      togglePortal(snapDownloadPortal, btn, event);
+    }
+    window.toggleSnapshotDownloadMenu = toggleSnapshotDownloadMenu;
+    // 历史别名：兼容旧调用
+    function closeAllSnapshotDownloadMenus() { closeAllPortalMenus(); }
+    window.closeAllSnapshotDownloadMenus = closeAllSnapshotDownloadMenus;
+
+    // ---------- 全局事件：外部点击 / scroll / resize 一律关闭（锚点与菜单内部已 stopPropagation） ----------
+    if (!window.__portalGlobalBound) {
+      window.__portalGlobalBound = true;
+      document.addEventListener('click', () => closeAllPortalMenus());
+      window.addEventListener('resize', closeAllPortalMenus);
+      window.addEventListener('scroll', closeAllPortalMenus, true);
+      document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeAllPortalMenus(); });
+    }
+
+    // ---------- 批量条“下载 ▾”（通用工厂，对选中项批量下载） ----------
+    const snapBatchPortal = createPortalMenu(
+      'snap-batch-download-portal',
+      [{ label: '下载 txt', value: 'txt' }, { label: '下载 md', value: 'md' }],
+      (fmt) => batchDownloadSnapshots(fmt)
+    );
+    function toggleBatchDownloadMenu(btn, event) {
+      togglePortal(snapBatchPortal, btn, event);
+    }
+    window.toggleBatchDownloadMenu = toggleBatchDownloadMenu;
+
+    // ---------- 知识库 / 评测：统一“导出 ▾”菜单（type 区分 kb / eval，复用通用工厂，挂 .custom-dropdown） ----------
+    const exportPortal = createPortalMenu(
+      'export-portal',
+      [{ label: '导出为 txt', value: 'txt' }, { label: '导出为 md', value: 'md' }],
+      (fmt) => {
+        const type = exportPortal.getAttribute('data-export-type');
+        if (type === 'kb') exportKb(fmt);
+        else if (type === 'eval') exportEval(fmt);
+      },
+      'custom-dropdown'
+    );
+    function toggleExportMenu(btn, event, type) {
+      exportPortal.setAttribute('data-export-type', type);
+      togglePortal(exportPortal, btn, event);
+    }
+    window.toggleExportMenu = toggleExportMenu;
+
+    // ---------- 预览 Modal（pre 保留换行，Esc 关闭） ----------
+    let snapshotPreviewEscHandler = null;
+    async function openSnapshotPreview(id) {
+      const modal = document.getElementById('snap-preview-modal');
+      const pre = document.getElementById('snap-preview-pre');
+      const title = document.getElementById('snap-preview-title');
+      if (!modal || !pre) return;
+      pre.textContent = '加载中...';
+      title.innerText = `快照预览 · ${id}`;
+      modal.style.display = 'flex';
+      try {
+        const d = await safeFetchJson(`/api/snapshots/detail?id=${encodeURIComponent(id)}`);
+        if (!d || !d.success || !d.data) {
+          pre.textContent = (d && (d.error || d.message)) || '快照详情获取失败';
+          return;
+        }
+        title.innerText = `快照预览 · ${d.data.id}`;
+        // textContent 写入 <pre>，天然保留换行且防 XSS
+        pre.textContent = d.data.final_prompt_content == null ? '' : String(d.data.final_prompt_content);
+        pre.scrollTop = 0;
+      } catch (e) {
+        pre.textContent = (e && e.message) || '加载失败';
+      }
+      if (snapshotPreviewEscHandler) document.removeEventListener('keydown', snapshotPreviewEscHandler);
+      snapshotPreviewEscHandler = function(ev) { if (ev.key === 'Escape') closeSnapshotPreview(); };
+      document.addEventListener('keydown', snapshotPreviewEscHandler);
+    }
+    window.openSnapshotPreview = openSnapshotPreview;
+
+    function closeSnapshotPreview() {
+      const modal = document.getElementById('snap-preview-modal');
+      if (modal) modal.style.display = 'none';
+      if (snapshotPreviewEscHandler) {
+        document.removeEventListener('keydown', snapshotPreviewEscHandler);
+        snapshotPreviewEscHandler = null;
+      }
+    }
+    window.closeSnapshotPreview = closeSnapshotPreview;
+
+    /** 历史快照回滚：拉 detail 的 layers 写回系统提示词，并刷新镜像层与 Token 统计
      *  竞态修复：rollbackSeq + projectIdAtRollback 双守卫；切项目 / 连点多个快照时只允许最新一次生效。 */
     let rollbackSeq = 0;
     async function rollbackSnapshot(id) {
@@ -3021,16 +3807,36 @@
           setter.call(el, content == null ? '' : String(content));
           // 触发 input 事件：同步更新镜像高亮层、自动撑高与 Token 统计（50ms 防抖）
           el.dispatchEvent(new Event('input', { bubbles: true }));
+          // 强制回到顶部，确保回滚内容从头显示、光标不错位
+          el.scrollTop = 0;
+          const mirror = document.getElementById('mirror-' + elId.replace('val-', ''));
+          if (mirror) mirror.scrollTop = 0;
         };
-        setEditorValue('val-L0', byLayer.L0);
-        setEditorValue('val-L1', byLayer.L1);
-        setEditorValue('val-L3', byLayer.L3);
+        // v1.60：优先回滚单层 SYSTEM；旧三层快照则按迁移规则合并后写回
+        let systemContent = '';
+        if (byLayer.SYSTEM != null) {
+          systemContent = byLayer.SYSTEM;
+        } else {
+          // 与后端迁移规则一致：内容已自带标题则不重复添加
+          const buildBlock = (raw, title) => {
+            const text = String(raw == null ? '' : raw).trim();
+            if (!text) return '';
+            return text.startsWith(title) ? text : title + '\n' + text;
+          };
+          const parts = [
+            buildBlock(byLayer.L0, '【L0 全局安全基座】'),
+            buildBlock(byLayer.L1, '【L1 语音基座】'),
+            buildBlock(byLayer.L3, '【L3 项目专属话术】'),
+          ].filter(Boolean);
+          systemContent = parts.join('\n\n');
+        }
+        setEditorValue('val-system', systemContent);
         // 再主动全量刷新一次，确保初始化/赋值后的镜像与统计一定是最新的
         if (typeof window.refreshAllEditorMirrors === 'function') window.refreshAllEditorMirrors();
         if (typeof window.updateEditorStats === 'function') window.updateEditorStats();
         showToast(`已回滚到快照 ${id}（尚未生成新快照，请确认后重新生成）`);
-        const l0El = document.getElementById('val-L0');
-        if (l0El && typeof l0El.scrollIntoView === 'function') l0El.scrollIntoView({ block: 'center' });
+        const sysEl = document.getElementById('val-system');
+        if (sysEl && typeof sysEl.scrollIntoView === 'function') sysEl.scrollIntoView({ block: 'center' });
       } catch (e) {
         if (seq !== rollbackSeq || activeProjectId !== projectIdAtRollback) return; // 失效请求异常静默
         showToast((e && e.message) || '回滚失败，请稍后重试');
@@ -3267,7 +4073,7 @@
       if (newCompanyInput) {
         newCompanyInput.onkeydown = (e) => { if (e.key === 'Enter' && modalCallback) modalCallback(); };
       }
-      document.getElementById('modal-confirm-btn').className = 'btn btn-primary';
+      document.getElementById('modal-confirm-btn').className = 'btn-plain';
       modal.style.display = 'flex';
       createInputEl.focus();
 
@@ -3354,7 +4160,7 @@
       editInputEl.placeholder = '请输入名称...';
       editInputEl.value = currentName;
       document.getElementById('modal-company-select-container').style.display = 'none';
-      document.getElementById('modal-confirm-btn').className = 'btn btn-primary';
+      document.getElementById('modal-confirm-btn').className = 'btn-plain';
       modal.style.display = 'flex';
       document.getElementById('modal-input').focus();
 
@@ -3387,7 +4193,11 @@
       document.getElementById('modal-input-container').style.display = 'none';
       document.getElementById('modal-company-select-container').style.display = 'none';
       const confirmBtn = document.getElementById('modal-confirm-btn');
-      confirmBtn.className = 'btn btn-primary'; confirmBtn.style.background = 'var(--danger)';
+      confirmBtn.className = 'btn-plain';
+      confirmBtn.style.background = '#ffffff';
+      confirmBtn.style.color = '#c0392b';
+      confirmBtn.style.border = '1px solid rgba(192, 57, 43, 0.3)';
+      confirmBtn.style.boxShadow = 'none';
       modal.style.display = 'flex';
 
       modalCallback = async () => {
@@ -3433,7 +4243,10 @@
       modalCallback = null;
       createSubmitting = false;
       const confirmBtn = document.getElementById('modal-confirm-btn');
-      confirmBtn.style.background = 'var(--primary)';
+      confirmBtn.style.background = '';
+      confirmBtn.style.color = '';
+      confirmBtn.style.border = '';
+      confirmBtn.style.boxShadow = '';
       confirmBtn.disabled = false;
       confirmBtn.classList.remove('loading');
       confirmBtn.innerText = '确定';
@@ -3482,7 +4295,7 @@
       inputEl.type = 'password';
       inputEl.value = '';
       inputEl.placeholder = '输入新的 DeepSeek API Key（留空则保持不变）';
-      confirmBtn.className = 'btn btn-primary';
+      confirmBtn.className = 'btn-plain';
       confirmBtn.style.background = '';
       confirmBtn.disabled = false;
       confirmBtn.innerText = '确定';
@@ -3853,7 +4666,7 @@
     }
     window.initGlobalEscHandler = initGlobalEscHandler;
 
-    // ==================== 模块六：复制 NewLync Text / Zip 导出 / Ctrl+S ====================
+    // ==================== 模块六：复制为 txt / Ctrl+S ====================
     /** 剪贴板写入：优先 navigator.clipboard，失败/超时降级 execCommand('copy')（纯原生实现） */
     async function copyTextToClipboard(text) {
       if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
@@ -3884,7 +4697,7 @@
       }
     }
 
-    /** 📋 复制为 NewLync Text：POST /api/prompt/assemble（不写库）→ 剪贴板 */
+    /** 复制为txt：POST /api/prompt/assemble（不写库）→ 剪贴板 */
     async function copyPromptAsText() {
       if (!activeProjectId) { showToast('请先选择一个项目'); return; }
       const btn = document.getElementById('copy-prompt-btn');
@@ -3912,40 +4725,10 @@
       } catch (e) {
         showToast((e && e.message) || '复制失败，请稍后重试');
       } finally {
-        if (btn) { btn.disabled = false; btn.innerText = originalText || '📋 复制为 NewLync Text'; }
+        if (btn) { btn.disabled = false; btn.innerText = originalText || '复制为txt'; }
       }
     }
     window.copyPromptAsText = copyPromptAsText;
-
-    /** 📦 批量导出 Zip：先查快照非空，再用 <a download> 触发下载（不弹新窗口） */
-    async function exportProjectZip() {
-      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
-      const btn = document.getElementById('export-zip-btn');
-      const originalText = btn ? btn.innerText : '';
-      if (btn) { btn.disabled = true; btn.innerText = '检查中...'; }
-      try {
-        const d = await safeFetchJson(`/api/snapshots/list?project_id=${encodeURIComponent(activeProjectId)}`);
-        const list = d && d.success && Array.isArray(d.data) ? d.data : [];
-        if (list.length === 0) {
-          showToast('暂无快照可导出');
-          return;
-        }
-        const url = `/api/projects/export_zip?project_id=${encodeURIComponent(activeProjectId)}`;
-        const a = document.createElement('a');
-        a.href = url;
-        a.setAttribute('download', '');
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        showToast('正在导出项目快照 Zip…');
-      } catch (e) {
-        showToast((e && e.message) || '导出失败，请稍后重试');
-      } finally {
-        if (btn) { btn.disabled = false; btn.innerText = originalText || '📦 批量导出 Zip'; }
-      }
-    }
-    window.exportProjectZip = exportProjectZip;
 
     /** Ctrl/Cmd + S → 生成快照（阻止浏览器另存为；弹窗打开/无项目时不触发；输入法组合态放行） */
     function initShortcuts() {
@@ -3963,7 +4746,8 @@
     window.initShortcuts = initShortcuts;
 
     // ==================== 模块一：Token 实时预估 ====================
-    const EDITOR_LAYERS = ['L0', 'L1', 'L3'];
+    // v1.60：提示词扁平化，三层合并为单一系统提示词
+    const EDITOR_LAYERS = ['SYSTEM'];
     let editorStatsTimer = null;
 
     /** 50ms 防抖后刷新统计（连续输入时先 clearTimeout 旧计时器，只算最后一次） */
@@ -3979,7 +4763,7 @@
     function updateEditorStats() {
       let totalChars = 0;
       EDITOR_LAYERS.forEach(layer => {
-        const el = document.getElementById('val-' + layer);
+        const el = document.getElementById('val-' + layer.toLowerCase());
         if (el) totalChars += (el.value || '').length;
       });
       const totalTokens = Math.ceil(totalChars * 0.6);
@@ -3992,8 +4776,8 @@
     window.updateEditorStats = updateEditorStats;
     window.scheduleEditorStats = scheduleEditorStats;
 
-    // ==================== V3.0 阶段四：Token 红线进度条（上限 4000） ====================
-    const TOKEN_LIMIT = 4000;
+    // ==================== v1.60：Token 红线进度条（上限 1,000,000） ====================
+    const TOKEN_LIMIT = 1000000;
     /** 进度条：≤80% 绿、80%~100% 黄、>100% 红；超限显示红色提示（随 updateEditorStats 同步） */
     function updateTokenProgress(totalTokens) {
       const bar = document.getElementById('token-progress-bar');
@@ -4009,20 +4793,20 @@
       if (label) label.innerText = `Token 占用 ${(ratio * 100).toFixed(0)}%（${totalTokens}/${TOKEN_LIMIT}）`;
       if (warning) {
         warning.style.display = ratio > 1 ? 'inline' : 'none';
-        if (ratio > 1) warning.innerText = `⚠️ 超出 4000 Token 上限（当前 ${totalTokens} Token）`;
+        if (ratio > 1) warning.innerText = `⚠️ 超出 1,000,000 Token 上限（当前 ${totalTokens} Token）`;
       }
     }
     window.updateTokenProgress = updateTokenProgress;
     window.TOKEN_LIMIT = TOKEN_LIMIT;
 
     // ==================== V3.0 阶段四：一键清理排版 ====================
-    /** 对 L0/L1/L3 执行：行首尾空白去除、连续空行折叠为 1、删除首尾空行、中文逗号「，」→ 英文逗号「,」 */
+    /** 对系统提示词执行：行首尾空白去除、连续空行折叠为 1、删除首尾空行、中文逗号「，」→ 英文逗号「,」 */
     function cleanupFormatting() {
       if (guardPublicProject()) return;
       let removedChars = 0;
       let changedBlocks = 0;
       EDITOR_LAYERS.forEach(layer => {
-        const el = document.getElementById('val-' + layer);
+        const el = document.getElementById('val-' + layer.toLowerCase());
         if (!el) return;
         const original = el.value || '';
         if (!original) return;
@@ -4119,7 +4903,7 @@
       syncEditorScroll(textarea);
     }
 
-    // ==================== V3.0 阶段三：L0「插入变量」下拉（中文选项 → 英文占位符） ====================
+    // ==================== v1.60：系统提示词「插入变量」下拉（中文选项 → 英文占位符） ====================
     /** 在指定 textarea 光标处插入英文占位符，并刷新镜像高亮 / 自动撑高 / Token 统计 */
     function insertVariableAtCursor(textareaId, placeholder) {
       const el = document.getElementById(textareaId);
@@ -4140,14 +4924,14 @@
     }
     window.insertVariableAtCursor = insertVariableAtCursor;
 
-    /** 绑定 L0 上方的「插入变量」下拉：选择后插入光标处并复位下拉 */
+    /** 绑定系统提示词上方的「插入变量」下拉：选择后插入光标处并复位下拉 */
     function initInsertVariableSelect() {
       const select = document.getElementById('insert-var-select');
       if (!select) return;
       select.addEventListener('change', () => {
         const placeholder = select.value;
         if (!placeholder) return;
-        insertVariableAtCursor('val-L0', placeholder);
+        insertVariableAtCursor('val-system', placeholder);
         select.value = '';
       });
     }
@@ -4196,19 +4980,19 @@
       if (withStats) scheduleEditorStats();
     }
 
-    /** 三个编辑框全量刷新（选中项目 / 窗口尺寸变化 / 程序赋值后调用） */
+    /** 系统提示词编辑框全量刷新（选中项目 / 窗口尺寸变化 / 程序赋值后调用） */
     function refreshAllEditorMirrors() {
       EDITOR_LAYERS.forEach(layer => {
-        const el = document.getElementById('val-' + layer);
+        const el = document.getElementById('val-' + layer.toLowerCase());
         if (el) refreshEditor(el, false);
       });
     }
     window.refreshAllEditorMirrors = refreshAllEditorMirrors;
 
-    /** 绑定三个编辑框的 input / scroll / 输入法结束事件 */
+    /** 绑定系统提示词编辑框的 input / scroll / 输入法结束事件 */
     function initEditorMirrors() {
       EDITOR_LAYERS.forEach(layer => {
-        const textarea = document.getElementById('val-' + layer);
+        const textarea = document.getElementById('val-' + layer.toLowerCase());
         if (!textarea) return;
         textarea.addEventListener('input', () => refreshEditor(textarea, true));
         textarea.addEventListener('scroll', () => syncEditorScroll(textarea));
@@ -4295,7 +5079,7 @@
     /** 绑定：三个编辑框 mousemove/mouseleave/scroll/input/blur + 全局滚动/resize 均隐藏 */
     function initVariableTooltip() {
       EDITOR_LAYERS.forEach(layer => {
-        const textarea = document.getElementById('val-' + layer);
+        const textarea = document.getElementById('val-' + layer.toLowerCase());
         if (!textarea) return;
         textarea.addEventListener('mousemove', (e) => handleEditorVarTooltipMove(textarea, e.clientX, e.clientY));
         textarea.addEventListener('mouseleave', () => hideVarTooltip());
@@ -4635,7 +5419,7 @@
       const newCompanyContainer = document.getElementById('modal-new-company-container');
       if (newCompanyContainer) newCompanyContainer.style.display = 'none';
       const confirmBtn = document.getElementById('modal-confirm-btn');
-      confirmBtn.className = 'btn btn-primary';
+      confirmBtn.className = 'btn-plain';
       confirmBtn.style.background = '';
       confirmBtn.disabled = false;
       confirmBtn.innerText = '确定';
@@ -4660,21 +5444,23 @@
 
     function getEditorLayerValues() {
       return {
-        L0: document.getElementById('val-L0') ? document.getElementById('val-L0').value : '',
-        L1: document.getElementById('val-L1') ? document.getElementById('val-L1').value : '',
-        L3: document.getElementById('val-L3') ? document.getElementById('val-L3').value : '',
+        SYSTEM: document.getElementById('val-system') ? document.getElementById('val-system').value : '',
       };
     }
     window.getEditorLayerValues = getEditorLayerValues;
 
-    /** 写入三层并统一派发 input 事件（刷新镜像高亮/撑高/Token 统计） */
+    /** 写入系统提示词并统一派发 input 事件（刷新镜像高亮/撑高/Token 统计） */
     function setEditorLayerValues(values) {
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-      ['L0', 'L1', 'L3'].forEach((layer) => {
-        const el = document.getElementById('val-' + layer);
+      ['SYSTEM'].forEach((layer) => {
+        const el = document.getElementById('val-' + layer.toLowerCase());
         if (!el) return;
         setter.call(el, values[layer] == null ? '' : String(values[layer]));
         el.dispatchEvent(new Event('input', { bubbles: true }));
+        // 强制回到顶部，确保内容从头显示、光标/滚动不错位
+        el.scrollTop = 0;
+        const mirror = document.getElementById('mirror-' + layer.toLowerCase());
+        if (mirror) mirror.scrollTop = 0;
       });
     }
     window.setEditorLayerValues = setEditorLayerValues;
@@ -4690,8 +5476,8 @@
     async function extractPromptTemplate() {
       if (templateExtracting) return;
       const values = getEditorLayerValues();
-      if (!values.L0.trim() && !values.L1.trim() && !values.L3.trim()) {
-        showToast('当前三层内容为空，请先填写内容或回填快照');
+      if (!values.SYSTEM.trim()) {
+        showToast('当前系统提示词为空，请先填写内容或回填快照');
         return;
       }
       templateExtracting = true;
@@ -4701,7 +5487,7 @@
       try {
         const d = await safeFetchJson('/api/templates/extract', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ l0_content: values.L0, l1_content: values.L1, l3_content: values.L3 }),
+          body: JSON.stringify({ system_prompt: values.SYSTEM }),
         });
         if (d && d.success && d.data) {
           openTemplateExtractModal(d.data);
@@ -4721,9 +5507,7 @@
       const modal = document.getElementById('template-extract-modal');
       if (!modal) return;
       document.getElementById('template-name-input').value = (data && data.name) || `模板-${new Date().toISOString().slice(0, 10)}`;
-      document.getElementById('template-l0-input').value = (data && data.l0_content) || '';
-      document.getElementById('template-l1-input').value = (data && data.l1_content) || '';
-      document.getElementById('template-l3-input').value = (data && data.l3_content) || '';
+      document.getElementById('template-system-input').value = (data && data.system_prompt) || '';
       setTemplateExtractError('');
       modal.style.display = 'flex';
       const nameEl = document.getElementById('template-name-input');
@@ -4745,18 +5529,16 @@
     async function saveTemplateFromModal() {
       if (templateSaving) return;
       const name = document.getElementById('template-name-input').value.trim();
-      const l0 = document.getElementById('template-l0-input').value;
-      const l1 = document.getElementById('template-l1-input').value;
-      const l3 = document.getElementById('template-l3-input').value;
+      const systemPrompt = document.getElementById('template-system-input').value;
       if (!name) { setTemplateExtractError('模板名称不能为空'); showToast('模板名称不能为空'); return; }
-      if (!l0.trim() && !l1.trim() && !l3.trim()) { setTemplateExtractError('三层内容不能全为空'); showToast('三层内容不能全为空'); return; }
+      if (!systemPrompt.trim()) { setTemplateExtractError('系统提示词不能为空'); showToast('系统提示词不能为空'); return; }
       templateSaving = true;
       const saveBtn = document.getElementById('template-save-btn');
       if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = '保存中...'; }
       try {
         const d = await safeFetchJson('/api/templates/save', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, l0_content: l0, l1_content: l1, l3_content: l3 }),
+          body: JSON.stringify({ name, system_prompt: systemPrompt }),
         });
         if (d && d.success) {
           showToast(d.message || '模板已保存');
@@ -4845,11 +5627,11 @@
         nameEl.textContent = tpl.name || '(未命名模板)';
         const meta = document.createElement('div');
         meta.className = 'tpl-item-meta';
-        meta.textContent = `L0 ${(tpl.l0_content || '').length} 字 · L1 ${(tpl.l1_content || '').length} 字 · L3 ${(tpl.l3_content || '').length} 字`;
+        meta.textContent = `系统提示词 ${(tpl.system_prompt || '').length} 字`;
         main.appendChild(nameEl);
         main.appendChild(meta);
         const applyBtn = document.createElement('button');
-        applyBtn.className = 'btn btn-primary';
+        applyBtn.className = 'btn-plain';
         applyBtn.type = 'button';
         applyBtn.style.padding = '4px 12px';
         applyBtn.innerText = '应用';
@@ -4868,14 +5650,14 @@
     }
     window.renderTemplateList = renderTemplateList;
 
-    /** 应用模板：手写确认框 → 写入三层 + 记录可回退状态 + 显示恢复按钮 */
+    /** 应用模板：手写确认框 → 写入系统提示词 + 记录可回退状态 + 显示恢复按钮 */
     function requestApplyTemplate(id) {
       if (guardPublicProject()) return;
       const tpl = templateCache.find((t) => String(t.id) === String(id));
       if (!tpl) { showToast('模板不存在，请刷新列表'); return; }
-      openConfirmModal('应用模板', `将用模板「${tpl.name}」覆盖当前 L0 / L1 / L3 三层内容，是否继续？`, async () => {
+      openConfirmModal('应用模板', `将用模板「${tpl.name}」覆盖当前系统提示词，是否继续？`, async () => {
         // 「恢复初始模板」语义 = 恢复到刚应用的模板原文（撤销应用后的人工改动）
-        templateRestoreState = { L0: tpl.l0_content || '', L1: tpl.l1_content || '', L3: tpl.l3_content || '' };
+        templateRestoreState = { SYSTEM: tpl.system_prompt || '' };
         setEditorLayerValues(templateRestoreState);
         const restoreBtn = document.getElementById('restore-template-btn');
         if (restoreBtn) restoreBtn.style.display = 'inline-block';
@@ -4915,18 +5697,18 @@
     }
     window.requestDeleteTemplate = requestDeleteTemplate;
 
-    // ==================== V4.0 阶段二：AI 润色（L0/L1/L3） ====================
+    // ==================== v1.60：AI 润色（系统提示词） ====================
     let polishingLayer = null;
 
     async function polishLayer(layer) {
       if (guardPublicProject()) return;
       if (polishingLayer) return;
-      const textarea = document.getElementById('val-' + layer);
+      const textarea = document.getElementById('val-' + layer.toLowerCase());
       if (!textarea) return;
       const content = (textarea.value || '').trim();
-      if (!content) { showToast(`请先填写 ${layer} 内容`); return; }
+      if (!content) { showToast('请先填写系统提示词内容'); return; }
       polishingLayer = layer;
-      const btn = document.getElementById('polish-' + layer);
+      const btn = document.getElementById('polish-' + layer.toLowerCase());
       const originalText = btn ? btn.innerText : '';
       if (btn) { btn.disabled = true; btn.classList.add('loading'); btn.innerText = '✨ 润色中...'; }
       try {
@@ -5029,7 +5811,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `prompt-studio-backup-${stamp}.json`;
+        a.download = `newrock-ai-workbench-backup-${stamp}.json`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -5117,9 +5899,8 @@
     initContextUI();
     initKbUI();
     initChatUI();
-    resetBatchState();
     initShortcuts(); // 模块六：Ctrl/Cmd + S 快捷键
-    initInsertVariableSelect(); // V3.0 阶段三：L0 插入变量下拉
+    initInsertVariableSelect(); // v1.60：系统提示词插入变量下拉
     initModelConfigUI(); // V3.0 阶段二：模型配置中心
     initGlobalEscHandler(); // V3.0 阶段四：Esc 关闭最上层弹层
     initVariableTooltip(); // P2-A：镜像变量中文自定义 tooltip

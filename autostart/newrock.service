@@ -1,0 +1,41 @@
+[Unit]
+Description=NewRock AI Workbench (Node.js Express)
+Documentation=file:///opt/newrock-ai-workbench/README.md
+# 等网络就绪再启动，避免开机时依赖未准备好
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# ============================================================
+# 部署前必须改这三处：WorkingDirectory / ExecStart 的 node 路径 / User
+# 也可以直接运行 autostart/install-systemd.sh 自动替换
+# ============================================================
+WorkingDirectory=/opt/newrock-ai-workbench
+ExecStart=/usr/bin/node server.js
+
+# 端口：与项目 .env 的 PORT 保持一致（默认 3100）
+# 若 .env 里已写 PORT=3100，可删掉下面这行；两处不一致时环境变量优先
+Environment=NODE_ENV=production
+Environment=PORT=3100
+
+# 崩溃自动拉起
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+# 优雅退出：server.js 已监听 SIGTERM，会先关库再退出
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+# 日志走 journald（用 journalctl -u newrock -f 查看）
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=newrock
+
+# 可选：降权运行。请提前创建用户并把项目目录 chown 给该用户
+# User=newrock
+# Group=newrock
+
+[Install]
+WantedBy=multi-user.target

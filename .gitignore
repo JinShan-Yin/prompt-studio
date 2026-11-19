@@ -9,4 +9,4 @@ test-data/e2e/
 *.log
 
 # 忽略 DSH 本地插件缓存
-.dshwolf/
+.dshwolf/tmp/

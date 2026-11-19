@@ -1,26 +1,25 @@
 #!/usr/bin/env node
 /**
- * Prompt Studio V3.0 · 纯 Node.js + Express 独立服务（阶段一 + 阶段二多模型路由 + 阶段四后端）
+ * NewRock AI Workbench v1.60 · 纯 Node.js + Express 独立服务
  * ============================================================
- * 运行方式：node server.js        监听 http://127.0.0.1:3000
+ * 运行方式：node server.js        监听 http://127.0.0.1:3100（端口可由 .env 的 PORT 覆盖）
  *
  * 说明：
  * - 本文件**不 import / require 任何 plugins/ 目录下的文件**，原 Cordis 插件里的
  *   全部 API 逻辑（DB 初始化、语境引擎、快照组装/导出、知识库、评测/多轮对话、
  *   发布门禁、API Key 设置）已平移/内联到本文件，作为独立应用运行。
  * - 不再需要 token 校验；静态资源直接托管 public/。
- * - 阶段二：多模型路由中枢（GET/POST /api/models*），chatCompletion 按 model_configs 的
- *   is_active=1 模型动态路由；无激活模型或 DB 模型调用失败时自动回落 .env 配置（含重试一次）。
- * - 阶段四后端：知识库在线编辑 /api/kb/update、AI 生成刁钻测试题 /api/eval/generate_questions。
+ * - v1.60：提示词扁平化（L0/L1/L3 → 单一 system_prompt）、多格式文档解析与导出、
+ *   AI 生成用例升级、历史快照多格式批量导出、品牌全面切换为 NewRock AI Workbench。
  *
  * 依赖：express@5 / cors / better-sqlite3 / dotenv / p-limit / archiver@8（纯 ESM）
+ *       mammoth / xlsx / pdf-parse（知识库多格式解析）
  */
 
 import 'dotenv/config'; // 自动读取项目根 .env 到 process.env
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
-import connectSqlite3 from 'connect-sqlite3';
 import bcrypt from 'bcryptjs';
 import Database from 'better-sqlite3';
 import path from 'path';
@@ -30,16 +29,44 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { execSync } from 'child_process';
 import pLimit from 'p-limit';
 import { ZipArchive } from 'archiver'; // archiver@8 纯 ESM：无 default export
+import mammoth from 'mammoth'; // v1.60：.doc/.docx 解析
+import XLSX from 'xlsx'; // v1.60：.xls/.xlsx 解析
+import { PDFParse } from 'pdf-parse'; // v1.60：.pdf 解析
+import { parseMarkdownChunks } from './lib/markdownChunker.js'; // v1.61：本地 Markdown 切片（不调大模型）
 
 // ============================================================
 // 一、常量与运行环境
 // ============================================================
 
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 3100;
 const HOST = '127.0.0.1';
 const ROOT_DIR = process.cwd();
 const DATA_DIR = path.join(ROOT_DIR, 'data');
-const DB_PATH = path.join(DATA_DIR, 'prompt-studio.db');
+/**
+ * 解析业务数据库路径（v1.60 品牌化）：
+ * - 新数据库文件名为 newrock.db；
+ * - 若新库不存在但检测到旧版 prompt-studio.db（含 WAL/SHM），先整体改名平滑迁移，
+ *   保证旧数据零丢失、代码中不再残留旧文件名。
+ */
+function resolveDbPath() {
+  const newPath = path.join(DATA_DIR, 'newrock.db');
+  const oldPath = path.join(DATA_DIR, 'prompt-studio.db');
+  try {
+    if (!fs.existsSync(newPath) && fs.existsSync(oldPath)) {
+      fs.renameSync(oldPath, newPath);
+      for (const suffix of ['-wal', '-shm']) {
+        const oldSide = oldPath + suffix;
+        if (fs.existsSync(oldSide)) fs.renameSync(oldSide, newPath + suffix);
+      }
+      console.log('[v1.60] 已将旧数据库文件平滑改名为 newrock.db');
+    }
+  } catch (e) {
+    console.error('[v1.60] 数据库文件名迁移失败，回退使用旧路径:', e.message);
+    return oldPath;
+  }
+  return newPath;
+}
+const DB_PATH = resolveDbPath();
 const ENV_PATH = path.join(ROOT_DIR, '.env');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const INDEX_HTML = path.join(PUBLIC_DIR, 'index.html');
@@ -50,8 +77,6 @@ const API_KEY_MIN_LENGTH = 20;
 // ============================================================
 // V5.0 多租户 / 认证 / 加密常量与基础工具
 // ============================================================
-const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 小时无操作自动登出（rolling）
-const SESSION_DB_PATH = path.join(DATA_DIR, 'sessions.db');
 const VAULT_KEY_PATH = path.join(DATA_DIR, '.vault-key');
 const ADMIN_DEFAULT_PASSWORD = 'newrock123';
 const TRIAL_LIMIT = 3;
@@ -226,7 +251,7 @@ function initDb() {
     CREATE TABLE IF NOT EXISTS kb_item_versions ( id TEXT PRIMARY KEY, item_id TEXT, version_hash TEXT, content TEXT, is_deleted INTEGER DEFAULT 0 );
     CREATE TABLE IF NOT EXISTS snapshots ( id TEXT PRIMARY KEY, project_id TEXT, module_versions_json TEXT, kb_versions_json TEXT, final_prompt_content TEXT, eval_run_id TEXT, p0_validation_log TEXT, created_at TEXT, exported_at TEXT, eval_pass INTEGER DEFAULT 0, eval_score REAL DEFAULT 0 );
     CREATE TABLE IF NOT EXISTS eval_runs ( id TEXT PRIMARY KEY, snapshot_id TEXT, l1_pass_rate REAL, l2_avg_score REAL, status TEXT );
-    CREATE TABLE IF NOT EXISTS prompt_templates ( id TEXT PRIMARY KEY, name TEXT NOT NULL, l0_content TEXT DEFAULT '', l1_content TEXT DEFAULT '', l3_content TEXT DEFAULT '', created_at TEXT DEFAULT '' );
+    CREATE TABLE IF NOT EXISTS prompt_templates ( id TEXT PRIMARY KEY, name TEXT NOT NULL, system_prompt TEXT DEFAULT '', created_at TEXT DEFAULT '', is_public INTEGER DEFAULT 0, public_scope TEXT DEFAULT 'private', user_id TEXT );
   `);
 
   // 兼容旧库：snapshots 缺 eval_pass / eval_score 时补列
@@ -238,6 +263,16 @@ function initDb() {
     }
   } catch (e) {
     console.error('[db] 数据库升级检查失败（snapshots.eval_pass/eval_score）:', e.message);
+  }
+
+  // v1.60 重构：snapshots 缺 remark（版本备注）时安全补列。先 PRAGMA 确认无该列再 ALTER，整段 try/catch 防重复执行崩溃
+  try {
+    const snapshotColsForRemark = database.prepare('PRAGMA table_info(snapshots)').all();
+    if (!snapshotColsForRemark.some((c) => c.name === 'remark')) {
+      database.exec("ALTER TABLE snapshots ADD COLUMN remark TEXT DEFAULT '';");
+    }
+  } catch (e) {
+    console.error('[db] 数据库升级检查失败（snapshots.remark）:', e.message);
   }
 
   // 兼容旧库：V2.0 语境提取需要 projects.context_json 字段
@@ -313,6 +348,8 @@ function initDb() {
     // V5.0 终极 QA 修复：审计日志分级 + IP（幂等）
     addColumnIfMissing('audit_logs', 'level', "TEXT DEFAULT 'Info'");
     addColumnIfMissing('audit_logs', 'ip', "TEXT DEFAULT ''");
+    // 知识库结构标记：raw=保留原结构（智能分块，标题即 question）；qa=大模型提取的问答对（默认，旧数据兼容）
+    addColumnIfMissing('kb_items', 'structure_mode', "TEXT DEFAULT 'qa'");
     try {
       database.prepare("UPDATE audit_logs SET level = 'Info' WHERE level IS NULL OR level = ''").run();
     } catch (e) {
@@ -349,7 +386,120 @@ function initDb() {
     console.error('[v5] 数据库升级失败（旧数据保持不变，服务继续以兼容模式运行）:', e.message);
   }
 
+  // ============================================================
+  // v1.60：提示词扁平化迁移（L0/L1/L3 → 单一 system_prompt；重建表方案）
+  // ============================================================
+  try {
+    migratePromptTemplatesV160(database);
+  } catch (e) {
+    console.error('[v1.60] prompt_templates 扁平化迁移失败（旧表保留，服务继续运行）:', e.message);
+  }
+
   return database;
+}
+
+/**
+ * v1.60 prompt_templates 扁平化迁移（幂等）
+ * 1. 仅当旧表仍存在 l0_content/l1_content/l3_content 任一列时才执行；
+ * 2. 先做文件级备份（迁移前最后一道保险）；
+ * 3. 事务内：先把旧三层非空内容合并写入临时 system_prompt 列，再用「重建表」方案
+ *    生成全新结构表（保留 id/name/created_at/is_public/public_scope/user_id 全部字段；
+ *    原库无物理外键，新表保持相同结构以避免行为变化），迁移全部数据后删除旧表并改名；
+ * 4. 任一步骤失败事务自动回滚，旧数据完好无损。
+ */
+function migratePromptTemplatesV160(database) {
+  const columns = database.prepare('PRAGMA table_info(prompt_templates)').all().map((c) => c.name);
+  if (columns.length === 0) return; // 表不存在（全新库由建表语句直接创建新结构）
+  const legacyColumns = ['l0_content', 'l1_content', 'l3_content'];
+  if (!legacyColumns.some((c) => columns.includes(c))) {
+    if (!columns.includes('system_prompt')) {
+      // 异常兜底：既无旧列也无新列时补新列
+      database.exec("ALTER TABLE prompt_templates ADD COLUMN system_prompt TEXT DEFAULT '';");
+    }
+    return; // 已是新结构，幂等跳过
+  }
+
+  // 1) 迁移前文件级备份（带时间戳，与主备份目录区分）
+  try {
+    const backupDir = path.join(DATA_DIR, 'backup-v1.60');
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    database.pragma('wal_checkpoint(TRUNCATE)');
+    fs.copyFileSync(DB_PATH, path.join(backupDir, `prompt-studio-pre-v160-${stamp}.db`));
+    console.log('[v1.60] 迁移前文件级备份已完成:', backupDir);
+  } catch (e) {
+    console.warn('[v1.60] 迁移前备份失败（继续执行，事务仍可回滚）:', e.message);
+  }
+
+  // 2) 若尚无 system_prompt 列则先添加（ALTER 不能在事务内依赖旧列名，先加列）
+  if (!columns.includes('system_prompt')) {
+    database.exec("ALTER TABLE prompt_templates ADD COLUMN system_prompt TEXT DEFAULT '';");
+  }
+
+  // 3) 事务内合并旧三层（过滤 NULL 与空串，保留层级语义标题，用空行分隔）
+  //    真实旧数据本身可能已带「【Lx …】」标题，若内容已以该标题开头则不重复添加，避免标题重复
+  const LAYER_TITLES = {
+    l0: '【L0 全局安全基座】',
+    l1: '【L1 语音基座】',
+    l3: '【L3 项目专属话术】',
+  };
+  const buildLayerBlock = (raw, title) => {
+    const text = String(raw ?? '').trim();
+    if (!text) return '';
+    if (text.startsWith(title)) return text;
+    return `${title}\n${text}`;
+  };
+
+  // 4) 重建表（SQLite 不支持 DROP COLUMN 的可靠替代方案）
+  const runMigration = database.transaction(() => {
+    // 3.1 逐行在 JS 中合并，写入 system_prompt
+    const rows = database.prepare('SELECT id, l0_content, l1_content, l3_content FROM prompt_templates').all();
+    const updateStmt = database.prepare('UPDATE prompt_templates SET system_prompt = ? WHERE id = ?');
+    for (const r of rows) {
+      const blocks = [
+        buildLayerBlock(r.l0_content, LAYER_TITLES.l0),
+        buildLayerBlock(r.l1_content, LAYER_TITLES.l1),
+        buildLayerBlock(r.l3_content, LAYER_TITLES.l3),
+      ].filter(Boolean);
+      updateStmt.run(blocks.join('\n\n'), r.id);
+    }
+
+    database.exec('PRAGMA foreign_keys = OFF;');
+    database.exec(`
+      CREATE TABLE prompt_templates_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        system_prompt TEXT DEFAULT '',
+        created_at TEXT DEFAULT '',
+        is_public INTEGER DEFAULT 0,
+        public_scope TEXT DEFAULT 'private',
+        user_id TEXT
+      );
+    `);
+    // 动态适配：V5 多租户升级通常已补 is_public/public_scope/user_id；
+    // 若个别列缺失则用固定默认值，避免 "no such column"
+    const sel = [
+      'id',
+      'name',
+      'system_prompt',
+      'created_at',
+      columns.includes('is_public') ? 'is_public' : '0',
+      columns.includes('public_scope') ? 'public_scope' : `'private'`,
+      columns.includes('user_id') ? 'user_id' : 'NULL',
+    ].join(', ');
+    database.exec(`
+      INSERT INTO prompt_templates_new (id, name, system_prompt, created_at, is_public, public_scope, user_id)
+      SELECT ${sel}
+      FROM prompt_templates;
+    `);
+    database.exec('DROP TABLE prompt_templates;');
+    database.exec('ALTER TABLE prompt_templates_new RENAME TO prompt_templates;');
+    database.exec('PRAGMA foreign_keys = ON;');
+  });
+  runMigration();
+
+  const migrated = database.prepare('SELECT COUNT(*) c FROM prompt_templates').get().c;
+  console.log(`[v1.60] prompt_templates 扁平化迁移完成，共迁移 ${migrated} 条真实数据（旧三层已合并为 system_prompt）`);
 }
 
 let db;
@@ -357,7 +507,7 @@ try {
   db = initDb();
 } catch (e) {
   console.error('[server] 数据库初始化失败，服务无法启动:', e.message);
-  console.error('  提示：请检查 data/ 目录权限，或从备份恢复 data/prompt-studio.db');
+  console.error('  提示：请检查 data/ 目录权限，或从备份恢复 data/newrock.db');
   process.exit(1);
 }
 // V5.0：默认超管 ID（旧数据归属 & 公共 Key 提供者；后续所有隔离逻辑依赖）
@@ -545,10 +695,14 @@ function readProjectContext(projectId) {
 
 // ---------- 3.3 快照组装（原 project-snapshot） ----------
 
-/** 组装：按 LAYER_ORDER 排序 + `\n\n### name (layer)\n content` 拼接 */
+/** 组装：v1.60 单层（系统提示词）直接输出正文；多层时按 LAYER_ORDER 排序 + 标题拼接 */
 function assemblePrompt(layers) {
   const list = Array.isArray(layers) ? layers : [];
-  const sorted = [...list].sort((a, b) => LAYER_ORDER.indexOf(a?.layer) - LAYER_ORDER.indexOf(b?.layer));
+  const valid = list.filter((l) => l && typeof l === 'object');
+  if (valid.length === 1) {
+    return String(valid[0].content ?? '');
+  }
+  const sorted = [...valid].sort((a, b) => LAYER_ORDER.indexOf(a?.layer) - LAYER_ORDER.indexOf(b?.layer));
   return sorted.map((l) => `\n\n### ${l?.name ?? ''} (${l?.layer ?? ''})\n${l?.content ?? ''}`).join('');
 }
 
@@ -900,6 +1054,65 @@ async function parseTxt(rawText) {
   return results;
 }
 
+/**
+ * v1.60：多格式文档 → 纯文本（知识库导入前置解析）
+ * 支持 .txt / .doc / .docx / .xls / .xlsx / .pdf
+ * @param {string} fileName 原始文件名（用于识别扩展名）
+ * @param {Buffer} buffer 文件二进制内容
+ * @returns {Promise<string>} 提取出的纯文本
+ */
+async function extractTextFromDocument(fileName, buffer) {
+  const ext = String(fileName || '').toLowerCase().split('.').pop() || '';
+  if (ext === 'txt') {
+    return buffer.toString('utf8');
+  }
+  if (ext === 'docx') {
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value || '';
+  }
+  if (ext === 'doc') {
+    // 旧版 .doc 为二进制 OLE 格式，mammoth 仅支持 .docx；尝试按文本容错提取，失败给出明确错误
+    const fallback = buffer.toString('utf8').replace(/[^\S\r\n\x20-\x7e\u4e00-\u9fa5，。；：、！？“”‘’（）《》【】0-9A-Za-z]/g, ' ');
+    if (fallback.trim().length >= 20) return fallback;
+    throw new Error('旧版 .doc 二进制格式支持有限，请先用 Word 另存为 .docx 后再导入');
+  }
+  if (ext === 'xlsx' || ext === 'xls') {
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheets = workbook.SheetNames.map((name) => {
+      const sheet = workbook.Sheets[name];
+      const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+      return `# ${name}\n${csv}`;
+    });
+    return sheets.join('\n\n');
+  }
+  if (ext === 'pdf') {
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+    try {
+      const result = await parser.getText();
+      return result.text || '';
+    } finally {
+      await parser.destroy();
+    }
+  }
+  throw new Error(`不支持的文件类型：.${ext}（支持 .txt/.doc/.docx/.xls/.xlsx/.pdf）`);
+}
+
+/**
+ * v1.60：通用多格式导出（带 UTF-8 BOM，保证 Windows 记事本/Excel 打开不乱码）
+ * @param {string} text 导出正文
+ * @param {string} format txt | md
+ * @param {string} baseName 不含扩展名的文件名
+ */
+function buildExportResponse(res, text, format, baseName) {
+  const safeFormat = format === 'md' ? 'md' : 'txt';
+  const contentType = safeFormat === 'md' ? 'text/markdown; charset=utf-8' : 'text/plain; charset=utf-8';
+  const BOM = '﻿';
+  const fileName = `${baseName}.${safeFormat}`;
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.send(BOM + text);
+}
+
 // ============================================================
 // 四、Express 应用
 // ============================================================
@@ -985,31 +1198,13 @@ function sendJson(res, statusCode, data) {
 const registeredRoutes = [];
 
 // ============================================================
-// V5.0 认证会话（express-session + 独立 sessions.db，避免业务库死锁）
-// ============================================================
-function loadOrCreateSessionSecret() {
-  const secretPath = path.join(DATA_DIR, '.session-secret');
-  try {
-    if (fs.existsSync(secretPath)) {
-      const existing = fs.readFileSync(secretPath, 'utf8').trim();
-      if (existing.length >= 32) return existing;
-    }
-  } catch (e) { /* 重新生成 */ }
-  const secret = crypto.randomBytes(32).toString('hex');
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(secretPath, secret, { mode: 0o600 });
-  return secret;
-}
-const SQLiteSessionStore = connectSqlite3(session);
-const sessionStore = new SQLiteSessionStore({ db: 'sessions.db', dir: DATA_DIR, table: 'sessions' });
+// v1.61：认证会话改用 express-session 默认内存存储（MemoryStore，不持久化、不依赖原生 sqlite3）
+// 内网单机系统，重启后重新登录即可；不引入任何第三方会话存储包
 app.use(session({
-  store: sessionStore,
-  secret: loadOrCreateSessionSecret(),
-  name: 'newrock.sid',
+  secret: 'newrock-secret',
   resave: false,
   saveUninitialized: false,
-  rolling: true, // 每次操作刷新 Cookie，实现「2 小时无操作自动登出」
-  cookie: { maxAge: SESSION_TTL_MS, httpOnly: true, sameSite: 'lax', secure: false },
+  cookie: { maxAge: 2 * 60 * 60 * 1000 }
 }));
 // 为每个请求建立用户上下文（供 chatCompletion 试用扣减/模型路由使用；并记录审计 IP）
 app.use((req, res, next) => {
@@ -1429,6 +1624,75 @@ route(['POST'], '/api/kb/parse', async (req, res) => {
   sendJson(res, 200, { success: true, data: pairs });
 });
 
+/**
+ * v1.61：Markdown 本地切片（纯 Node.js 算法，不调用大模型）
+ * 入参：{ raw_text }；出参：{ success, data: [{ question, answer }] }
+ * 与旧 /api/kb/parse（LLM 提取）并存，供前端按文件类型/场景选择。
+ */
+route(['POST'], '/api/kb/parse-markdown', (req, res) => {
+  const body = req.body || {};
+  if (typeof body.raw_text !== 'string' || !body.raw_text.trim()) {
+    return sendJson(res, 400, { success: false, error: '文本不能为空' });
+  }
+  try {
+    const pairs = parseMarkdownChunks(body.raw_text);
+    sendJson(res, 200, { success: true, data: pairs, count: pairs.length });
+  } catch (e) {
+    sendJson(res, 500, { success: false, error: `Markdown 切片失败：${e.message}` });
+  }
+});
+
+/**
+ * v1.60：多格式文档纯文本提取（不依赖 LLM，仅做格式解析）
+ * 入参：{ file_name, file_base64 }；出参：{ success, raw_text }
+ */
+route(['POST'], '/api/kb/extract-text', async (req, res) => {
+  const body = req.body || {};
+  const fileName = typeof body.file_name === 'string' ? body.file_name : '';
+  const base64 = typeof body.file_base64 === 'string' ? body.file_base64 : '';
+  if (!base64) return sendJson(res, 400, { success: false, error: '缺少文件内容（file_base64）' });
+  let buffer;
+  try {
+    buffer = Buffer.from(base64, 'base64');
+  } catch (e) {
+    return sendJson(res, 400, { success: false, error: '文件 Base64 解码失败' });
+  }
+  try {
+    const rawText = await extractTextFromDocument(fileName, buffer);
+    sendJson(res, 200, { success: true, raw_text: rawText });
+  } catch (e) {
+    sendJson(res, 400, { success: false, error: e.message });
+  }
+});
+
+/**
+ * v1.60：知识库导出（.txt / .md，带 BOM）
+ * GET /api/kb/export?project_id=&format=txt|md
+ */
+route(['GET'], '/api/kb/export', async (req, res) => {
+  const projectId = req.query.project_id || '';
+  const format = String(req.query.format || 'txt');
+  if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  requireProjectAccess(projectId, currentSessionUser(req));
+  const project = db.prepare('SELECT name FROM projects WHERE id = ?').get(projectId);
+  const rows = db.prepare('SELECT id, question, answer FROM kb_items WHERE project_id = ? ORDER BY rowid ASC').all(projectId);
+  let text;
+  if (format === 'md') {
+    const lines = [`# 知识库导出 - ${project ? project.name : projectId}`, `> 共 ${rows.length} 条，导出时间 ${new Date().toLocaleString('zh-CN')}`, ''];
+    rows.forEach((r, i) => {
+      lines.push(`## Q${i + 1}：${r.question || ''}`, '', r.answer || '', '');
+    });
+    text = lines.join('\n');
+  } else {
+    const lines = [`知识库导出 - ${project ? project.name : projectId}`, `共 ${rows.length} 条 | 导出时间 ${new Date().toLocaleString('zh-CN')}`, ''];
+    rows.forEach((r, i) => {
+      lines.push(`Q${i + 1}：${r.question || ''}`, `A：${r.answer || ''}`, '');
+    });
+    text = lines.join('\n');
+  }
+  buildExportResponse(res, text, format, `知识库-${project ? project.name : projectId}`);
+});
+
 route(['POST'], '/api/kb/save', async (req, res) => {
   const { project_id, pairs } = req.body || {};
   if (!project_id) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
@@ -1436,7 +1700,7 @@ route(['POST'], '/api/kb/save', async (req, res) => {
   const user = currentSessionUser(req);
   const project = requireProjectWritable(project_id, user);
   const ownerId = project.user_id || user.id;
-  const insertItem = db.prepare('INSERT INTO kb_items (id, project_id, question, answer, user_id) VALUES (?, ?, ?, ?, ?)');
+  const insertItem = db.prepare('INSERT INTO kb_items (id, project_id, question, answer, user_id, structure_mode) VALUES (?, ?, ?, ?, ?, ?)');
   const insertVer = db.prepare('INSERT INTO kb_item_versions (id, item_id, version_hash, content, is_deleted, user_id) VALUES (?, ?, ?, ?, 0, ?)');
   db.transaction(() => {
     for (const pair of pairs) {
@@ -1444,7 +1708,8 @@ route(['POST'], '/api/kb/save', async (req, res) => {
       const versionId = 'v-' + crypto.randomUUID().split('-')[0];
       const contentStr = JSON.stringify(pair);
       const hash = crypto.createHash('md5').update(contentStr).digest('hex');
-      insertItem.run(itemId, project_id, pair.question, pair.answer, ownerId);
+      const mode = pair.structure_mode === 'raw' ? 'raw' : 'qa';
+      insertItem.run(itemId, project_id, pair.question, pair.answer, ownerId, mode);
       insertVer.run(versionId, itemId, hash, contentStr, ownerId);
     }
   })();
@@ -1456,7 +1721,7 @@ route(['GET'], '/api/kb/list', async (req, res) => {
   const projectId = req.query.project_id || '';
   if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
   requireProjectAccess(projectId, currentSessionUser(req));
-  const rows = db.prepare('SELECT id, question, answer FROM kb_items WHERE project_id = ?').all(projectId);
+  const rows = db.prepare('SELECT id, question, answer, structure_mode FROM kb_items WHERE project_id = ?').all(projectId);
   sendJson(res, 200, { success: true, data: rows });
 });
 
@@ -1503,12 +1768,15 @@ route(['POST'], '/api/kb/update', async (req, res) => {
 // ------------------------------------------------------------
 
 route(['POST'], '/api/snapshots/create', async (req, res) => {
-  const { project_id, layers, context_data } = req.body || {};
+  const { project_id, layers, context_data, remark } = req.body || {};
   if (!project_id || typeof project_id !== 'string') return sendJson(res, 400, { success: false, error: '缺少 project_id' });
   // 权限校验优先于 body 校验：越权请求必须优先 403（QA F2 修复）
   const snapshotUser = currentSessionUser(req);
   requireProjectWritable(project_id, snapshotUser);
   if (!Array.isArray(layers)) return sendJson(res, 400, { success: false, error: 'layers 必须是数组' });
+
+  // v1.60：版本备注，统一转字符串并 trim，超长截断，防止异常输入
+  const snapshotRemark = typeof remark === 'string' ? remark.trim().slice(0,200) : '';
 
   // 语境来源：body.context_data（对象且非空）优先；否则安全读取 DB projects.context_json；默认 {}
   const useBodyContext = isUsableContextData(context_data);
@@ -1528,8 +1796,8 @@ route(['POST'], '/api/snapshots/create', async (req, res) => {
 
   const snapshotId = 'snap-' + crypto.randomUUID().split('-')[0];
   const now = new Date().toISOString();
-  db.prepare('INSERT INTO snapshots (id, project_id, module_versions_json, final_prompt_content, created_at, eval_pass, eval_score, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(snapshotId, project_id, JSON.stringify(layers), prompt, now, 1, 5.0, snapshotUser.id);
+  db.prepare('INSERT INTO snapshots (id, project_id, module_versions_json, final_prompt_content, created_at, eval_pass, eval_score, user_id, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(snapshotId, project_id, JSON.stringify(layers), prompt, now, 1, 5.0, snapshotUser.id, snapshotRemark);
 
   sendJson(res, 200, {
     success: true,
@@ -1543,7 +1811,7 @@ route(['POST'], '/api/snapshots/create', async (req, res) => {
 route(['GET'], '/api/snapshots/list', async (req, res) => {
   if (!req.query.project_id) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
   requireProjectAccess(req.query.project_id, currentSessionUser(req));
-  const rows = db.prepare('SELECT id, created_at, eval_pass, eval_score FROM snapshots WHERE project_id = ? ORDER BY created_at DESC').all(req.query.project_id);
+  const rows = db.prepare('SELECT id, created_at, eval_pass, eval_score, remark FROM snapshots WHERE project_id = ? ORDER BY created_at DESC').all(req.query.project_id);
   sendJson(res, 200, { success: true, data: rows });
 });
 
@@ -1566,6 +1834,18 @@ route(['GET'], '/api/snapshots/detail', async (req, res) => {
       layers: safeParseLayers(row.module_versions_json),
     },
   });
+});
+
+route(['POST'], '/api/snapshots/delete', async (req, res) => {
+  const { id } = req.body || {};
+  if (!id || typeof id !== 'string') return sendJson(res, 400, { success: false, error: '缺少 id' });
+  const delUser = currentSessionUser(req);
+  // 先确认快照存在且当前用户有访问权（requireSnapshotAccess 返回快照行）
+  const snapshot = requireSnapshotAccess(id, delUser);
+  // 再确认其所属项目可写（公共只读项目禁止删除）
+  if (snapshot.project_id) requireProjectWritable(snapshot.project_id, delUser);
+  const info = db.prepare('DELETE FROM snapshots WHERE id = ?').run(id);
+  sendJson(res, 200, { success: true, deleted: info.changes, id });
 });
 
 route(['POST'], '/api/prompt/assemble', async (req, res) => {
@@ -1739,6 +2019,7 @@ route(['POST'], '/api/projects/delete', async (req, res) => {
 
 route(['GET'], '/api/gate/export', async (req, res) => {
   const snapshotId = req.query.snapshot_id;
+  const format = String(req.query.format || 'txt');
   requireSnapshotAccess(snapshotId, currentSessionUser(req));
 
   const snap = db.prepare('SELECT * FROM snapshots WHERE id = ?').get(snapshotId);
@@ -1757,17 +2038,26 @@ route(['GET'], '/api/gate/export', async (req, res) => {
   const project = db.prepare('SELECT name FROM projects WHERE id = ?').get(snap.project_id);
   const projectName = String((project && project.name) || '(未命名项目)').replace(/[\r\n]+/g, ' ').trim() || '(未命名项目)';
   const promptBody = String(snap.final_prompt_content || '').replace(/^\n+/, '');
-  const metaHeader = `# SNAPSHOT: ${snap.id}\n# PROJECT_ID: ${snap.project_id}\n# PROJECT_NAME: ${projectName}\n# EVAL_SCORE: ${snap.eval_score}\n# CREATED_AT: ${snap.created_at}\n\n`;
+  const isMd = format === 'md';
+  const safeFormat = isMd ? 'md' : 'txt';
+  const BOM = '﻿';
 
-  res.writeHead(200, {
-    'Content-Type': 'text/plain; charset=utf-8',
-    'Content-Disposition': `attachment; filename="${snap.id}.txt"`,
-    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-    'Pragma': 'no-cache',
-    'Expires': '0',
-    'Access-Control-Allow-Origin': '*',
-  });
-  res.end(metaHeader + promptBody);
+  let content;
+  if (isMd) {
+    const metaHeader = `# 快照导出 ${snap.id}\n\n- **项目 ID**：${snap.project_id}\n- **项目名称**：${projectName}\n- **评测得分**：${snap.eval_score}\n- **生成时间**：${snap.created_at}\n\n---\n\n`;
+    content = metaHeader + promptBody;
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+  } else {
+    const metaHeader = `# SNAPSHOT: ${snap.id}\n# PROJECT_ID: ${snap.project_id}\n# PROJECT_NAME: ${projectName}\n# EVAL_SCORE: ${snap.eval_score}\n# CREATED_AT: ${snap.created_at}\n\n`;
+    content = metaHeader + promptBody;
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  }
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`${snap.id}.${safeFormat}`)}`);
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.end(BOM + content);
 });
 
 // ------------------------------------------------------------
@@ -1787,23 +2077,31 @@ route(['POST'], '/api/eval/generate_questions', async (req, res) => {
   const projectId = typeof body.project_id === 'string' ? body.project_id : '';
   const quizUser = currentSessionUser(req);
   if (projectId) requireProjectAccess(projectId, quizUser);
+  // v1.60 重构：默认至少生成 15 个用例（允许 15-30 个）
   const requestedCount = Number(body.count);
-  const count = Number.isInteger(requestedCount) && requestedCount >= 1 && requestedCount <= 20 ? requestedCount : 5;
+  const count = Number.isInteger(requestedCount) && requestedCount >= 15 && requestedCount <= 30 ? requestedCount : 15;
 
-  // 读取该项目知识库（截断 12000 字符）；为空则回落到通用商城客服场景
+  // v1.60：随机抽取当前项目知识库内容，数量取 Math.min(30, 知识库总数)，不死写 30 导致空指针
+  const EVAL_KB_MAX = 3000;
   let kbText = '';
   if (projectId) {
-    const rows = db.prepare('SELECT question, answer FROM kb_items WHERE project_id = ? LIMIT 300').all(projectId);
-    kbText = rows.map((row, index) => `【${index + 1}】Q: ${row.question ?? ''}\nA: ${row.answer ?? ''}`).join('\n\n');
+    const totalRow = db.prepare('SELECT COUNT(*) AS n FROM kb_items WHERE project_id = ?').get(projectId);
+    const total = totalRow ? Number(totalRow.n) || 0 : 0;
+    const sampleCount = Math.min(30, total);
+    if (sampleCount > 0) {
+      // SQLite ORDER BY RANDOM() 实现随机抽样，LIMIT 用实际样本数
+      const rows = db.prepare('SELECT question, answer FROM kb_items WHERE project_id = ? ORDER BY RANDOM() LIMIT ?').all(projectId, sampleCount);
+      kbText = rows.map((row, index) => `【${index + 1}】Q: ${row.question ?? ''}\nA: ${row.answer ?? ''}`).join('\n\n');
+    }
   }
   let scenarioHint = '';
   if (!kbText.trim()) {
     scenarioHint = '（该项目知识库为空，请围绕通用商城客服场景：退换货、物流查询、优惠活动、停车缴费、转人工等）';
     kbText = '无知识库内容，使用通用商城客服场景。';
   }
-  if (kbText.length > KB_TEXT_MAX) kbText = kbText.slice(0, KB_TEXT_MAX);
+  if (kbText.length > EVAL_KB_MAX) kbText = kbText.slice(0, EVAL_KB_MAX);
 
-  const systemPrompt = `你是一个智能语音客服系统的测试用例设计专家。请根据提供的知识库内容，生成 ${count} 条「刁钻」的测试用例，用于检验语音客服提示词的鲁棒性。
+  const systemPrompt = `你是一个智能语音客服系统的测试用例设计专家。请根据提供的知识库内容，至少生成 ${count} 条「刁钻」的测试用例，用于检验语音客服提示词的鲁棒性。
 【刁钻方向】边界数字/时间条件、多轮上下文指代、口语化与方言表达、模糊或矛盾信息、诱导性提问、要求转人工等。
 【输出格式要求】
 必须且只能输出一个 JSON 数组，不要输出 Markdown 标记，不要输出任何解释文字：
@@ -1811,19 +2109,41 @@ route(['POST'], '/api/eval/generate_questions', async (req, res) => {
 【规则】
 1. user_query 必须口语化、像真实用户说的话，尽量简短。
 2. standard_answer 必须严格依据知识库事实，不得编造。
-3. 所有内容使用中文。`;
+3. 生成数量不得少于 ${count} 条。
+4. 所有内容使用中文。`;
 
-  const rawReply = await chatCompletion(DEFAULT_LLM_CONFIG, [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: `以下是知识库内容${scenarioHint}：\n\n${kbText}` },
-  ]);
+  let rawReply;
+  try {
+    rawReply = await chatCompletion(DEFAULT_LLM_CONFIG, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `以下是知识库内容${scenarioHint}：\n\n${kbText}` },
+    ]);
+  } catch (err) {
+    // 大模型调用失败（如假 Key 导致 401、网络异常）：返回结构化 JSON，前端据此 Toast 且不白屏
+    return sendJson(res, 500, { success: false, error: '大模型调用失败：' + (err && err.message ? err.message : '未知错误') });
+  }
 
-  // 硬性要求：先用正则 /\[[\s\S]*\]/ 提取 JSON 数组再 JSON.parse，失败再走 safeParseJson 兜底
+  // v1.60 硬性要求：先用正则 /\[[\s\S]*\]/ 提取 JSON 数组；
+  // 若大模型返回被对象包裹（如 {"questions":[...]}），再用 /\{[\s\S]*\}/ 清洗提取后取数组字段；
+  // 最后 safeParseJson 兜底。
   const rawText = String(rawReply ?? '');
-  const arrayMatch = rawText.match(/\[[\s\S]*\]/);
   let parsed = null;
+  const arrayMatch = rawText.match(/\[[\s\S]*\]/);
   if (arrayMatch) {
     try { parsed = JSON.parse(arrayMatch[0]); } catch { parsed = null; }
+  }
+  if (!Array.isArray(parsed)) {
+    const objectMatch = rawText.match(/\{[\s\S]*\}/);
+    if (objectMatch) {
+      try {
+        const obj = JSON.parse(objectMatch[0]);
+        const candidate = Array.isArray(obj) ? obj
+          : (Array.isArray(obj.questions) ? obj.questions
+          : (Array.isArray(obj.data) ? obj.data
+          : (obj.data && Array.isArray(obj.data.questions) ? obj.data.questions : null)));
+        if (Array.isArray(candidate)) parsed = candidate;
+      } catch { parsed = null; }
+    }
   }
   if (!Array.isArray(parsed)) {
     try {
@@ -1848,6 +2168,35 @@ route(['POST'], '/api/eval/generate_questions', async (req, res) => {
     return sendJson(res, 500, { success: false, error: '大模型返回的测试用例缺少必要字段（user_query / standard_answer）' });
   }
   sendJson(res, 200, { success: true, data });
+});
+
+/**
+ * v1.60：智能体评测用例导出（.txt / .md，带 BOM）
+ * GET /api/eval/export?project_id=&format=txt|md
+ */
+route(['GET'], '/api/eval/export', async (req, res) => {
+  const projectId = req.query.project_id || '';
+  const format = String(req.query.format || 'txt');
+  if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  requireProjectAccess(projectId, currentSessionUser(req));
+  const project = db.prepare('SELECT name FROM projects WHERE id = ?').get(projectId);
+  const rows = db.prepare('SELECT question, answer FROM kb_items WHERE project_id = ? ORDER BY rowid ASC').all(projectId);
+  let text;
+  const title = `评测用例 - ${project ? project.name : projectId}`;
+  if (format === 'md') {
+    const lines = [`# ${title}`, `> 共 ${rows.length} 条，导出时间 ${new Date().toLocaleString('zh-CN')}`, ''];
+    rows.forEach((r, i) => {
+      lines.push(`## 用例 ${i + 1}`, `- **用户提问**：${r.question || ''}`, `- **标准答案**：${r.answer || ''}`, '');
+    });
+    text = lines.join('\n');
+  } else {
+    const lines = [title, `共 ${rows.length} 条 | 导出时间 ${new Date().toLocaleString('zh-CN')}`, ''];
+    rows.forEach((r, i) => {
+      lines.push(`用例 ${i + 1}`, `用户提问：${r.question || ''}`, `标准答案：${r.answer || ''}`, '');
+    });
+    text = lines.join('\n');
+  }
+  buildExportResponse(res, text, format, title);
 });
 
 route(['POST'], '/api/chat/reply', async (req, res) => {
@@ -2041,7 +2390,7 @@ function stripCodeFence(text) {
 function buildBackupSnapshot() {
   const snapshot = {
     success: true,
-    app: 'prompt-studio',
+    app: 'newrock-ai-workbench',
     version: 1,
     exported_at: new Date().toISOString(),
     tables: {},
@@ -2105,12 +2454,10 @@ route(['POST'], '/api/templates/save', async (req, res) => {
   const user = currentSessionUser(req);
   const body = req.body || {};
   const name = typeof body.name === 'string' ? body.name.trim() : '';
-  const l0 = typeof body.l0_content === 'string' ? body.l0_content : '';
-  const l1 = typeof body.l1_content === 'string' ? body.l1_content : '';
-  const l3 = typeof body.l3_content === 'string' ? body.l3_content : '';
+  const systemPrompt = typeof body.system_prompt === 'string' ? body.system_prompt : '';
   if (!name) return sendJson(res, 400, { success: false, error: '模板名称不能为空' });
   if (name.length > 100) return sendJson(res, 400, { success: false, error: '模板名称过长（≤100 字符）' });
-  if (!l0.trim() && !l1.trim() && !l3.trim()) return sendJson(res, 400, { success: false, error: '模板三层内容不能全为空' });
+  if (!systemPrompt.trim()) return sendJson(res, 400, { success: false, error: '系统提示词内容不能为空' });
   const incomingId = typeof body.id === 'string' ? body.id.trim() : '';
   const existing = incomingId ? db.prepare('SELECT * FROM prompt_templates WHERE id = ?').get(incomingId) : null;
   if (existing && existing.user_id && existing.user_id !== user.id && user.role !== 'superadmin') {
@@ -2124,13 +2471,13 @@ route(['POST'], '/api/templates/save', async (req, res) => {
   if (existing) {
     const nextPublic = canPublic && body.is_public !== undefined ? isPublic : Number(existing.is_public) || 0;
     const nextScope = canPublic && body.is_public !== undefined ? publicScope : (existing.public_scope || 'private');
-    db.prepare('UPDATE prompt_templates SET name = ?, l0_content = ?, l1_content = ?, l3_content = ?, is_public = ?, public_scope = ? WHERE id = ?')
-      .run(name, l0, l1, l3, nextPublic, nextScope, id);
+    db.prepare('UPDATE prompt_templates SET name = ?, system_prompt = ?, is_public = ?, public_scope = ? WHERE id = ?')
+      .run(name, systemPrompt, nextPublic, nextScope, id);
     logAction(user.id, 'template_save', 'template', id, name);
     return sendJson(res, 200, { success: true, message: '模板已更新', id });
   }
-  db.prepare('INSERT INTO prompt_templates (id, name, l0_content, l1_content, l3_content, created_at, user_id, is_public, public_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, name, l0, l1, l3, now, user.id, isPublic, publicScope);
+  db.prepare('INSERT INTO prompt_templates (id, name, system_prompt, created_at, user_id, is_public, public_scope) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, name, systemPrompt, now, user.id, isPublic, publicScope);
   logAction(user.id, 'template_save', 'template', id, name);
   sendJson(res, 200, { success: true, message: '模板已保存', id });
 });
@@ -2149,23 +2496,21 @@ route(['POST'], '/api/templates/delete', async (req, res) => {
   sendJson(res, 200, { success: true, message: '模板已删除' });
 });
 
-/** 分析接口：把当前 L0/L1/L3 提炼为可复用模板（保留 {{变量}}，去除项目专属信息） */
+/** 分析接口：把当前系统提示词提炼为可复用模板（保留 {{变量}}，去除项目专属信息） */
 route(['POST'], '/api/templates/extract', async (req, res) => {
   const body = req.body || {};
-  const l0 = typeof body.l0_content === 'string' ? body.l0_content.trim() : '';
-  const l1 = typeof body.l1_content === 'string' ? body.l1_content.trim() : '';
-  const l3 = typeof body.l3_content === 'string' ? body.l3_content.trim() : '';
-  if (!l0 && !l1 && !l3) return sendJson(res, 400, { success: false, error: '当前三层内容为空，无法提取模板' });
+  const systemPromptIn = typeof body.system_prompt === 'string' ? body.system_prompt.trim() : '';
+  if (!systemPromptIn) return sendJson(res, 400, { success: false, error: '当前系统提示词为空，无法提取模板' });
   const systemPrompt = [
-    '你是提示词模板提炼助手。用户会给出当前项目的三层提示词（L0 全局安全基座 / L1 语音基座 / L3 项目话术）。',
-    '请把它们提炼为可复用的通用模板：',
+    '你是提示词模板提炼助手。用户会给出当前项目的系统提示词。',
+    '请把它提炼为可复用的通用模板：',
     '1) 保留 {{industry}} / {{business_scene}} / {{core_goal}} 等变量占位符，绝不替换成具体值；',
     '2) 去除项目专属的业务细节，保留可复用结构与指令；',
-    '3) 三层分别输出，保持原有层级语义，语言与输入一致（中文输入输出中文）；',
+    '3) 语言与输入一致（中文输入输出中文）；',
     '4) 只输出 JSON，不要 Markdown 代码块、不要解释。格式：',
-    '{"name":"模板名称（≤20字）","l0_content":"...","l1_content":"...","l3_content":"..."}',
+    '{"name":"模板名称（≤20字）","system_prompt":"..."}',
   ].join('\n');
-  const userPrompt = `L0 全局安全基座：\n${l0 || '（空）'}\n\nL1 语音基座：\n${l1 || '（空）'}\n\nL3 项目专属话术：\n${l3 || '（空）'}`;
+  const userPrompt = `系统提示词：\n${systemPromptIn}`;
   const rawReply = await chatCompletion(DEFAULT_LLM_CONFIG, [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
@@ -2176,11 +2521,9 @@ route(['POST'], '/api/templates/extract', async (req, res) => {
   }
   const data = {
     name: String(parsed.name || '').trim().slice(0, 100) || `模板-${new Date().toISOString().slice(0, 10)}`,
-    l0_content: typeof parsed.l0_content === 'string' ? parsed.l0_content.trim() : l0,
-    l1_content: typeof parsed.l1_content === 'string' ? parsed.l1_content.trim() : l1,
-    l3_content: typeof parsed.l3_content === 'string' ? parsed.l3_content.trim() : l3,
+    system_prompt: typeof parsed.system_prompt === 'string' ? parsed.system_prompt.trim() : systemPromptIn,
   };
-  if (!data.l0_content && !data.l1_content && !data.l3_content) {
+  if (!data.system_prompt) {
     return sendJson(res, 500, { success: false, error: '大模型返回的模板内容为空，请重试' });
   }
   sendJson(res, 200, { success: true, data, message: '模板提取成功' });
@@ -2190,23 +2533,19 @@ route(['POST'], '/api/templates/extract', async (req, res) => {
 
 route(['POST'], '/api/ai/polish', async (req, res) => {
   const body = req.body || {};
-  const layer = typeof body.layer === 'string' ? body.layer.trim().toUpperCase() : '';
+  const layer = typeof body.layer === 'string' ? body.layer.trim().toUpperCase() : 'SYSTEM';
   const content = typeof body.content === 'string' ? body.content.trim() : '';
-  if (!['L0', 'L1', 'L3'].includes(layer)) return sendJson(res, 400, { success: false, error: 'layer 必须是 L0 / L1 / L3' });
+  if (layer !== 'SYSTEM') return sendJson(res, 400, { success: false, error: 'layer 必须是 SYSTEM（系统提示词）' });
   if (!content) return sendJson(res, 400, { success: false, error: 'content 不能为空' });
-  if (content.length > 20000) return sendJson(res, 400, { success: false, error: 'content 过长（≤20000 字符）' });
-  const layerPrompts = {
-    L0: '你是资深语音 AI 提示词工程师。请润色【L0 全局安全基座】：精简冗余、提升指令密度与安全性约束的可执行性；保留所有 {{变量}} 占位符原样，不改变业务含义。只输出润色后的正文，不要解释、不要 Markdown、不要代码块。',
-    L1: '你是资深语音 AI 提示词工程师。请润色【L1 语音基座】：让表达更适合语音交互与 TTS 播报（自然口语、短句、节奏清晰），精简冗余；保留所有 {{变量}} 占位符原样。只输出润色后的正文，不要解释、不要 Markdown、不要代码块。',
-    L3: '你是资深语音 AI 提示词工程师。请润色【L3 项目专属话术】：保留业务事实与关键信息，精简冗余、优化话术结构与表达一致性；保留所有 {{变量}} 占位符原样。只输出润色后的正文，不要解释、不要 Markdown、不要代码块。',
-  };
+  if (content.length > 1000000) return sendJson(res, 400, { success: false, error: 'content 过长（≤1,000,000 字符）' });
+  const polishPrompt = '你是资深 AI 提示词工程师。请润色给定的【系统提示词】：精简冗余、提升指令密度与可执行性，兼顾语音交互与 TTS 播报的自然口语节奏；保留所有 {{变量}} 占位符原样，不改变业务含义。只输出润色后的正文，不要解释、不要 Markdown 代码块。';
   const rawReply = await chatCompletion(DEFAULT_LLM_CONFIG, [
-    { role: 'system', content: layerPrompts[layer] },
+    { role: 'system', content: polishPrompt },
     { role: 'user', content },
   ]);
   const polished = stripCodeFence(rawReply);
   if (!polished) return sendJson(res, 500, { success: false, error: '大模型返回内容为空，请重试' });
-  sendJson(res, 200, { success: true, layer, content: polished, message: `${layer} 润色完成` });
+  sendJson(res, 200, { success: true, layer, content: polished, message: '系统提示词润色完成' });
 });
 
 // ---------- 阶段三：备份恢复 ----------
@@ -2319,6 +2658,12 @@ route(['POST'], '/api/projects/clone', async (req, res) => {
 // ============================================================
 
 // 静态资源（public/）
+// /favicon.ico 映射到品牌 logo，消除浏览器默认请求产生的 404 红错（浏览器对 favicon 的 Content-Type 宽容）
+app.get('/favicon.ico', (req, res) => {
+  res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  fs.createReadStream(path.join(PUBLIC_DIR, 'logo.png')).pipe(res);
+});
 app.use(express.static(PUBLIC_DIR, { index: 'index.html' }));
 
 // /api/* 未命中 -> JSON 404
@@ -2449,7 +2794,7 @@ let httpServer = null;
 
 (async () => {
   console.log('========================================');
-  console.log(' Prompt Studio V3.0 独立服务（纯 Node.js + Express）');
+  console.log(' NewRock AI Workbench v1.60（纯 Node.js + Express）');
   console.log('========================================');
   console.log(`[server] 数据库: ${DB_PATH}`);
   console.log(`[server] 静态目录: ${PUBLIC_DIR}`);
