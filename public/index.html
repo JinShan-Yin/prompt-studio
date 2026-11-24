@@ -657,6 +657,19 @@
       cursor: pointer;
     }
 
+    /* V1.62 QA 修复：全局 input 重置会把单选按钮压成 0×0；克隆弹窗保留原生单选框外观 */
+    #clone-project-modal input[type="radio"] {
+      -webkit-appearance: auto;
+      appearance: auto;
+      width: 16px;
+      height: 16px;
+      min-width: 16px;
+      min-height: 16px;
+      flex: 0 0 auto;
+      margin: 0;
+      cursor: pointer;
+    }
+
     /* ---------- 四、结构与交互精修 ---------- */
     /* 子级项目左侧极淡引导线 + 层级缩进 */
     .tree-container .menu-child {
