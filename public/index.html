@@ -1284,7 +1284,39 @@
           </div>
         </div>
 
-        <!-- v1.60：语境配置面板已移除（提示词扁平化，变量仍可通过「插入变量」按钮使用） -->
+        <!-- V1.62：恢复语境配置面板（变量实际取值入口） -->
+        <div class="card context-card" data-tab="edit" id="context-card">
+          <div class="card-header">
+            <span>🎯 语境配置</span>
+            <div class="context-header-actions">
+              <button class="btn btn-link" type="button" id="ctx-toggle-btn" onclick="toggleContextPanel()">收起</button>
+              <button class="btn btn-primary" id="ctx-extract-btn" type="button" onclick="aiExtractContext()" style="padding: 6px 14px; font-size: 13px;">
+                <span class="ctx-extract-label">✨ AI 智能提取</span>
+              </button>
+            </div>
+          </div>
+          <div class="card-body" id="context-card-body">
+            <div class="form-group">
+              <label class="form-label">行业 <span class="var-hint">{{industry}}</span></label>
+              <input id="ctx-industry" class="form-input" type="text" placeholder="例如：汽车服务 / 金融 / 电商零售" maxlength="60" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">业务场景 <span class="var-hint">{{business_scene}}</span></label>
+              <div class="tag-input-wrap" id="ctx-scene-wrap">
+                <div class="tag-list" id="ctx-scene-tags"></div>
+                <input id="ctx-scene-input" class="tag-input" type="text" placeholder="输入后按回车添加，可添加多个" maxlength="60" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">核心目标 <span class="var-hint">{{core_goal}}</span></label>
+              <div class="tag-input-wrap" id="ctx-goal-wrap">
+                <div class="tag-list" id="ctx-goal-tags"></div>
+                <input id="ctx-goal-input" class="tag-input" type="text" placeholder="输入后按回车添加，可添加多个" maxlength="60" />
+              </div>
+            </div>
+            <div style="font-size: 12px; color: #909399;">提示：生成快照 / 复制 txt / 对话时，会用这里的内容替换系统提示词中的 <span style="color:#f59e0b; font-family: Consolas, Monaco, monospace;">{{变量}}</span>；留空时替换为「通用」。</div>
+          </div>
+        </div>
 
         <!-- 卡片2：知识库列表（Tab2：左右 7:3 布局 + 批量管理） -->
         <div class="card kb-card" data-tab="kb" id="kb-card">
@@ -2179,6 +2211,14 @@
         if (el) el.readOnly = readOnly;
       });
       ['generate-snapshot-btn', 'clean-format-btn', 'polish-system'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = readOnly;
+      });
+      setContextReadOnly(readOnly);
+    }
+    /** V1.62：语境配置的只读联动（输入框、提取按钮禁用；Tag 增删另在函数入口守卫） */
+    function setContextReadOnly(readOnly) {
+      ['ctx-industry', 'ctx-scene-input', 'ctx-goal-input', 'ctx-extract-btn'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.disabled = readOnly;
       });
@@ -5547,6 +5587,7 @@
     };
     let extractAbortController = null; // AI 提取请求的 AbortController（防竞态串号）
     let contextSaveTimer = null;
+    let pendingContextSave = null; // V1.62：待提交的语境快照（切项目/关页前可立即落库）
 
     /** 清空语境：state 置空 + 输入框清空 + 标签 DOM 清空（切换项目时先调用） */
     function clearContext() {
@@ -5595,6 +5636,7 @@
 
     /** 添加标签：先 trim、空字符串过滤、同数组去重后才 add（成功返回 true） */
     function addContextTag(kind, rawValue) {
+      if (window.isPublicProject) { showToast('只读项目不能修改语境配置'); return false; }
       const value = String(rawValue == null ? '' : rawValue).trim();
       if (!value) return false;
       if (!Array.isArray(state[kind])) state[kind] = [];
@@ -5606,6 +5648,7 @@
     }
 
     function removeContextTag(kind, index) {
+      if (window.isPublicProject) { showToast('只读项目不能修改语境配置'); return; }
       if (!Array.isArray(state[kind])) return;
       if (index < 0 || index >= state[kind].length) return;
       state[kind].splice(index, 1);
@@ -5665,16 +5708,31 @@
       const projectIdAtSave = activeProjectId;
       if (!projectIdAtSave) return;
       const payload = JSON.parse(JSON.stringify(getContextDataForSnapshot()));
+      pendingContextSave = { projectId: projectIdAtSave, payload: payload };
       contextSaveTimer = setTimeout(() => {
         contextSaveTimer = null;
+        pendingContextSave = null;
         // 只校验项目未变，payload 一律用调度时的快照，绝不在回调内读 DOM
         if (!projectIdAtSave || projectIdAtSave !== activeProjectId) return;
         saveContextSilently(projectIdAtSave, payload);
       }, 800);
     }
 
-    async function saveContextSilently(projectId, payload) {
-      if (window.isPublicProject) return;
+    /** V1.62：切换项目/离开前立即提交待保存语境，避免 800ms 防抖窗口内丢值 */
+    function flushContextSave() {
+      if (!pendingContextSave) return;
+      const projectId = pendingContextSave.projectId;
+      const payload = pendingContextSave.payload;
+      pendingContextSave = null;
+      if (contextSaveTimer) { clearTimeout(contextSaveTimer); contextSaveTimer = null; }
+      if (!projectId) return;
+      saveContextSilently(projectId, payload, true);
+    }
+    window.flushContextSave = flushContextSave;
+
+    async function saveContextSilently(projectId, payload, force) {
+      // force=true 仅用于 flush：payload 在仍是可写项目时生成，切换后也要落库
+      if (!force && window.isPublicProject) return;
       try {
         await safeFetchJson(`/api/context/save`, {
           method: 'POST',
@@ -5689,7 +5747,9 @@
     /** 拉取并回填项目语境（异常/旧数据一律降级为空值，不报错、不阻塞页面） */
     async function loadProjectContext(projectId) {
       if (!projectId) return;
-      // 先丢弃上一个项目待执行的自动保存任务，避免其闭包 payload 串写到当前项目
+      // V1.62：先把上一个项目待保存的语境立即落库，再清理定时器（防切项目丢最后输入）
+      flushContextSave();
+      // 丢弃残留定时器，避免其闭包 payload 串写到当前项目
       if (contextSaveTimer) {
         clearTimeout(contextSaveTimer);
         contextSaveTimer = null;
