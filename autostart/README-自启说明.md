@@ -11,12 +11,37 @@
 const PORT = Number(process.env.PORT) || 3100;
 ```
 
-即优先级为：`.env` 的 `PORT` → 系统环境变量 `PORT` → 代码默认 3100。
+即优先级为：**系统环境变量 `PORT` → `.env` 的 `PORT` → 代码默认 3100**（`dotenv` 不会覆盖已存在的环境变量）。
 
-- 想换端口：只改 `.env` 的 `PORT=xxxx`，**不需要改代码**。
-- 自启配置文件里的 `PORT` 必须与 `.env` 保持一致（不一致时环境变量优先，容易排查困难）。
+- 想换端口：改 `.env` 的 `PORT=xxxx`，**不需要改代码**；但若自启配置里显式写了 `Environment=PORT=xxx`，它会覆盖 `.env`，必须同步修改。
+- Windows 的 `start-newrock*.bat` 已不再导出 `PORT`，只读取 `.env` 用于提示与打开浏览器；因此 Windows 以 `.env` 为准。
 
-## 二、三种环境选一个
+## 二、局域网访问（v1.62）
+
+默认仍然只监听 `127.0.0.1`。需要让同一局域网内的其他设备访问时：
+
+1. 在 `.env` 增加 `LAN_ACCESS=true`，重启服务。
+2. 启动日志会出现：
+   ```
+   [server] 绑定模式: 局域网（0.0.0.0，放行私有网段）
+   [server] [LAN] 局域网访问: http://192.168.1.20:3100
+   ```
+3. Windows 防火墙放行 TCP 3100（管理员 PowerShell）：
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File autostart\open-lan-firewall.ps1
+   # 取消：-Uninstall
+   ```
+4. 其他设备访问 `http://<局域网IP>:3100`。服务只放行回环与私有网段（10/8、172.16/12、192.168/16、IPv6 ULA / 链路本地），公网域名 Host 仍返回 403。
+5. 局域网模式默认关闭自助注册，账号请在「系统管理 → 用户与团队」创建。
+6. **安全提醒**：局域网是 HTTP 明文，只用于可信内网，不要做公网端口映射。
+
+## 三、日志轮转（v1.62）
+
+- Windows：`start-newrock.bat` / `start-newrock-silent.bat` 启动前会调用 `rotate-logs.ps1`；`logs/service.log` 超过 10MB 时改名为 `service-<时间戳>.log`，最多保留 5 份。
+- systemd：日志进 journald，用 `journalctl --vacuum-size=200M` 之类的策略即可。
+- supervisord / 容器：按原有日志驱动处理。
+
+## 四、三种环境选一个
 
 | 环境 | 用哪个文件 | 是否需要 root / 管理员 |
 |---|---|---|
@@ -132,7 +157,10 @@ taskkill /PID <PID> /F
 - 容器：确认 `pid 1` 是不是 systemd；不是的话必须用 supervisord 方案。
 
 **Q4：会不会和其它 agent 冲突？**
-不会。每个 agent 环境是独立的容器/网络空间；本服务只监听 `127.0.0.1:3100`（仅本机可访问，不对外暴露），且不修改任何系统级代理或路由配置。
+不会。每个 agent 环境是独立的容器/网络空间；默认只监听 `127.0.0.1:3100`，且不修改任何系统级代理或路由配置。开启 `LAN_ACCESS=true` 后才会监听 `0.0.0.0`，但仍只接受回环与私有网段的 Host/Origin。
+
+**Q5：局域网设备打不开？**
+依次检查：`.env` 是否 `LAN_ACCESS=true`、是否重启、防火墙是否放行 3100（跑 `open-lan-firewall.ps1`）、是否用了 `http://<局域网IP>:3100` 而不是 `127.0.0.1`、Windows 网络位置是否为「公用网络」。也可先在本机执行 `curl http://127.0.0.1:3100/api/health` 确认服务本身正常。
 
 ## 五、文件清单
 
@@ -142,6 +170,8 @@ taskkill /PID <PID> /F
 | `install-systemd.sh` | systemd 一键安装/卸载（自动替换路径与端口） |
 | `newrock-supervisor.conf` | supervisord 配置片段 |
 | `start-newrock.sh` | 通用启动脚本（前台 / 后台 / 状态 / 停止 / 健康检查） |
+| `rotate-logs.ps1` | Windows 日志轮转（>10MB 归档，保留 5 份） |
+| `open-lan-firewall.ps1` | Windows 防火墙放行 / 撤销 TCP 3100（需管理员） |
 | `start-newrock.bat` | Windows 双击启动 |
 | `install-autostart-windows.bat` | Windows 开机自启安装/卸载 |
 | `README-自启说明.md` | 本文件 |

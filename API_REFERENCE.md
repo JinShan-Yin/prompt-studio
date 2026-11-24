@@ -1,16 +1,67 @@
-# 核心 API 参考
+# 核心 API 参考（v1.62）
 
-## 鉴权 (Auth)
-- `POST /api/auth/login` / `logout` / `me`
+> 完整路由以 `server.js` 启动日志为准（共 68 条）。所有 `/api` 请求默认要求登录会话（白名单除外），并校验 `Host` / `Origin`。
 
-## 项目与资产 (Projects)
-- `GET /api/projects` / `POST /api/projects/create`
+## 鉴权 / 探活 / 配置
 
-## 快照 (Snapshots)
-- `POST /api/snapshots/create` / `GET /api/snapshots/list`
+- `POST /api/auth/login` `{username,password}`
+- `POST /api/auth/register`（局域网模式默认关闭，返回 `REGISTER_DISABLED`）
+- `POST /api/auth/logout`
+- `GET /api/auth/me` → 含 `features`、`trial_count`、`trial_limit`、`status`
+- `POST /api/auth/change-password` `{old_password,new_password}`
+- `GET /api/auth/config`（公开）→ `{register_enabled,lan_mode,version}`
+- `GET /api/health`（公开）→ `{status,version,uptime_s,db_ok,mode,port}`
 
-## 知识库 (Knowledge Base)
-- `POST /api/kb/parse` / `save`
+## 团队 / 用户 / 权限 / 备份（管理）
 
-## AI 与系统 (AI & System)
-- `POST /api/eval/generate_questions` / `GET /api/models`
+- `GET /api/teams`、`POST /api/teams/create`（超管）
+- `GET /api/admin/users` → 含 `status/last_login_at/features/overrides/team_name`
+- `POST /api/admin/users/create` `{username,password,role,team_id}`
+- `POST /api/admin/users/features` `{user_id,overrides:{edit,kb,eval,snapshot}}`（超管目标 403）
+- `POST /api/admin/users/status` `{user_id,status:'active'|'disabled'}`
+- `POST /api/admin/users/kick` `{user_id}`
+- `POST /api/admin/users/delete` `{user_id}`（有业务数据返回 409 `USER_HAS_DATA`）
+- `POST /api/admin/users/reset-password` `{user_id}`
+- `POST /api/admin/users/assign-team` `{user_id,team_id,role}`
+- `GET /api/admin/features`、`POST /api/admin/features/matrix`（超管）
+- `GET /api/admin/backups`、`POST /api/admin/backups/run`（超管）
+- `GET /api/admin/audit-logs`
+
+## 客户 / 项目 / 授权 / 置顶
+
+- `GET /api/companies`、`POST /api/companies/create|update|delete`
+- `GET /api/projects` → 每行含 `pinned`、`can_write`
+- `POST /api/projects/create|update|delete`
+- `POST /api/projects/clone` `{id,target_company_id?,name?,copy_mode?:'latest'|'all'|'none'}`
+- `POST /api/projects/pin` `{project_id,pinned}`
+- `GET /api/projects/grants?project_id=`、`POST /api/projects/grants/save` `{project_id,user_ids:[]}`
+- `GET /api/projects/export_zip`
+
+## 语境 / 知识库 / 快照
+
+- `GET /api/context/get`、`POST /api/context/save|extract`
+- `POST /api/kb/parse`、`/parse-markdown`、`/extract-text`、`/save`、`/delete`、`/update`
+- `GET /api/kb/list`、`/export`
+- `POST /api/prompt/assemble`
+- `POST /api/snapshots/create|delete`、`GET /api/snapshots/list|detail`
+- `GET /api/gate/export?snapshot_id=&format=txt|md`
+
+## 评测 / 对话 / 模型 / 模板 / 备份
+
+- `POST /api/eval/run`、`/generate_questions`、`GET /api/eval/export`
+- `POST /api/chat/reply`
+- `GET|POST /api/settings/api-key`（超管）
+- `GET /api/models`、`POST /api/models/save|delete|test`
+- `GET /api/templates`、`POST /api/templates/save|delete|extract`
+- `POST /api/ai/polish`
+- `GET /api/backup/export?scope=business|full`、`POST /api/backup/import`
+
+## 权限与错误码
+
+- `401 UNAUTHORIZED`：未登录 / 会话失效（禁用、踢下线、版本变化）
+- `403 FEATURE_DISABLED`：功能组被管理员关闭
+- `403 ACCOUNT_DISABLED`：账号被禁用
+- `403 SUPERADMIN_LOCKED`：试图修改超管功能权限
+- `403 TRIAL_EXHAUSTED`：免费试用额度用完（前端会引导配置个人 Key）
+- `409 USER_HAS_DATA`：账号仍有业务数据，不能删除
+- `429 LOGIN_LOCKED`：登录失败次数过多
