@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * NewRock AI Workbench v1.60 · 纯 Node.js + Express 独立服务
+ * NewRock AI Workbench v1.62 · 纯 Node.js + Express 独立服务
  * ============================================================
- * 运行方式：node server.js        监听 http://127.0.0.1:3100（端口可由 .env 的 PORT 覆盖）
+ * 运行方式：node server.js        默认监听 http://127.0.0.1:3100
+ *          LAN_ACCESS=true 时监听 0.0.0.0，供局域网内其他设备访问（端口可由 .env 的 PORT 覆盖）
  *
  * 说明：
  * - 本文件**不 import / require 任何 plugins/ 目录下的文件**，原 Cordis 插件里的
@@ -25,6 +26,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import os from 'os';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { execSync } from 'child_process';
 import pLimit from 'p-limit';
@@ -38,10 +40,16 @@ import { parseMarkdownChunks } from './lib/markdownChunker.js'; // v1.61：本�
 // 一、常量与运行环境
 // ============================================================
 
+const APP_VERSION = '1.62.0';
 const PORT = Number(process.env.PORT) || 3100;
-const HOST = '127.0.0.1';
+/** V1.62：局域网开关。默认关闭，保持与 V1.61 完全一致的本机监听口径 */
+const LAN_ACCESS = /^(1|true|yes|on)$/i.test(String(process.env.LAN_ACCESS || '').trim());
+const HOST = String(process.env.BIND_HOST || '').trim() || (LAN_ACCESS ? '0.0.0.0' : '127.0.0.1');
+/** V1.62：局域网模式下默认关闭自助注册；本机模式保留注册，可用 ALLOW_SELF_REGISTER=true 强制开启 */
+const SELF_REGISTER_ENABLED = !LAN_ACCESS || /^(1|true|yes|on)$/i.test(String(process.env.ALLOW_SELF_REGISTER || '').trim());
 const ROOT_DIR = process.cwd();
-const DATA_DIR = path.join(ROOT_DIR, 'data');
+/** V1.62：测试隔离钩子——仅供自动化冒烟指向临时数据目录，默认行为不变 */
+const DATA_DIR = process.env.NEWROCK_DATA_DIR ? path.resolve(process.env.NEWROCK_DATA_DIR) : path.join(ROOT_DIR, 'data');
 /**
  * 解析业务数据库路径（v1.60 品牌化）：
  * - 新数据库文件名为 newrock.db；
@@ -178,6 +186,228 @@ function logAction(userId, action, targetType = '', targetId = '', detail = '', 
   }
 }
 
+
+// ============================================================
+// V1.62：功能级权限 / 账号治理 / 备份运维 基础工具
+// ============================================================
+
+/** 会话密钥：优先 SESSION_SECRET，其次复用 data/.session-secret，最后生成并持久化 */
+function resolveSessionSecret() {
+  const envSecret = String(process.env.SESSION_SECRET || '').trim();
+  if (envSecret.length >= 16) return envSecret;
+  const secretPath = path.join(DATA_DIR, '.session-secret');
+  try {
+    if (fs.existsSync(secretPath)) {
+      const existing = fs.readFileSync(secretPath, 'utf8').trim();
+      if (existing.length >= 32) return existing;
+    }
+  } catch (e) {
+    console.warn('[session] 读取 .session-secret 失败:', e.message);
+  }
+  const generated = crypto.randomBytes(32).toString('hex');
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(secretPath, generated, { mode: 0o600 });
+  } catch (e) {
+    console.warn('[session] 写入 .session-secret 失败，使用临时密钥:', e.message);
+  }
+  return generated;
+}
+
+/** 功能组定义（与前端 4 个 Tab 一一对应） */
+const FEATURE_DEFS = [
+  { key: 'edit', label: '提示词编辑' },
+  { key: 'kb', label: '知识库管理' },
+  { key: 'eval', label: '智能体评测' },
+  { key: 'snapshot', label: '历史快照' },
+];
+const FEATURE_KEYS = FEATURE_DEFS.map((item) => item.key);
+/** 默认矩阵：全开，升级后行为与 V1.61 完全一致 */
+const DEFAULT_FEATURE_MATRIX = {
+  user: { edit: true, kb: true, eval: true, snapshot: true },
+  teamadmin: { edit: true, kb: true, eval: true, snapshot: true },
+};
+/** 功能门禁只覆盖对应接口；项目树/模型/备份/系统管理属于始终可用的基线功能 */
+const FEATURE_ROUTE_RULES = [
+  ['edit', /^\/api\/(context\/|prompt\/assemble|templates\/|ai\/polish)/],
+  ['kb', /^\/api\/kb\//],
+  ['eval', /^\/api\/(eval\/|chat\/)/],
+  ['snapshot', /^\/api\/(snapshots\/|gate\/export)/],
+];
+
+/** 解析个人功能覆盖 JSON（只认 4 个 key 的布尔值，坏数据静默忽略） */
+function parseFeatureOverrides(raw) {
+  if (!raw) return {};
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out = {};
+    for (const key of FEATURE_KEYS) {
+      if (typeof parsed[key] === 'boolean') out[key] = parsed[key];
+    }
+    return out;
+  } catch (e) {
+    return {};
+  }
+}
+
+let featureMatrixCache = null;
+/** 角色默认矩阵（读 app_settings，缺失/损坏回落全开） */
+function getFeatureMatrix() {
+  if (featureMatrixCache) return featureMatrixCache;
+  const matrix = JSON.parse(JSON.stringify(DEFAULT_FEATURE_MATRIX));
+  try {
+    const row = db.prepare("SELECT value FROM app_settings WHERE key = 'feature_matrix'").get();
+    if (row && row.value) {
+      const parsed = JSON.parse(row.value);
+      for (const role of ['user', 'teamadmin']) {
+        for (const key of FEATURE_KEYS) {
+          if (parsed && parsed[role] && typeof parsed[role][key] === 'boolean') matrix[role][key] = parsed[role][key];
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[features] 读取功能矩阵失败，使用默认值:', e.message);
+  }
+  featureMatrixCache = matrix;
+  return featureMatrixCache;
+}
+function invalidateFeatureMatrixCache() {
+  featureMatrixCache = null;
+}
+
+/** 解析某用户最终生效的功能集合：超管全开 → 角色默认 → 个人覆盖 */
+function resolveUserFeatures(user) {
+  const all = {};
+  for (const key of FEATURE_KEYS) all[key] = true;
+  if (!user) return all;
+  if (user.role === 'superadmin') return all;
+  const matrix = getFeatureMatrix();
+  const base = matrix[user.role] || matrix.user || {};
+  const overrides = parseFeatureOverrides(user.feature_overrides);
+  const features = {};
+  for (const key of FEATURE_KEYS) {
+    features[key] = typeof overrides[key] === 'boolean' ? overrides[key] : !!base[key];
+  }
+  return features;
+}
+
+/** 账号是否可用（V1.62 账号治理） */
+function isUserActive(user) {
+  return !!user && String(user.status || 'active') === 'active';
+}
+
+/** 功能门禁中间件：挂在 authGate 之后，超管直通，关闭则 403 */
+function featureGate(req, res, next) {
+  if (!req.path.startsWith('/api/')) return next();
+  const rule = FEATURE_ROUTE_RULES.find(([, pattern]) => pattern.test(req.path));
+  if (!rule) return next();
+  const user = getSessionUser(req);
+  if (!user) return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录或会话已过期' });
+  if (user.role === 'superadmin') return next();
+  const features = resolveUserFeatures(user);
+  if (features[rule[0]]) return next();
+  return sendJson(res, 403, {
+    success: false,
+    code: 'FEATURE_DISABLED',
+    feature: rule[0],
+    error: '该功能已被管理员关闭，如需开通请联系管理员',
+  });
+}
+
+// ---------- 备份目录与启动前快照 ----------
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const BACKUP_STARTUP_DIR = path.join(BACKUP_DIR, 'startup');
+const BACKUP_AUTO_DIR = path.join(BACKUP_DIR, 'auto');
+
+function initBackupDirs() {
+  for (const dir of [BACKUP_DIR, BACKUP_STARTUP_DIR, BACKUP_AUTO_DIR]) {
+    try {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    } catch (e) {
+      console.warn('[backup] 创建备份目录失败:', dir, e.message);
+    }
+  }
+}
+
+/** 文件名时间戳：20261124_222036 */
+function fileStamp() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+/** 只保留最近 keep 个 .db 备份 */
+function pruneBackupDir(dir, keep) {
+  try {
+    const files = fs.readdirSync(dir)
+      .filter((name) => name.endsWith('.db'))
+      .map((name) => {
+        const full = path.join(dir, name);
+        try { return { full, mtime: fs.statSync(full).mtimeMs }; } catch { return null; }
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.mtime - a.mtime);
+    for (const item of files.slice(keep)) {
+      try { fs.unlinkSync(item.full); } catch (e) { /* ignore */ }
+    }
+  } catch (e) {
+    console.warn('[backup] 清理旧备份失败:', dir, e.message);
+  }
+}
+
+/** 在线备份（better-sqlite3 db.backup，不阻塞读；用于每日自动备份/手动备份） */
+async function createDatabaseBackup(kind = 'auto') {
+  initBackupDirs();
+  const dir = kind === 'startup' ? BACKUP_STARTUP_DIR : BACKUP_AUTO_DIR;
+  const dest = path.join(dir, `${kind === 'startup' ? 'startup' : 'auto'}-${fileStamp()}.db`);
+  await db.backup(dest);
+  try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (e) { /* ignore */ }
+  pruneBackupDir(dir, kind === 'startup' ? 5 : 14);
+  return dest;
+}
+
+/** 列出备份文件（startup / auto），按时间倒序，最多 limit 条 */
+function listBackupFiles(limit = 50) {
+  const rows = [];
+  for (const [kind, dir] of [['startup', BACKUP_STARTUP_DIR], ['auto', BACKUP_AUTO_DIR]]) {
+    try {
+      for (const name of fs.readdirSync(dir)) {
+        if (!name.endsWith('.db')) continue;
+        const full = path.join(dir, name);
+        try {
+          const stat = fs.statSync(full);
+          rows.push({ kind, name, size: stat.size, mtime: stat.mtime.toISOString() });
+        } catch (e) { /* ignore */ }
+      }
+    } catch (e) { /* ignore */ }
+  }
+  rows.sort((a, b) => String(b.mtime).localeCompare(String(a.mtime)));
+  return rows.slice(0, limit);
+}
+
+/** 启动前文件级快照：在打开数据库、执行任何迁移之前执行 */
+function snapshotBeforeStartup() {
+  try {
+    if (!fs.existsSync(DB_PATH)) return '';
+    initBackupDirs();
+    const dest = path.join(BACKUP_STARTUP_DIR, `startup-${fileStamp()}.db`);
+    fs.copyFileSync(DB_PATH, dest);
+    for (const suffix of ['-wal', '-shm']) {
+      const side = DB_PATH + suffix;
+      if (fs.existsSync(side)) {
+        try { fs.copyFileSync(side, dest + suffix); } catch (e) { /* 忽略单文件失败 */ }
+      }
+    }
+    pruneBackupDir(BACKUP_STARTUP_DIR, 5);
+    console.log('[backup] 启动前数据库快照:', dest);
+    return dest;
+  } catch (e) {
+    console.warn('[backup] 启动前快照失败（继续启动）:', e.message);
+    return '';
+  }
+}
+
 // 快照层顺序（与 V2.0 保持一致）
 const LAYER_ORDER = ['L0', 'L1', 'L2', 'L3.5', 'L3'];
 // 发送给大模型的知识库文本上限
@@ -239,6 +469,10 @@ function initDb() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   const database = new Database(DB_PATH);
   database.pragma('journal_mode = WAL');
+  // V1.62：先 checkpoint 把 WAL 合回主库，再在「执行任何迁移之前」做文件级快照，
+  // 保证备份是一个完整可单独恢复的 .db（sidecar 仍一并复制，防 checkpoint 异常）
+  try { database.pragma('wal_checkpoint(TRUNCATE)'); } catch (e) { console.warn('[backup] 启动 checkpoint 失败:', e.message); }
+  snapshotBeforeStartup();
 
   // 建表语句（与原 db.js 完全一致；projects 含 context_json）
   database.exec(`
@@ -317,6 +551,9 @@ function initDb() {
       CREATE TABLE IF NOT EXISTS teams ( id TEXT PRIMARY KEY, name TEXT, created_at TEXT );
       CREATE TABLE IF NOT EXISTS users ( id TEXT PRIMARY KEY, username TEXT UNIQUE, password_hash TEXT, role TEXT, team_id TEXT, need_change_password INTEGER, trial_count INTEGER DEFAULT 0, created_at TEXT );
       CREATE TABLE IF NOT EXISTS audit_logs ( id TEXT PRIMARY KEY, user_id TEXT, action TEXT, target_type TEXT, target_id TEXT, detail TEXT, created_at TEXT );
+      CREATE TABLE IF NOT EXISTS app_settings ( key TEXT PRIMARY KEY, value TEXT );
+      CREATE TABLE IF NOT EXISTS project_grants ( id TEXT PRIMARY KEY, project_id TEXT NOT NULL, grantee_user_id TEXT NOT NULL, granted_by TEXT, created_at TEXT, UNIQUE(project_id, grantee_user_id) );
+      CREATE TABLE IF NOT EXISTS project_pins ( id TEXT PRIMARY KEY, user_id TEXT NOT NULL, project_id TEXT NOT NULL, created_at TEXT, UNIQUE(user_id, project_id) );
     `);
     const userCount = database.prepare('SELECT COUNT(*) c FROM users').get().c;
     if (userCount === 0) {
@@ -348,12 +585,28 @@ function initDb() {
     // V5.0 终极 QA 修复：审计日志分级 + IP（幂等）
     addColumnIfMissing('audit_logs', 'level', "TEXT DEFAULT 'Info'");
     addColumnIfMissing('audit_logs', 'ip', "TEXT DEFAULT ''");
+    // V1.62：账号治理 + 个人功能权限
+    addColumnIfMissing('users', 'feature_overrides', "TEXT DEFAULT ''");
+    addColumnIfMissing('users', 'status', "TEXT DEFAULT 'active'");
+    addColumnIfMissing('users', 'session_version', 'INTEGER DEFAULT 1');
+    addColumnIfMissing('users', 'last_login_at', "TEXT DEFAULT ''");
     // 知识库结构标记：raw=保留原结构（智能分块，标题即 question）；qa=大模型提取的问答对（默认，旧数据兼容）
     addColumnIfMissing('kb_items', 'structure_mode', "TEXT DEFAULT 'qa'");
     try {
       database.prepare("UPDATE audit_logs SET level = 'Info' WHERE level IS NULL OR level = ''").run();
     } catch (e) {
       console.error('[v5] 审计日志 level 回填失败（已跳过）:', e.message);
+    }
+
+    // V1.62：初始化角色默认功能矩阵（不存在时写入全开默认值）
+    try {
+      const matrixRow = database.prepare("SELECT value FROM app_settings WHERE key = 'feature_matrix'").get();
+      if (!matrixRow) {
+        database.prepare("INSERT INTO app_settings (key, value) VALUES ('feature_matrix', ?)").run(JSON.stringify(DEFAULT_FEATURE_MATRIX));
+        console.log('[v1.62] 已初始化默认功能矩阵（全部开放）');
+      }
+    } catch (e) {
+      console.warn('[v1.62] 初始化功能矩阵失败（使用默认值）:', e.message);
     }
 
     const adminRow = database.prepare("SELECT id FROM users WHERE role = 'superadmin' ORDER BY rowid ASC LIMIT 1").get()
@@ -517,6 +770,16 @@ try {
   ADMIN_USER_ID = adminRow ? adminRow.id : '';
 } catch (e) {
   console.error('[v5] 查询超管账号失败:', e.message);
+}
+/** V1.62：全量备份导入后账号可能会变，必须重新解析超管 ID（公共模型/旧数据归属都依赖它） */
+function refreshAdminUserId() {
+  try {
+    const adminRow = db.prepare("SELECT id FROM users WHERE role = 'superadmin' ORDER BY rowid ASC LIMIT 1").get()
+      || db.prepare('SELECT id FROM users ORDER BY rowid ASC LIMIT 1').get();
+    ADMIN_USER_ID = adminRow ? adminRow.id : '';
+  } catch (e) {
+    console.error('[v1.62] 刷新超管 ID 失败:', e.message);
+  }
 }
 
 // ============================================================
@@ -1128,24 +1391,46 @@ app.use((req, res, next) => {
   next();
 });
 
-// CORS 白名单：仅允许本机来源（localhost/127.0.0.1/::1）与无 Origin 的本机工具调用。
-// 目的：阻断任意恶意网页跨站调用本机 API（尤其借自定义 base_url 窃取 .env 真实 Key）。
-const LOCAL_ORIGIN_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+// V1.62 来源白名单：
+// - LAN_ACCESS=false（默认）：只允许回环地址，行为与 V1.61 完全一致；
+// - LAN_ACCESS=true：额外放行 RFC1918 私有网段与 IPv6 ULA / 链路本地；
+// - 任何情况下只认「字面 IP + localhost」，继续拒绝任意域名（保留防 DNS rebinding 能力）。
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+function normalizeHostname(raw) {
+  return String(raw || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
+}
+function isLoopbackHostname(hostname) {
+  const host = normalizeHostname(hostname);
+  if (!host) return false;
+  return LOOPBACK_HOSTS.has(host) || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+}
+function isPrivateIpv4Hostname(host) {
+  return /^(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})$/.test(host);
+}
+function isPrivateIpv6Hostname(host) {
+  if (!host.includes(':')) return false;
+  if (host === '::1') return true;
+  if (host.startsWith('fc') || host.startsWith('fd')) return true; // fc00::/7 ULA
+  if (/^fe[89ab]/.test(host)) return true; // fe80::/10 链路本地
+  const mapped = host.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+  return !!(mapped && isPrivateIpv4Hostname(mapped[1]));
+}
+function isAllowedNetworkHost(hostname) {
+  const host = normalizeHostname(hostname);
+  if (!host) return false;
+  if (isLoopbackHostname(host)) return true;
+  if (!LAN_ACCESS) return false;
+  return isPrivateIpv4Hostname(host) || isPrivateIpv6Hostname(host);
+}
 function isLocalOrigin(origin) {
   if (!origin) return true; // curl / 同源请求通常无 Origin
-  try {
-    const u = new URL(origin);
-    return LOCAL_ORIGIN_HOSTS.has(u.hostname.toLowerCase());
-  } catch { return false; }
+  try { return isAllowedNetworkHost(new URL(origin).hostname); } catch { return false; }
 }
-// Host 头校验（防 DNS rebinding：攻击者用同端口恶意域名解析到 127.0.0.1 后无 Origin 访问本机 API）
+// Host 头校验（防 DNS rebinding：攻击者用同端口恶意域名解析到本机后无 Origin 访问 API）
 function isLocalHostHeader(hostHeader) {
   const raw = String(hostHeader || '').trim();
   if (!raw) return false;
-  try {
-    const u = new URL('http://' + raw);
-    return LOCAL_ORIGIN_HOSTS.has(u.hostname.toLowerCase().replace(/^\[|\]$/g, ''));
-  } catch { return false; }
+  try { return isAllowedNetworkHost(new URL('http://' + raw).hostname); } catch { return false; }
 }
 app.use(cors({
   origin(origin, cb) {
@@ -1153,13 +1438,13 @@ app.use(cors({
     return cb(null, false);
   },
 }));
-// 双重防线：非本机 Origin 或伪造 Host 的 /api 请求一律 403
+// 双重防线：非白名单 Origin 或伪造 Host 的 /api 请求一律 403
 app.use('/api', (req, res, next) => {
   if (!isLocalOrigin(req.headers.origin)) {
-    return res.status(403).json({ success: false, error: '跨站请求被拒绝：仅允许本机同源访问' });
+    return res.status(403).json({ success: false, error: '跨站请求被拒绝：仅允许本机或局域网私有网段访问' });
   }
   if (!isLocalHostHeader(req.headers.host)) {
-    return res.status(403).json({ success: false, error: 'Host 不被允许：仅限本机访问（防 DNS rebinding）' });
+    return res.status(403).json({ success: false, error: 'Host 不被允许：仅限本机或局域网私有网段访问（防 DNS rebinding）' });
   }
   return next();
 });
@@ -1200,11 +1485,14 @@ const registeredRoutes = [];
 // ============================================================
 // v1.61：认证会话改用 express-session 默认内存存储（MemoryStore，不持久化、不依赖原生 sqlite3）
 // 内网单机系统，重启后重新登录即可；不引入任何第三方会话存储包
+// V1.62：会话密钥持久化（不再硬编码），cookie 名与 logout 清理保持一致
+const SESSION_SECRET = resolveSessionSecret();
 app.use(session({
-  secret: 'newrock-secret',
+  name: 'newrock.sid',
+  secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 2 * 60 * 60 * 1000 }
+  cookie: { maxAge: 2 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax' }
 }));
 // 为每个请求建立用户上下文（供 chatCompletion 试用扣减/模型路由使用；并记录审计 IP）
 app.use((req, res, next) => {
@@ -1212,27 +1500,48 @@ app.use((req, res, next) => {
   requestContext.run({ userId: req.session && req.session.userId ? req.session.userId : null, ip }, next);
 });
 
-// 白名单：登录页 / 登录注册接口 / 登录页所需静态资源；其余未登录访问一律拦截
-const AUTH_WHITELIST_PATHS = new Set(['/login.html', '/api/auth/login', '/api/auth/register', '/api/auth/logout']);
+// 白名单：登录页 / 登录注册接口 / 启动配置 / 健康检查；其余未登录访问一律拦截
+const AUTH_WHITELIST_PATHS = new Set(['/login.html', '/api/auth/login', '/api/auth/register', '/api/auth/logout', '/api/auth/config', '/api/health']);
 const AUTH_PUBLIC_STATIC_RE = /^\/(logo\.png|favicon\.ico)$/i;
+function destroySessionQuietly(req) {
+  try { if (req.session) req.session.destroy(() => {}); } catch (e) { /* ignore */ }
+}
+/** V1.62：解析并校验会话用户（账号状态 + 会话版本），失效立即销毁会话 */
+function resolveSessionUser(req) {
+  if (req._sessionUser !== undefined) return req._sessionUser;
+  const userId = req.session && req.session.userId ? String(req.session.userId) : '';
+  if (!userId) { req._sessionUser = null; return null; }
+  let user = null;
+  try { user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) || null; } catch (e) { user = null; }
+  if (!user || String(user.status || 'active') !== 'active') {
+    destroySessionQuietly(req);
+    req._sessionUser = null;
+    return null;
+  }
+  const expected = Number(user.session_version) || 1;
+  const actual = Number(req.session && req.session.sv) || 0;
+  if (expected !== actual) {
+    destroySessionQuietly(req);
+    req._sessionUser = null;
+    return null;
+  }
+  req._sessionUser = user;
+  return user;
+}
 function authGate(req, res, next) {
   const requestPath = req.path;
   if (AUTH_WHITELIST_PATHS.has(requestPath) || AUTH_PUBLIC_STATIC_RE.test(requestPath)) return next();
-  const loggedIn = !!(req.session && req.session.userId);
-  if (loggedIn) return next();
+  if (resolveSessionUser(req)) return next();
   if (requestPath.startsWith('/api/')) {
     return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录或会话已过期，请重新登录' });
   }
   return res.redirect(302, '/login.html');
 }
 app.use(authGate);
+app.use(featureGate);
 
 function getSessionUser(req) {
-  const userId = req.session && req.session.userId ? String(req.session.userId) : '';
-  if (!userId) return null;
-  try {
-    return db.prepare('SELECT * FROM users WHERE id = ?').get(userId) || null;
-  } catch (e) { return null; }
+  return resolveSessionUser(req);
 }
 function publicUser(user) {
   return {
@@ -1242,6 +1551,9 @@ function publicUser(user) {
     team_id: user.team_id || '',
     need_change_password: Number(user.need_change_password) || 0,
     trial_count: Number(user.trial_count) || 0,
+    trial_limit: TRIAL_LIMIT,
+    status: user.status || 'active',
+    features: resolveUserFeatures(user),
   };
 }
 function requireLogin(req, res, next) {
@@ -1313,15 +1625,38 @@ function canReadPublicProject(project, user) {
   }
   return false;
 }
+/** V1.62：项目是否被显式只读授权给该用户 */
+function hasProjectGrant(projectId, userId) {
+  if (!projectId || !userId) return false;
+  try {
+    return !!db.prepare('SELECT 1 FROM project_grants WHERE project_id = ? AND grantee_user_id = ? LIMIT 1').get(String(projectId), String(userId));
+  } catch (e) {
+    return false;
+  }
+}
+/** V1.62：当前用户是否只能通过「只读授权」访问该项目（所有者/同团队团管不算） */
+function isReadOnlyGrantee(project, user) {
+  if (!project || !user) return false;
+  if (canAccessOwner(project.user_id, user)) return false;
+  return hasProjectGrant(project.id, user.id);
+}
+/** V1.62：统一读权限判定（所有者 / 公共参考 / 只读授权） */
+function canReadProject(project, user) {
+  if (!project) return false;
+  return canAccessOwner(project.user_id, user)
+    || canReadPublicProject(project, user)
+    || hasProjectGrant(project.id, user && user.id);
+}
 function requireProjectAccess(projectId, user) {
   const project = projectId ? db.prepare('SELECT * FROM projects WHERE id = ?').get(String(projectId)) : null;
   if (!project) throw httpError(404, '项目不存在或无权访问');
-  if (!canAccessOwner(project.user_id, user) && !canReadPublicProject(project, user)) throw httpError(403, '无权访问该项目');
+  if (!canReadProject(project, user)) throw httpError(403, '无权访问该项目');
   return project;
 }
-/** 写操作校验：公共参考项目禁止修改（超管管理场景除外） */
+/** 写操作校验：共享只读授权、公共参考项目均禁止修改（超管管理场景除外） */
 function requireProjectWritable(projectId, user) {
   const project = requireProjectAccess(projectId, user);
+  if (isReadOnlyGrantee(project, user)) throw httpError(403, '该项目为共享只读权限，无权修改');
   if (Number(project.is_public) === 1 && (!user || user.role !== 'superadmin')) {
     throw httpError(403, '无权修改公共项目');
   }
@@ -1329,6 +1664,7 @@ function requireProjectWritable(projectId, user) {
 }
 /** 已有项目行时的写保护（KB 等通过 project 行校验的场景） */
 function assertProjectWritableByRow(project, user) {
+  if (project && isReadOnlyGrantee(project, user)) throw httpError(403, '该项目为共享只读权限，无权修改');
   if (project && Number(project.is_public) === 1 && (!user || user.role !== 'superadmin')) {
     throw httpError(403, '无权修改公共项目');
   }
@@ -1351,7 +1687,7 @@ function requireSnapshotAccess(snapshotId, user) {
     projectRow = db.prepare('SELECT * FROM projects WHERE id = ?').get(snapshot.project_id) || null;
     if (!ownerId && projectRow) ownerId = projectRow.user_id;
   }
-  if (!canAccessOwner(ownerId, user) && !(projectRow && canReadPublicProject(projectRow, user))) throw httpError(403, '无权访问该快照');
+  if (!canAccessOwner(ownerId, user) && !(projectRow && canReadProject(projectRow, user))) throw httpError(403, '无权访问该快照');
   return snapshot;
 }
 /** 校验知识库条目访问权（回落到所属项目） */
@@ -1359,7 +1695,7 @@ function requireKbAccess(kbId, user) {
   const item = kbId ? db.prepare('SELECT * FROM kb_items WHERE id = ?').get(String(kbId)) : null;
   if (!item) throw httpError(404, '知识条目不存在或无权访问');
   const project = item.project_id ? db.prepare('SELECT * FROM projects WHERE id = ?').get(item.project_id) : null;
-  if (!project || !canAccessOwner(project.user_id, user)) throw httpError(403, '无权访问该知识条目');
+  if (!project || !canReadProject(project, user)) throw httpError(403, '无权访问该知识条目');
   return { item, project };
 }
 
@@ -1391,7 +1727,43 @@ function route(methods, requestPath, handler) {
 // ------------------------------------------------------------
 // 4.0 V5.0 认证接口（登录 / 注册 / 登出 / 当前用户 / 修改密码）
 // ------------------------------------------------------------
+/** V1.62：登录失败限流（内存；同一 IP+账号 10 分钟窗口最多 10 次） */
+const LOGIN_FAIL_WINDOW_MS = 10 * 60 * 1000;
+const LOGIN_FAIL_LIMIT = 10;
+const loginFailures = new Map();
+function loginAttemptKey(req, username) {
+  const ip = String(req.ip || (req.socket && req.socket.remoteAddress) || '');
+  return `${ip}|${String(username || '').toLowerCase()}`;
+}
+function getLoginFailureState(key) {
+  const item = loginFailures.get(key);
+  if (!item || item.resetAt <= Date.now()) {
+    loginFailures.delete(key);
+    return { count: 0, resetAt: 0 };
+  }
+  return item;
+}
+function recordLoginFailure(key) {
+  const now = Date.now();
+  const item = getLoginFailureState(key);
+  const next = item.count > 0 ? item : { count: 0, resetAt: now + LOGIN_FAIL_WINDOW_MS };
+  next.count += 1;
+  loginFailures.set(key, next);
+  return next;
+}
+
+/** V1.62：启动配置（登录页据此决定是否显示注册入口；公开接口） */
+route(['GET'], '/api/auth/config', async (req, res) => {
+  return sendJson(res, 200, {
+    success: true,
+    data: { register_enabled: SELF_REGISTER_ENABLED, lan_mode: LAN_ACCESS, version: APP_VERSION },
+  });
+});
+
 route(['POST'], '/api/auth/register', async (req, res) => {
+  if (!SELF_REGISTER_ENABLED) {
+    return sendJson(res, 403, { success: false, code: 'REGISTER_DISABLED', error: '当前已关闭自助注册，请联系管理员创建账号' });
+  }
   const body = req.body || {};
   const username = typeof body.username === 'string' ? body.username.trim() : '';
   const password = typeof body.password === 'string' ? body.password : '';
@@ -1405,18 +1777,22 @@ route(['POST'], '/api/auth/register', async (req, res) => {
   if (exists) return sendJson(res, 409, { success: false, error: '该账号已注册' });
   const id = 'user-' + crypto.randomUUID().split('-')[0];
   try {
-    db.prepare('INSERT INTO users (id, username, password_hash, role, team_id, need_change_password, trial_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, username, bcrypt.hashSync(password, 10), 'user', '', 0, 0, new Date().toISOString());
+    db.prepare('INSERT INTO users (id, username, password_hash, role, team_id, need_change_password, trial_count, created_at, status, session_version, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, username, bcrypt.hashSync(password, 10), 'user', '', 0, 0, new Date().toISOString(), 'active', 1, new Date().toISOString());
   } catch (e) {
     return sendJson(res, 409, { success: false, error: '注册失败：账号已存在' });
   }
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-  req.session.userId = user.id;
-  req.session.role = user.role;
-  req.session.save((err) => {
-    if (err) return sendJson(res, 500, { success: false, error: '会话保存失败，请重试' });
-    logAction(user.id, 'register', 'user', user.id, `username=${user.username}`);
-    return sendJson(res, 200, { success: true, user: publicUser(user) });
+  req.session.regenerate((regenErr) => {
+    if (regenErr) return sendJson(res, 500, { success: false, error: '会话保存失败，请重试' });
+    req.session.userId = user.id;
+    req.session.role = user.role;
+    req.session.sv = Number(user.session_version) || 1;
+    req.session.save((err) => {
+      if (err) return sendJson(res, 500, { success: false, error: '会话保存失败，请重试' });
+      logAction(user.id, 'register', 'user', user.id, `username=${user.username}`);
+      return sendJson(res, 200, { success: true, user: publicUser(user) });
+    });
   });
 });
 
@@ -1425,16 +1801,34 @@ route(['POST'], '/api/auth/login', async (req, res) => {
   const username = typeof body.username === 'string' ? body.username.trim() : '';
   const password = typeof body.password === 'string' ? body.password : '';
   if (!username || !password) return sendJson(res, 400, { success: false, error: '请输入账号和密码' });
+  const failKey = loginAttemptKey(req, username);
+  const failState = getLoginFailureState(failKey);
+  if (failState.count >= LOGIN_FAIL_LIMIT) {
+    const retrySeconds = Math.max(1, Math.ceil((failState.resetAt - Date.now()) / 1000));
+    return sendJson(res, 429, { success: false, code: 'LOGIN_LOCKED', error: `登录失败次数过多，请 ${retrySeconds} 秒后重试` });
+  }
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    recordLoginFailure(failKey);
     return sendJson(res, 401, { success: false, error: '账号或密码错误' });
   }
-  req.session.userId = user.id;
-  req.session.role = user.role;
-  req.session.save((err) => {
-    if (err) return sendJson(res, 500, { success: false, error: '会话保存失败，请重试' });
-    logAction(user.id, 'login', 'user', user.id, `role=${user.role}`);
-    return sendJson(res, 200, { success: true, user: publicUser(user) });
+  if (String(user.status || 'active') !== 'active') {
+    return sendJson(res, 403, { success: false, code: 'ACCOUNT_DISABLED', error: '该账号已被禁用，请联系管理员' });
+  }
+  loginFailures.delete(failKey);
+  try {
+    db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), user.id);
+  } catch (e) { /* 最后登录时间失败不影响登录 */ }
+  req.session.regenerate((regenErr) => {
+    if (regenErr) return sendJson(res, 500, { success: false, error: '会话保存失败，请重试' });
+    req.session.userId = user.id;
+    req.session.role = user.role;
+    req.session.sv = Number(user.session_version) || 1;
+    req.session.save((err) => {
+      if (err) return sendJson(res, 500, { success: false, error: '会话保存失败，请重试' });
+      logAction(user.id, 'login', 'user', user.id, `role=${user.role}`);
+      return sendJson(res, 200, { success: true, user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(user.id)) });
+    });
   });
 });
 
@@ -1451,6 +1845,21 @@ route(['GET'], '/api/auth/me', async (req, res) => {
   const user = getSessionUser(req);
   if (!user) return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录或会话已过期' });
   return sendJson(res, 200, { success: true, user: publicUser(user) });
+});
+
+/** V1.62：健康检查（公开接口，供自启/监控探活；只做最小 DB 检查） */
+route(['GET'], '/api/health', async (req, res) => {
+  let dbOk = false;
+  try { db.prepare('SELECT 1').get(); dbOk = true; } catch (e) { dbOk = false; }
+  return sendJson(res, dbOk ? 200 : 503, {
+    success: dbOk,
+    status: dbOk ? 'ok' : 'degraded',
+    version: APP_VERSION,
+    uptime_s: Math.round(process.uptime()),
+    db_ok: dbOk,
+    mode: LAN_ACCESS ? 'lan' : 'local',
+    port: PORT,
+  });
 });
 
 route(['POST'], '/api/auth/change-password', async (req, res) => {
@@ -1490,16 +1899,181 @@ route(['POST'], '/api/teams/create', async (req, res) => {
   sendJson(res, 200, { success: true, id, message: '团队创建成功' });
 });
 
+/** V1.62：管理端可见的用户行（含团队名、状态、最后登录、生效功能） */
+function toAdminUserRow(row, teamNames) {
+  return {
+    id: row.id,
+    username: row.username,
+    role: row.role,
+    team_id: row.team_id || '',
+    team_name: teamNames.get(row.team_id || '') || '',
+    need_change_password: Number(row.need_change_password) || 0,
+    trial_count: Number(row.trial_count) || 0,
+    created_at: row.created_at || '',
+    last_login_at: row.last_login_at || '',
+    status: row.status || 'active',
+    features: resolveUserFeatures(row),
+    overrides: parseFeatureOverrides(row.feature_overrides),
+  };
+}
+
 route(['GET'], '/api/admin/users', async (req, res) => {
   const user = currentSessionUser(req);
   if (!user || !['superadmin', 'teamadmin'].includes(user.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  const columns = 'id, username, role, team_id, need_change_password, trial_count, created_at, status, last_login_at, feature_overrides';
   let rows;
   if (user.role === 'superadmin') {
-    rows = db.prepare('SELECT id, username, role, team_id, need_change_password, trial_count, created_at FROM users ORDER BY created_at ASC').all();
+    rows = db.prepare(`SELECT ${columns} FROM users ORDER BY created_at ASC`).all();
   } else {
-    rows = db.prepare('SELECT id, username, role, team_id, need_change_password, trial_count, created_at FROM users WHERE team_id = ? ORDER BY created_at ASC').all(user.team_id || '');
+    rows = db.prepare(`SELECT ${columns} FROM users WHERE team_id = ? ORDER BY created_at ASC`).all(user.team_id || '');
   }
-  sendJson(res, 200, { success: true, data: rows });
+  const teamNames = new Map();
+  try {
+    for (const team of db.prepare('SELECT id, name FROM teams').all()) teamNames.set(team.id, team.name || '');
+  } catch (e) { /* ignore */ }
+  sendJson(res, 200, { success: true, data: rows.map((row) => toAdminUserRow(row, teamNames)) });
+});
+
+/** V1.62：管理员创建账号（局域网模式关闭自助注册后的唯一建号入口） */
+route(['POST'], '/api/admin/users/create', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  const body = req.body || {};
+  const username = typeof body.username === 'string' ? body.username.trim() : '';
+  const password = typeof body.password === 'string' ? body.password : '';
+  const role = body.role === 'teamadmin' ? 'teamadmin' : 'user';
+  const teamId = typeof body.team_id === 'string' ? body.team_id.trim() : '';
+  if (!isValidUsername(username)) return sendJson(res, 400, { success: false, error: '请输入正确的手机号或邮箱作为账号' });
+  if (password.length < 6) return sendJson(res, 400, { success: false, error: '密码至少 6 位' });
+  if (admin.role === 'teamadmin') {
+    if (role !== 'user') return sendJson(res, 403, { success: false, error: '团管只能创建普通用户' });
+    if (teamId !== (admin.team_id || '')) return sendJson(res, 403, { success: false, error: '团管只能在本团队创建账号' });
+  }
+  if (teamId && !db.prepare('SELECT id FROM teams WHERE id = ?').get(teamId)) {
+    return sendJson(res, 404, { success: false, error: '团队不存在' });
+  }
+  if (db.prepare('SELECT id FROM users WHERE username = ?').get(username)) {
+    return sendJson(res, 409, { success: false, error: '该账号已存在' });
+  }
+  const id = 'user-' + crypto.randomUUID().split('-')[0];
+  try {
+    db.prepare('INSERT INTO users (id, username, password_hash, role, team_id, need_change_password, trial_count, created_at, status, session_version, last_login_at) VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, 1, \'\')')
+      .run(id, username, bcrypt.hashSync(password, 10), role, teamId, new Date().toISOString(), 'active');
+  } catch (e) {
+    return sendJson(res, 409, { success: false, error: '创建失败：账号已存在' });
+  }
+  logAction(admin.id, 'admin_create_user', 'user', id, `username=${username} role=${role} team=${teamId}`);
+  return sendJson(res, 200, { success: true, id, message: '账号已创建，首次登录需修改密码' });
+});
+
+/** V1.62：个人功能权限（三态：true/false 覆盖，缺省=跟随角色） */
+route(['POST'], '/api/admin/users/features', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  const body = req.body || {};
+  const targetId = typeof body.user_id === 'string' ? body.user_id.trim() : '';
+  const target = targetId ? db.prepare('SELECT * FROM users WHERE id = ?').get(targetId) : null;
+  if (!target) return sendJson(res, 404, { success: false, error: '用户不存在' });
+  if (target.role === 'superadmin') {
+    return sendJson(res, 403, { success: false, code: 'SUPERADMIN_LOCKED', error: '超级管理员功能权限永久全开，不可修改' });
+  }
+  if (admin.role === 'teamadmin' && (target.role !== 'user' || (target.team_id || '') !== (admin.team_id || ''))) {
+    return sendJson(res, 403, { success: false, error: '团管只能调整本团队普通用户' });
+  }
+  const next = {};
+  const raw = body.overrides;
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const key of FEATURE_KEYS) {
+      if (typeof raw[key] === 'boolean') next[key] = raw[key];
+    }
+  }
+  const stored = Object.keys(next).length ? JSON.stringify(next) : '';
+  db.prepare('UPDATE users SET feature_overrides = ? WHERE id = ?').run(stored, target.id);
+  logAction(admin.id, 'admin_user_features', 'user', target.id, stored || 'follow-role');
+  const fresh = { ...target, feature_overrides: stored };
+  return sendJson(res, 200, { success: true, overrides: next, features: resolveUserFeatures(fresh), message: '功能权限已更新' });
+});
+
+/** V1.62：启用/禁用账号（禁用即踢下线） */
+route(['POST'], '/api/admin/users/status', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  const body = req.body || {};
+  const targetId = typeof body.user_id === 'string' ? body.user_id.trim() : '';
+  const status = body.status === 'disabled' ? 'disabled' : (body.status === 'active' ? 'active' : '');
+  if (!status) return sendJson(res, 400, { success: false, error: 'status 必须为 active 或 disabled' });
+  const target = targetId ? db.prepare('SELECT * FROM users WHERE id = ?').get(targetId) : null;
+  if (!target) return sendJson(res, 404, { success: false, error: '用户不存在' });
+  if (target.id === admin.id) return sendJson(res, 403, { success: false, error: '不能修改自己的账号状态' });
+  if (target.role === 'superadmin') return sendJson(res, 403, { success: false, error: '不能禁用超级管理员账号' });
+  if (admin.role === 'teamadmin' && (target.role !== 'user' || (target.team_id || '') !== (admin.team_id || ''))) {
+    return sendJson(res, 403, { success: false, error: '团管只能管理本团队普通用户' });
+  }
+  db.prepare('UPDATE users SET status = ?, session_version = COALESCE(session_version, 1) + 1 WHERE id = ?').run(status, target.id);
+  logAction(admin.id, status === 'disabled' ? 'admin_disable_user' : 'admin_enable_user', 'user', target.id, status, status === 'disabled' ? 'Danger' : 'Warn');
+  return sendJson(res, 200, { success: true, message: status === 'disabled' ? '账号已禁用，在线会话已失效' : '账号已启用' });
+});
+
+/** V1.62：强制下线（仅提升会话版本，不影响密码） */
+route(['POST'], '/api/admin/users/kick', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  const body = req.body || {};
+  const targetId = typeof body.user_id === 'string' ? body.user_id.trim() : '';
+  const target = targetId ? db.prepare('SELECT * FROM users WHERE id = ?').get(targetId) : null;
+  if (!target) return sendJson(res, 404, { success: false, error: '用户不存在' });
+  if (target.role === 'superadmin' && target.id !== admin.id) return sendJson(res, 403, { success: false, error: '不能强制下线超级管理员' });
+  if (admin.role === 'teamadmin' && (target.role !== 'user' || (target.team_id || '') !== (admin.team_id || ''))) {
+    return sendJson(res, 403, { success: false, error: '团管只能管理本团队普通用户' });
+  }
+  db.prepare('UPDATE users SET session_version = COALESCE(session_version, 1) + 1 WHERE id = ?').run(target.id);
+  logAction(admin.id, 'admin_kick_user', 'user', target.id, '');
+  return sendJson(res, 200, { success: true, message: '已强制下线，该账号下次请求需重新登录' });
+});
+
+/** V1.62：删除账号（仅超管；有业务数据的一律拒绝，改用禁用） */
+route(['POST'], '/api/admin/users/delete', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || admin.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可删除账号' });
+  const body = req.body || {};
+  const targetId = typeof body.user_id === 'string' ? body.user_id.trim() : '';
+  const target = targetId ? db.prepare('SELECT * FROM users WHERE id = ?').get(targetId) : null;
+  if (!target) return sendJson(res, 404, { success: false, error: '用户不存在' });
+  if (target.id === admin.id) return sendJson(res, 403, { success: false, error: '不能删除自己的账号' });
+  if (target.role === 'superadmin') return sendJson(res, 403, { success: false, error: '不能删除超级管理员账号' });
+  const tables = [
+    ['companies', '客户/行业'], ['projects', '项目'], ['kb_items', '知识条目'], ['snapshots', '历史快照'],
+    ['model_configs', '模型配置'], ['prompt_templates', '提示词模板'],
+  ];
+  const counts = {};
+  let total = 0;
+  for (const [table, label] of tables) {
+    try {
+      const row = db.prepare(`SELECT COUNT(*) c FROM ${table} WHERE user_id = ?`).get(target.id);
+      counts[label] = row ? Number(row.c) || 0 : 0;
+      total += counts[label];
+    } catch (e) { counts[label] = 0; }
+  }
+  if (total > 0) {
+    return sendJson(res, 409, {
+      success: false,
+      code: 'USER_HAS_DATA',
+      counts,
+      error: '该账号仍拥有业务数据，已阻止删除；请改用「禁用」，或先转移/清理其数据',
+    });
+  }
+  try {
+    db.transaction(() => {
+      db.prepare('DELETE FROM project_grants WHERE grantee_user_id = ? OR granted_by = ?').run(target.id, target.id);
+      db.prepare('DELETE FROM project_pins WHERE user_id = ?').run(target.id);
+      db.prepare('DELETE FROM model_configs WHERE user_id = ?').run(target.id);
+      db.prepare('DELETE FROM users WHERE id = ?').run(target.id);
+    })();
+  } catch (e) {
+    return sendJson(res, 500, { success: false, error: '删除失败：' + e.message });
+  }
+  logAction(admin.id, 'admin_delete_user', 'user', target.id, `username=${target.username}`, 'Danger');
+  return sendJson(res, 200, { success: true, message: '账号已删除' });
 });
 
 route(['POST'], '/api/admin/users/reset-password', async (req, res) => {
@@ -1514,9 +2088,10 @@ route(['POST'], '/api/admin/users/reset-password', async (req, res) => {
   if (admin.role === 'superadmin' && target.role === 'superadmin' && target.id !== admin.id) {
     return sendJson(res, 403, { success: false, error: '不能重置其他超管密码' });
   }
-  db.prepare('UPDATE users SET password_hash = ?, need_change_password = 1 WHERE id = ?').run(bcrypt.hashSync('123456', 10), target.id);
+  db.prepare('UPDATE users SET password_hash = ?, need_change_password = 1, session_version = COALESCE(session_version, 1) + 1 WHERE id = ?')
+    .run(bcrypt.hashSync('123456', 10), target.id);
   logAction(admin.id, 'admin_reset_password', 'user', target.id, 'reset to 123456');
-  sendJson(res, 200, { success: true, message: '密码已重置为 123456，用户下次登录需修改密码' });
+  sendJson(res, 200, { success: true, message: '密码已重置为 123456，该账号在线会话已失效，下次登录需修改密码' });
 });
 
 route(['POST'], '/api/admin/users/assign-team', async (req, res) => {
@@ -1532,6 +2107,52 @@ route(['POST'], '/api/admin/users/assign-team', async (req, res) => {
   db.prepare('UPDATE users SET team_id = ?, role = ? WHERE id = ?').run(teamId, nextRole === 'superadmin' ? 'superadmin' : nextRole, target.id);
   logAction(admin.id, 'assign_team', 'user', target.id, `team=${teamId} role=${nextRole}`);
   sendJson(res, 200, { success: true, message: '团队分配成功' });
+});
+
+/** V1.62：读取功能定义与角色默认矩阵（管理端） */
+route(['GET'], '/api/admin/features', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  return sendJson(res, 200, { success: true, data: { features: FEATURE_DEFS, matrix: getFeatureMatrix() } });
+});
+
+/** V1.62：更新角色默认功能矩阵（仅超管；超管自身永远全开） */
+route(['POST'], '/api/admin/features/matrix', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || admin.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可调整功能矩阵' });
+  const raw = (req.body || {}).matrix;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return sendJson(res, 400, { success: false, error: 'matrix 必须是对象' });
+  const next = JSON.parse(JSON.stringify(DEFAULT_FEATURE_MATRIX));
+  for (const role of ['user', 'teamadmin']) {
+    for (const key of FEATURE_KEYS) {
+      if (raw[role] && typeof raw[role][key] === 'boolean') next[role][key] = raw[role][key];
+    }
+  }
+  db.prepare("INSERT INTO app_settings (key, value) VALUES ('feature_matrix', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+    .run(JSON.stringify(next));
+  invalidateFeatureMatrixCache();
+  logAction(admin.id, 'admin_feature_matrix', 'settings', 'feature_matrix', JSON.stringify(next));
+  return sendJson(res, 200, { success: true, matrix: next, message: '角色默认功能权限已保存' });
+});
+
+/** V1.62：备份列表 / 立即备份（仅超管） */
+route(['GET'], '/api/admin/backups', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || admin.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可查看备份' });
+  return sendJson(res, 200, { success: true, data: listBackupFiles(50) });
+});
+
+route(['POST'], '/api/admin/backups/run', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || admin.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可手动备份' });
+  try {
+    const file = await createDatabaseBackup('auto');
+    logAction(admin.id, 'admin_backup_run', 'backup', file, 'manual');
+    return sendJson(res, 200, { success: true, file: path.basename(file), message: '备份已完成' });
+  } catch (e) {
+    console.error('[backup] 手动备份失败:', e.message);
+    return sendJson(res, 500, { success: false, error: '备份失败：' + e.message });
+  }
 });
 
 route(['GET'], '/api/admin/audit-logs', async (req, res) => {
@@ -1923,9 +2544,11 @@ route(['GET'], '/api/companies', async (req, res) => {
     return sendJson(res, 200, { success: true, data: db.prepare('SELECT * FROM companies').all() });
   }
   const publicCompanySql = "id IN (SELECT company_id FROM projects WHERE is_public = 1 AND (public_scope = 'global' OR public_scope IS NULL OR public_scope = ''))";
+  // V1.62：把「有项目被只读授权给我」的公司也纳入可见范围
+  const grantedCompanySql = "id IN (SELECT company_id FROM projects WHERE id IN (SELECT project_id FROM project_grants WHERE grantee_user_id = ?))";
   const rows = ids.length === 0
-    ? db.prepare(`SELECT * FROM companies WHERE ${publicCompanySql}`).all()
-    : db.prepare(`SELECT * FROM companies WHERE user_id IN (${ids.map(() => '?').join(', ')}) OR ${publicCompanySql}`).all(...ids);
+    ? db.prepare(`SELECT * FROM companies WHERE ${publicCompanySql} OR ${grantedCompanySql}`).all(user.id)
+    : db.prepare(`SELECT * FROM companies WHERE user_id IN (${ids.map(() => '?').join(', ')}) OR ${publicCompanySql} OR ${grantedCompanySql}`).all(...ids, user.id);
   sendJson(res, 200, { success: true, data: rows });
 });
 
@@ -1955,23 +2578,46 @@ route(['POST'], '/api/companies/delete', async (req, res) => {
   const body = req.body || {};
   const user = currentSessionUser(req);
   requireCompanyAccess(body.id, user);
-  db.prepare('DELETE FROM companies WHERE id = ?').run(body.id);
-  db.prepare('DELETE FROM projects WHERE company_id = ?').run(body.id);
-  logAction(user.id, 'company_delete', 'company', body.id, '');
+  const projectIds = db.prepare('SELECT id FROM projects WHERE company_id = ?').all(body.id).map((r) => r.id);
+  // V1.62：SQLite 无外键级联，删除公司前显式清理授权与置顶
+  db.transaction(() => {
+    for (const pid of projectIds) {
+      db.prepare('DELETE FROM project_grants WHERE project_id = ?').run(pid);
+      db.prepare('DELETE FROM project_pins WHERE project_id = ?').run(pid);
+    }
+    db.prepare('DELETE FROM projects WHERE company_id = ?').run(body.id);
+    db.prepare('DELETE FROM companies WHERE id = ?').run(body.id);
+  })();
+  logAction(user.id, 'company_delete', 'company', body.id, `projects=${projectIds.length}`);
   sendJson(res, 200, { success: true, message: '删除成功' });
 });
+
+/** V1.62：给项目行补充 pinned / can_write（前端只读模式与置顶分区依赖这两个字段） */
+function decorateProjectsForUser(rows, user) {
+  const pinned = new Set();
+  try {
+    for (const row of db.prepare('SELECT project_id FROM project_pins WHERE user_id = ?').all(user.id)) pinned.add(row.project_id);
+  } catch (e) { /* ignore */ }
+  return rows.map((row) => {
+    const isPublic = Number(row.is_public) === 1;
+    const canWrite = canAccessOwner(row.user_id, user) && (!isPublic || user.role === 'superadmin');
+    return { ...row, pinned: pinned.has(row.id) ? 1 : 0, can_write: canWrite ? 1 : 0 };
+  });
+}
 
 route(['GET'], '/api/projects', async (req, res) => {
   const user = currentSessionUser(req);
   const ids = visibleOwnerIds(user);
   if (ids === null) {
-    return sendJson(res, 200, { success: true, data: db.prepare('SELECT * FROM projects').all() });
+    return sendJson(res, 200, { success: true, data: decorateProjectsForUser(db.prepare('SELECT * FROM projects').all(), user) });
   }
   const publicProjectSql = "is_public = 1 AND (public_scope = 'global' OR public_scope IS NULL OR public_scope = '')";
+  // V1.62：只读授权给我的项目也要出现在列表里
+  const grantedProjectSql = "id IN (SELECT project_id FROM project_grants WHERE grantee_user_id = ?)";
   const rows = ids.length === 0
-    ? db.prepare(`SELECT * FROM projects WHERE ${publicProjectSql}`).all()
-    : db.prepare(`SELECT * FROM projects WHERE user_id IN (${ids.map(() => '?').join(', ')}) OR (${publicProjectSql})`).all(...ids);
-  sendJson(res, 200, { success: true, data: rows });
+    ? db.prepare(`SELECT * FROM projects WHERE (${publicProjectSql}) OR ${grantedProjectSql}`).all(user.id)
+    : db.prepare(`SELECT * FROM projects WHERE user_id IN (${ids.map(() => '?').join(', ')}) OR (${publicProjectSql}) OR ${grantedProjectSql}`).all(...ids, user.id);
+  sendJson(res, 200, { success: true, data: decorateProjectsForUser(rows, user) });
 });
 
 route(['POST'], '/api/projects/create', async (req, res) => {
@@ -2008,9 +2654,98 @@ route(['POST'], '/api/projects/delete', async (req, res) => {
   const body = req.body || {};
   const user = currentSessionUser(req);
   requireProjectWritable(body.id, user);
-  db.prepare('DELETE FROM projects WHERE id = ?').run(body.id);
+  // V1.62：显式清理授权与置顶（SQLite 无外键级联）
+  db.transaction(() => {
+    db.prepare('DELETE FROM project_grants WHERE project_id = ?').run(body.id);
+    db.prepare('DELETE FROM project_pins WHERE project_id = ?').run(body.id);
+    db.prepare('DELETE FROM projects WHERE id = ?').run(body.id);
+  })();
   logAction(user.id, 'project_delete', 'project', body.id, '');
   sendJson(res, 200, { success: true, message: '删除成功' });
+});
+
+// ---------- V1.62：项目置顶（每用户各自一套） ----------
+route(['POST'], '/api/projects/pin', async (req, res) => {
+  const body = req.body || {};
+  const user = currentSessionUser(req);
+  const projectId = typeof body.project_id === 'string' ? body.project_id.trim() : '';
+  if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  requireProjectAccess(projectId, user);
+  const pinned = body.pinned === true || body.pinned === 1 || body.pinned === '1';
+  if (pinned) {
+    db.prepare('INSERT OR IGNORE INTO project_pins (id, user_id, project_id, created_at) VALUES (?, ?, ?, ?)')
+      .run('pin-' + crypto.randomUUID().split('-')[0], user.id, projectId, new Date().toISOString());
+  } else {
+    db.prepare('DELETE FROM project_pins WHERE user_id = ? AND project_id = ?').run(user.id, projectId);
+  }
+  sendJson(res, 200, { success: true, pinned: pinned ? 1 : 0, message: pinned ? '已置顶' : '已取消置顶' });
+});
+
+// ---------- V1.62：项目只读授权（管理员） ----------
+function listGrantCandidates(admin, project) {
+  let rows;
+  if (admin.role === 'superadmin') {
+    rows = db.prepare("SELECT u.id, u.username, u.role, u.team_id, COALESCE(t.name, '') AS team_name FROM users u LEFT JOIN teams t ON t.id = u.team_id WHERE u.role != 'superadmin' ORDER BY u.created_at ASC").all();
+  } else {
+    rows = db.prepare("SELECT u.id, u.username, u.role, u.team_id, COALESCE(t.name, '') AS team_name FROM users u LEFT JOIN teams t ON t.id = u.team_id WHERE u.team_id = ? AND u.role = 'user' ORDER BY u.created_at ASC").all(admin.team_id || '');
+  }
+  return rows.filter((row) => row.id !== project.user_id);
+}
+
+route(['GET'], '/api/projects/grants', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  const projectId = String(req.query.project_id || '').trim();
+  if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  const project = requireProjectAccess(projectId, admin);
+  if (admin.role === 'teamadmin' && !canAccessOwner(project.user_id, admin)) {
+    return sendJson(res, 403, { success: false, error: '团管只能管理本团队项目的授权' });
+  }
+  const granted = db.prepare('SELECT g.grantee_user_id, COALESCE(u.username, g.grantee_user_id) AS username FROM project_grants g LEFT JOIN users u ON u.id = g.grantee_user_id WHERE g.project_id = ?').all(projectId);
+  return sendJson(res, 200, {
+    success: true,
+    data: {
+      project: { id: project.id, name: project.name || '' },
+      granted,
+      candidates: listGrantCandidates(admin, project),
+    },
+  });
+});
+
+route(['POST'], '/api/projects/grants/save', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  const body = req.body || {};
+  const projectId = typeof body.project_id === 'string' ? body.project_id.trim() : '';
+  if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  const rawIds = Array.isArray(body.user_ids) ? body.user_ids : [];
+  const project = requireProjectAccess(projectId, admin);
+  if (admin.role === 'teamadmin' && !canAccessOwner(project.user_id, admin)) {
+    return sendJson(res, 403, { success: false, error: '团管只能管理本团队项目的授权' });
+  }
+  const cleaned = [];
+  for (const rawId of rawIds) {
+    const uid = String(rawId || '').trim();
+    if (!uid) continue;
+    const target = db.prepare('SELECT id, role, team_id FROM users WHERE id = ?').get(uid);
+    if (!target) return sendJson(res, 400, { success: false, error: '被授权用户不存在：' + uid });
+    if (target.id === project.user_id) continue; // 所有者天然可读，不需要授权
+    if (target.role === 'superadmin') continue; // 超管天然可读
+    if (admin.role === 'teamadmin' && (target.role !== 'user' || (target.team_id || '') !== (admin.team_id || ''))) {
+      return sendJson(res, 403, { success: false, error: '团管只能授权给本团队普通用户' });
+    }
+    if (!cleaned.includes(target.id)) cleaned.push(target.id);
+  }
+  const now = new Date().toISOString();
+  db.transaction(() => {
+    db.prepare('DELETE FROM project_grants WHERE project_id = ?').run(projectId);
+    const insert = db.prepare('INSERT INTO project_grants (id, project_id, grantee_user_id, granted_by, created_at) VALUES (?, ?, ?, ?, ?)');
+    for (const uid of cleaned) {
+      insert.run('grant-' + crypto.randomUUID().split('-')[0], projectId, uid, admin.id, now);
+    }
+  })();
+  logAction(admin.id, 'project_grant_update', 'project', projectId, `grantees=${cleaned.length}`, 'Warn');
+  sendJson(res, 200, { success: true, grantees: cleaned.length, message: cleaned.length ? `已授权 ${cleaned.length} 人只读` : '已清空该项目的只读授权' });
 });
 
 // ------------------------------------------------------------
@@ -2285,7 +3020,20 @@ route(['GET'], '/api/models', async (req, res) => {
   const rows = currentUser.role === 'superadmin'
     ? db.prepare('SELECT * FROM model_configs ORDER BY rowid ASC').all()
     : db.prepare('SELECT * FROM model_configs WHERE user_id = ? ORDER BY rowid ASC').all(currentUser.id);
-  sendJson(res, 200, { success: true, data: rows.map(toPublicModel) });
+  // 超管能看到全员模型：额外标注归属，便于区分
+  let ownerNames = null;
+  if (currentUser.role === 'superadmin') {
+    ownerNames = new Map();
+    try {
+      for (const user of db.prepare('SELECT id, username FROM users').all()) ownerNames.set(user.id, user.username || '');
+    } catch (e) { /* ignore */ }
+  }
+  const data = rows.map((row) => {
+    const model = toPublicModel(row);
+    if (ownerNames) model.owner_username = ownerNames.get(row.user_id) || row.user_id || '';
+    return model;
+  });
+  sendJson(res, 200, { success: true, data });
 });
 
 route(['POST'], '/api/models/save', async (req, res) => {
@@ -2325,8 +3073,13 @@ route(['POST'], '/api/models/save', async (req, res) => {
     return sendJson(res, 400, { success: false, error: '自定义/第三方 Base URL 必须填写 API Key（不允许使用 .env 回退，防 Key 外泄）' });
   }
 
+  // V1.62：首次配置且当前没有激活模型时自动激活，避免「配了 Key 还在扣试用」
+  const hasActiveModel = !!db.prepare('SELECT 1 FROM model_configs WHERE user_id = ? AND is_active = 1 LIMIT 1').get(currentUser.id);
+  const autoActivate = !existing && !wantActive && !hasActiveModel;
+  const effectiveActive = wantActive || autoActivate;
+
   // 单活模型：仅重置当前用户自己的模型（多租户互不影响）
-  if (wantActive) db.prepare('UPDATE model_configs SET is_active = 0 WHERE user_id = ?').run(currentUser.id);
+  if (effectiveActive) db.prepare('UPDATE model_configs SET is_active = 0 WHERE user_id = ?').run(currentUser.id);
 
   if (existing) {
     const isActive = isActiveSpecified ? (wantActive ? 1 : 0) : existing.is_active;
@@ -2338,9 +3091,39 @@ route(['POST'], '/api/models/save', async (req, res) => {
 
   const maxContextLength = Number.isFinite(Number(body.max_context_length)) ? Number(body.max_context_length) : 32000;
   db.prepare('INSERT INTO model_configs (id, provider, display_name, base_url, api_key, model_name, temperature, max_context_length, is_active, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, provider, displayName, baseUrl, apiKeyStored, modelName, temperature, maxContextLength, wantActive ? 1 : 0, currentUser.id);
+    .run(id, provider, displayName, baseUrl, apiKeyStored, modelName, temperature, maxContextLength, effectiveActive ? 1 : 0, currentUser.id);
   logAction(currentUser.id, 'model_save', 'model', id, `provider=${provider} base=${baseUrl}`);
-  sendJson(res, 200, { success: true, message: '模型配置已保存', id, is_active: wantActive ? 1 : 0 });
+  sendJson(res, 200, {
+    success: true,
+    message: autoActivate ? '模型配置已保存并自动设为当前模型' : '模型配置已保存',
+    id,
+    is_active: effectiveActive ? 1 : 0,
+    auto_activated: autoActivate,
+  });
+});
+
+/** V1.62：删除模型配置（个人 Key 自助管理的必要能力；删除激活模型时自动启用剩余最后一个） */
+route(['POST'], '/api/models/delete', async (req, res) => {
+  const currentUser = getSessionUser(req);
+  if (!currentUser) return sendJson(res, 401, { success: false, code: 'UNAUTHORIZED', error: '未登录' });
+  const id = typeof (req.body || {}).id === 'string' ? req.body.id.trim() : '';
+  if (!id) return sendJson(res, 400, { success: false, error: '缺少模型 id' });
+  const row = db.prepare('SELECT * FROM model_configs WHERE id = ?').get(id);
+  if (!row) return sendJson(res, 404, { success: false, error: '模型配置不存在' });
+  if (row.user_id && row.user_id !== currentUser.id && currentUser.role !== 'superadmin') {
+    return sendJson(res, 403, { success: false, error: '无权删除他人的模型配置' });
+  }
+  db.prepare('DELETE FROM model_configs WHERE id = ?').run(id);
+  const ownerId = row.user_id || currentUser.id;
+  try {
+    const stillActive = db.prepare('SELECT 1 FROM model_configs WHERE user_id = ? AND is_active = 1 LIMIT 1').get(ownerId);
+    if (!stillActive) {
+      const fallback = db.prepare('SELECT id FROM model_configs WHERE user_id = ? ORDER BY rowid DESC LIMIT 1').get(ownerId);
+      if (fallback) db.prepare('UPDATE model_configs SET is_active = 1 WHERE id = ?').run(fallback.id);
+    }
+  } catch (e) { /* 自动切换失败不影响删除 */ }
+  logAction(currentUser.id, 'model_delete', 'model', id, '');
+  sendJson(res, 200, { success: true, message: '模型配置已删除' });
 });
 
 route(['POST'], '/api/models/test', async (req, res) => {
@@ -2378,66 +3161,103 @@ const BACKUP_TABLES = [
   'model_configs', 'companies', 'projects', 'modules', 'module_versions',
   'kb_items', 'kb_item_versions', 'snapshots', 'eval_runs', 'prompt_templates',
 ];
+/** V1.62：全量备份额外覆盖账号体系、权限与审计（旧备份仍按 business 解析） */
+const FULL_BACKUP_TABLES = [
+  ...BACKUP_TABLES,
+  'users', 'teams', 'audit_logs', 'app_settings', 'project_grants', 'project_pins',
+];
 
-/** 去除大模型输出里的 Markdown 代码围栏 */
-function stripCodeFence(text) {
-  let s = String(text == null ? '' : text).trim();
-  s = s.replace(/^```[a-zA-Z0-9_-]*\s*\r?\n?/, '').replace(/\r?\n?```\s*$/, '');
-  return s.trim();
-}
-
-/** 导出全部表为 JSON 快照对象 */
-function buildBackupSnapshot() {
+/** 导出表为 JSON 快照对象（scope=business 保持 v1 结构；scope=full 为 v2） */
+function buildBackupSnapshot(scope = 'business') {
+  const isFull = scope === 'full';
+  const tables = isFull ? FULL_BACKUP_TABLES : BACKUP_TABLES;
   const snapshot = {
     success: true,
     app: 'newrock-ai-workbench',
-    version: 1,
+    version: isFull ? 2 : 1,
+    scope: isFull ? 'full' : 'business',
     exported_at: new Date().toISOString(),
     tables: {},
   };
-  for (const table of BACKUP_TABLES) snapshot.tables[table] = db.prepare(`SELECT * FROM ${table}`).all();
+  for (const table of tables) snapshot.tables[table] = db.prepare(`SELECT * FROM ${table}`).all();
   return snapshot;
 }
 
-/** 备份导入严格校验：表名白名单 / 必须包含全部表 / 每行对象 / 字段白名单 / 基本类型校验 */
+/** 单表行校验：主键 + 字段白名单 + 基本类型 */
+function validateBackupRows(table, rows, allowedColumns) {
+  if (!Array.isArray(rows)) throw new Error(`表 ${table} 必须是数组`);
+  const pk = table === 'app_settings' ? 'key' : 'id';
+  return rows.map((row, index) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error(`表 ${table} 第 ${index + 1} 行必须是对象`);
+    if (typeof row[pk] !== 'string' || !row[pk].trim()) throw new Error(`表 ${table} 第 ${index + 1} 行缺少主键 ${pk}`);
+    const keys = Object.keys(row);
+    if (keys.length === 0) throw new Error(`表 ${table} 第 ${index + 1} 行是空对象`);
+    const unknownColumns = keys.filter((key) => !allowedColumns.includes(key));
+    if (unknownColumns.length > 0) throw new Error(`表 ${table} 第 ${index + 1} 行存在未知字段：${unknownColumns.join(', ')}`);
+    const normalized = {};
+    for (const key of keys) {
+      const value = row[key];
+      if (value !== null && !['string', 'number', 'boolean'].includes(typeof value)) {
+        throw new Error(`表 ${table} 第 ${index + 1} 行字段 ${key} 类型非法`);
+      }
+      normalized[key] = typeof value === 'boolean' ? (value ? 1 : 0) : value;
+    }
+    return normalized;
+  });
+}
+
+/** 全量备份的引用完整性 + 超管兜底校验（防导入后锁死） */
+function validateFullBackupIntegrity(rowsByTable) {
+  const users = rowsByTable.users || [];
+  const loginableSuperadmins = users.filter((u) => u.role === 'superadmin' && typeof u.password_hash === 'string' && u.password_hash.trim());
+  if (loginableSuperadmins.length === 0) throw new Error('全量备份必须至少包含 1 个可登录的超级管理员账号');
+  const usernames = new Set();
+  for (const user of users) {
+    if (!user.username || !String(user.username).trim()) throw new Error('用户账号存在空 username');
+    if (usernames.has(user.username)) throw new Error('用户账号重复：' + user.username);
+    usernames.add(user.username);
+    if (!['superadmin', 'teamadmin', 'user'].includes(user.role)) throw new Error('非法角色：' + user.role);
+    if (user.status && !['active', 'disabled'].includes(user.status)) throw new Error('非法账号状态：' + user.status);
+  }
+  const userIds = new Set(users.map((u) => u.id));
+  const projectIds = new Set((rowsByTable.projects || []).map((p) => p.id));
+  for (const grant of rowsByTable.project_grants || []) {
+    if (!projectIds.has(grant.project_id)) throw new Error('只读授权引用了不存在的项目：' + grant.project_id);
+    if (!userIds.has(grant.grantee_user_id)) throw new Error('只读授权引用了不存在的用户：' + grant.grantee_user_id);
+  }
+  for (const pin of rowsByTable.project_pins || []) {
+    if (!userIds.has(pin.user_id)) throw new Error('置顶记录引用了不存在的用户：' + pin.user_id);
+    if (!projectIds.has(pin.project_id)) throw new Error('置顶记录引用了不存在的项目：' + pin.project_id);
+  }
+  for (const model of rowsByTable.model_configs || []) {
+    if (model.user_id && !userIds.has(model.user_id)) throw new Error('模型配置引用了不存在的用户：' + model.user_id);
+  }
+}
+
+/** 备份导入严格校验：按 version/scope 分流；返回 { scope, tables } */
 function validateBackupPayload(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('备份内容必须是 JSON 对象');
   const tables = payload.tables;
   if (!tables || typeof tables !== 'object' || Array.isArray(tables)) throw new Error('备份缺少 tables 对象');
-  const unknownTables = Object.keys(tables).filter((name) => !BACKUP_TABLES.includes(name));
+  const version = Number(payload.version) || 1;
+  const scope = payload.scope === 'full' ? 'full' : 'business';
+  if (scope === 'full' && version < 2) throw new Error('全量备份缺少版本标记（version 必须 >= 2）');
+  const expected = scope === 'full' ? FULL_BACKUP_TABLES : BACKUP_TABLES;
+  const unknownTables = Object.keys(tables).filter((name) => !expected.includes(name));
   if (unknownTables.length > 0) throw new Error(`备份包含未知数据表：${unknownTables.join(', ')}`);
-  const missingTables = BACKUP_TABLES.filter((name) => !Object.prototype.hasOwnProperty.call(tables, name));
+  const missingTables = expected.filter((name) => !Object.prototype.hasOwnProperty.call(tables, name));
   if (missingTables.length > 0) throw new Error(`备份缺少数据表：${missingTables.join(', ')}`);
 
   const columnCache = new Map();
   const rowsByTable = {};
-  for (const table of BACKUP_TABLES) {
-    const rows = tables[table];
-    if (!Array.isArray(rows)) throw new Error(`表 ${table} 必须是数组`);
+  for (const table of expected) {
     if (!columnCache.has(table)) {
       columnCache.set(table, db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
     }
-    const allowedColumns = columnCache.get(table);
-    rowsByTable[table] = rows.map((row, index) => {
-      if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error(`表 ${table} 第 ${index + 1} 行必须是对象`);
-      // 所有表均以 id 为主键：缺失/非法主键一律拒绝（防脏数据进入事务）
-      if (typeof row.id !== 'string' || !row.id.trim()) throw new Error(`表 ${table} 第 ${index + 1} 行缺少主键 id`);
-      const keys = Object.keys(row);
-      if (keys.length === 0) throw new Error(`表 ${table} 第 ${index + 1} 行是空对象`);
-      const unknownColumns = keys.filter((key) => !allowedColumns.includes(key));
-      if (unknownColumns.length > 0) throw new Error(`表 ${table} 第 ${index + 1} 行存在未知字段：${unknownColumns.join(', ')}`);
-      const normalized = {};
-      for (const key of keys) {
-        const value = row[key];
-        if (value !== null && !['string', 'number', 'boolean'].includes(typeof value)) {
-          throw new Error(`表 ${table} 第 ${index + 1} 行字段 ${key} 类型非法`);
-        }
-        normalized[key] = typeof value === 'boolean' ? (value ? 1 : 0) : value;
-      }
-      return normalized;
-    });
+    rowsByTable[table] = validateBackupRows(table, tables[table], columnCache.get(table));
   }
-  return rowsByTable;
+  if (scope === 'full') validateFullBackupIntegrity(rowsByTable);
+  return { scope, tables: rowsByTable };
 }
 
 // ---------- 阶段一：提示词模板库 ----------
@@ -2552,26 +3372,30 @@ route(['POST'], '/api/ai/polish', async (req, res) => {
 
 route(['GET'], '/api/backup/export', async (req, res) => {
   const user = currentSessionUser(req);
-  if (!user || user.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可导出全量备份' });
-  sendJson(res, 200, buildBackupSnapshot());
+  if (!user || user.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可导出备份' });
+  const scope = String(req.query.scope || '') === 'full' ? 'full' : 'business';
+  sendJson(res, 200, buildBackupSnapshot(scope));
 });
 
 route(['POST'], '/api/backup/import', async (req, res) => {
   const importUser = currentSessionUser(req);
-  if (!importUser || importUser.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可导入全量备份' });
-  let rowsByTable;
+  if (!importUser || importUser.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可导入备份' });
+  let validated;
   try {
-    rowsByTable = validateBackupPayload(req.body);
+    validated = validateBackupPayload(req.body);
   } catch (e) {
     return sendJson(res, 400, { success: false, error: `备份校验失败：${e.message}` });
   }
+  const importedScope = validated.scope;
+  const rowsByTable = validated.tables;
+  const tablesToReplace = importedScope === 'full' ? FULL_BACKUP_TABLES : BACKUP_TABLES;
 
   // 导入前自动落盘当前全量 JSON 备份（失败即中止，绝不冒险破坏数据）
   let safetyBackupPath = '';
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     safetyBackupPath = path.join(DATA_DIR, `backup-before-import-${Date.now()}.json`);
-    fs.writeFileSync(safetyBackupPath, JSON.stringify(buildBackupSnapshot()), 'utf8');
+    fs.writeFileSync(safetyBackupPath, JSON.stringify(buildBackupSnapshot('full')), 'utf8');
   } catch (e) {
     return sendJson(res, 500, { success: false, error: `导入前安全备份失败，已中止导入：${e.message}` });
   }
@@ -2579,8 +3403,8 @@ route(['POST'], '/api/backup/import', async (req, res) => {
   const importedCounts = {};
   try {
     const runImport = db.transaction(() => {
-      for (const table of BACKUP_TABLES) db.prepare(`DELETE FROM ${table}`).run();
-      for (const table of BACKUP_TABLES) {
+      for (const table of tablesToReplace) db.prepare(`DELETE FROM ${table}`).run();
+      for (const table of tablesToReplace) {
         const rows = rowsByTable[table];
         importedCounts[table] = rows.length;
         for (const row of rows) {
@@ -2597,59 +3421,129 @@ route(['POST'], '/api/backup/import', async (req, res) => {
     console.error('[backup] 导入失败，事务已回滚:', e.message, '安全备份:', safetyBackupPath);
     return sendJson(res, 500, { success: false, error: `备份导入失败，事务已回滚：${e.message}`, backup_file: safetyBackupPath });
   }
-  console.log('[backup] 备份导入成功:', JSON.stringify(importedCounts), '安全备份:', safetyBackupPath);
-  // 兼容旧备份：补齐 user_id 归属并加密明文模型 Key（在事务外执行，失败不影响已导入数据）
+  console.log('[backup] 备份导入成功:', importedScope, JSON.stringify(importedCounts), '安全备份:', safetyBackupPath);
+
+  let unreadableModelKeys = 0;
+  let reloginRequired = false;
   try {
+    // business 导入后可能出现指向已不存在项目的孤儿授权/置顶，统一清理
+    db.prepare('DELETE FROM project_grants WHERE project_id NOT IN (SELECT id FROM projects)').run();
+    db.prepare('DELETE FROM project_pins WHERE project_id NOT IN (SELECT id FROM projects)').run();
+    refreshAdminUserId();
     if (ADMIN_USER_ID) {
-      for (const table of BACKUP_TABLES) {
-        if (table === 'model_configs') db.prepare(`UPDATE ${table} SET user_id = ? WHERE user_id IS NULL OR user_id = ''`).run(ADMIN_USER_ID);
-      }
+      db.prepare("UPDATE model_configs SET user_id = ? WHERE user_id IS NULL OR user_id = ''").run(ADMIN_USER_ID);
     }
     const rows = db.prepare('SELECT id, api_key FROM model_configs').all();
     const updateKey = db.prepare('UPDATE model_configs SET api_key = ? WHERE id = ?');
     for (const row of rows) {
-      if (row.api_key && !String(row.api_key).startsWith('enc:v1:')) updateKey.run(encryptSecret(row.api_key), row.id);
+      const stored = String(row.api_key || '');
+      if (!stored) continue;
+      if (!stored.startsWith('enc:v1:')) {
+        updateKey.run(encryptSecret(row.api_key), row.id);
+      } else if (!decryptSecret(row.api_key)) {
+        unreadableModelKeys += 1;
+      }
     }
-    logAction(importUser.id, 'backup_import', 'backup', '', JSON.stringify(importedCounts).slice(0, 500));
+    const stillThere = db.prepare('SELECT id, status FROM users WHERE id = ?').get(importUser.id);
+    if (!stillThere || String(stillThere.status || 'active') !== 'active') {
+      destroySessionQuietly(req);
+      reloginRequired = true;
+    }
+    logAction(importUser.id, 'backup_import', 'backup', importedScope, JSON.stringify(importedCounts).slice(0, 500), 'Danger');
   } catch (e) {
-    console.warn('[backup] 导入后 user_id/Key 兼容处理失败:', e.message);
+    console.warn('[backup] 导入后兼容处理失败:', e.message);
   }
-  sendJson(res, 200, { success: true, message: '备份导入成功（全部表已替换）', imported: importedCounts, backup_file: safetyBackupPath });
+
+  const warnings = [];
+  if (unreadableModelKeys > 0) warnings.push(`有 ${unreadableModelKeys} 个模型 Key 无法解密：跨机迁移需同时复制 data/.vault-key，否则需重新填写`);
+  if (reloginRequired) warnings.push('当前账号在新的账号数据中不可用，请重新登录');
+  sendJson(res, 200, {
+    success: true,
+    scope: importedScope,
+    message: importedScope === 'full' ? '全量备份导入成功（含账号与权限）' : '业务数据导入成功（账号体系未改动）',
+    imported: importedCounts,
+    backup_file: safetyBackupPath,
+    unreadable_model_keys: unreadableModelKeys,
+    relogin_required: reloginRequired,
+    warnings,
+  });
 });
 
 // ---------- 阶段三：项目深拷贝克隆 ----------
 
 route(['POST'], '/api/projects/clone', async (req, res) => {
   const cloneUser = currentSessionUser(req);
-  const sourceId = typeof (req.body || {}).id === 'string' ? req.body.id.trim() : '';
+  const body = req.body || {};
+  const sourceId = typeof body.id === 'string' ? body.id.trim() : '';
   if (!sourceId) return sendJson(res, 400, { success: false, error: '缺少项目 id' });
-  requireProjectAccess(sourceId, cloneUser);
-  const source = db.prepare('SELECT * FROM projects WHERE id = ?').get(sourceId);
-  if (!source) return sendJson(res, 404, { success: false, error: '源项目不存在' });
+  // 源项目只需「可读」：公共参考项目、共享只读项目也允许克隆，复制品归执行人所有
+  const source = requireProjectAccess(sourceId, cloneUser);
+  const targetCompanyId = typeof body.target_company_id === 'string' && body.target_company_id.trim()
+    ? body.target_company_id.trim()
+    : (source.company_id || '');
+  if (targetCompanyId && targetCompanyId !== (source.company_id || '')) {
+    requireCompanyAccess(targetCompanyId, cloneUser);
+  }
+  let newName = typeof body.name === 'string' ? body.name.trim() : '';
+  if (!newName) newName = `${source.name || '未命名项目'}（副本）`;
+  if (newName.length > 100) return sendJson(res, 400, { success: false, error: '项目名称不能超过 100 个字符' });
+  const copyMode = ['latest', 'all', 'none'].includes(body.copy_mode) ? body.copy_mode : 'latest';
   const newProjectId = 'proj-' + crypto.randomUUID().split('-')[0];
-  const newName = `${source.name || '未命名项目'}（副本）`;
   const cloneOwnerId = cloneUser.id;
-  const kbRows = db.prepare('SELECT * FROM kb_items WHERE project_id = ?').all(sourceId);
-  const clone = db.transaction(() => {
+  const kbRows = db.prepare('SELECT * FROM kb_items WHERE project_id = ? ORDER BY rowid ASC').all(sourceId);
+  let snapshotRows = [];
+  if (copyMode === 'all') {
+    snapshotRows = db.prepare('SELECT * FROM snapshots WHERE project_id = ? ORDER BY created_at ASC').all(sourceId);
+  } else if (copyMode === 'latest') {
+    snapshotRows = db.prepare('SELECT * FROM snapshots WHERE project_id = ? ORDER BY created_at DESC LIMIT 1').all(sourceId);
+  }
+  const now = new Date().toISOString();
+  const counts = db.transaction(() => {
     db.prepare('INSERT INTO projects (id, company_id, name, target_agent_id, context_json, user_id) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(newProjectId, source.company_id, newName, source.target_agent_id || '', source.context_json || '{}', cloneOwnerId);
-    const kbIds = [];
+      .run(newProjectId, targetCompanyId, newName, source.target_agent_id || '', source.context_json || '{}', cloneOwnerId);
+    const insertKb = db.prepare('INSERT INTO kb_items (id, project_id, question, answer, user_id, structure_mode) VALUES (?, ?, ?, ?, ?, ?)');
     for (const row of kbRows) {
-      const newKbId = 'kb-' + crypto.randomUUID().split('-')[0];
-      db.prepare('INSERT INTO kb_items (id, project_id, question, answer, user_id) VALUES (?, ?, ?, ?, ?)')
-        .run(newKbId, newProjectId, row.question ?? '', row.answer ?? '', cloneOwnerId);
-      kbIds.push(newKbId);
+      insertKb.run(
+        'kb-' + crypto.randomUUID().split('-')[0],
+        newProjectId,
+        row.question ?? '',
+        row.answer ?? '',
+        cloneOwnerId,
+        row.structure_mode === 'raw' ? 'raw' : 'qa',
+      );
     }
-    return kbIds;
-  });
-  const newKbIds = clone();
-  logAction(cloneUser.id, 'project_clone', 'project', newProjectId, `source=${sourceId} kb=${newKbIds.length}`);
+    const insertSnapshot = db.prepare('INSERT INTO snapshots (id, project_id, module_versions_json, kb_versions_json, final_prompt_content, eval_run_id, p0_validation_log, created_at, exported_at, eval_pass, eval_score, user_id, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const row of snapshotRows) {
+      const isLatestMode = copyMode === 'latest';
+      insertSnapshot.run(
+        'snap-' + crypto.randomUUID().split('-')[0],
+        newProjectId,
+        row.module_versions_json || '[]',
+        '{}',
+        row.final_prompt_content || '',
+        isLatestMode ? '' : (row.eval_run_id || ''),
+        isLatestMode ? '' : (row.p0_validation_log || ''),
+        isLatestMode ? now : (row.created_at || now),
+        null,
+        isLatestMode ? 0 : (Number(row.eval_pass) || 0),
+        isLatestMode ? 0 : (Number(row.eval_score) || 0),
+        cloneOwnerId,
+        isLatestMode
+          ? `克隆自「${source.name || '未命名项目'}」${row.remark ? ' · ' + row.remark : ''}`.slice(0, 200)
+          : (row.remark || ''),
+      );
+    }
+    return { kb: kbRows.length, snapshots: snapshotRows.length };
+  })();
+  logAction(cloneUser.id, 'project_clone', 'project', newProjectId, `source=${sourceId} target_company=${targetCompanyId} kb=${counts.kb} snapshots=${counts.snapshots} mode=${copyMode}`);
   sendJson(res, 200, {
     success: true,
-    message: `克隆成功：项目 + ${newKbIds.length} 条知识库记录已复制（全新 id）`,
+    message: `克隆成功：项目 + ${counts.kb} 条知识库 + ${counts.snapshots} 条快照（全新 id）`,
     project_id: newProjectId,
     name: newName,
-    kb_count: newKbIds.length,
+    company_id: targetCompanyId,
+    kb_count: counts.kb,
+    snapshot_count: counts.snapshots,
   });
 });
 
@@ -2792,12 +3686,46 @@ function startServer() {
 // ---- 主启动流程 ----
 let httpServer = null;
 
+/** 局域网模式下探测本机可用 IPv4 地址，启动时直接打印可访问 URL */
+function getLanUrls() {
+  const urls = [];
+  try {
+    const interfaces = os.networkInterfaces();
+    for (const list of Object.values(interfaces)) {
+      for (const item of list || []) {
+        if (item && item.family === 'IPv4' && !item.internal) urls.push(`http://${item.address}:${PORT}`);
+      }
+    }
+  } catch (e) { /* 探测失败不影响启动 */ }
+  return urls;
+}
+
+/** 每日自动备份：启动 1 分钟后首次执行，之后每 24 小时；每次备份后做 WAL checkpoint */
+let autoBackupTimer = null;
+function startAutoBackupScheduler() {
+  const runOnce = async (label) => {
+    try {
+      const file = await createDatabaseBackup('auto');
+      console.log(`[backup] ${label}自动备份完成: ${path.basename(file)}`);
+    } catch (e) {
+      console.warn('[backup] 自动备份失败:', e.message);
+    }
+    try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (e) { /* ignore */ }
+  };
+  setTimeout(() => { runOnce('首次'); }, 60 * 1000).unref();
+  autoBackupTimer = setInterval(() => { runOnce('每日'); }, 24 * 60 * 60 * 1000);
+  autoBackupTimer.unref();
+}
+
 (async () => {
   console.log('========================================');
-  console.log(' NewRock AI Workbench v1.60（纯 Node.js + Express）');
+  console.log(' NewRock AI Workbench v1.62（纯 Node.js + Express）');
   console.log('========================================');
+  console.log(`[server] 数据目录: ${DATA_DIR}`);
   console.log(`[server] 数据库: ${DB_PATH}`);
   console.log(`[server] 静态目录: ${PUBLIC_DIR}`);
+  console.log(`[server] 绑定模式: ${LAN_ACCESS ? '局域网（0.0.0.0，放行私有网段）' : '仅本机（127.0.0.1）'}`);
+  console.log(`[server] 自助注册: ${SELF_REGISTER_ENABLED ? '开启' : '关闭（由管理员创建账号）'}`);
   console.log(`[server] 已注册 API 路由: ${registeredRoutes.length} 条`);
   registeredRoutes.forEach((item) => console.log(`         - ${item}`));
   console.log(`[server] LLM Key 是否已配置: ${process.env[KEY_NAME] ? '是 (已加载)' : '否 (请在设置中填写)'}`);
@@ -2811,7 +3739,16 @@ let httpServer = null;
 
   httpServer = await startServer();
   console.log(`[server] [OK] 服务已启动: http://${HOST}:${PORT}`);
-  console.log(`[server] [WEB] 浏览器访问: http://${HOST}:${PORT}`);
+  console.log(`[server] [WEB] 浏览器访问: http://127.0.0.1:${PORT}`);
+  if (LAN_ACCESS) {
+    const lanUrls = getLanUrls();
+    console.log(lanUrls.length ? `[server] [LAN] 局域网访问: ${lanUrls.join('  ')}` : '[server] [LAN] 未检测到可用局域网 IPv4 地址');
+  }
+  console.log(`[server] [HEALTH] 健康检查: http://127.0.0.1:${PORT}/api/health`);
+  try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (e) { /* ignore */ }
+  startAutoBackupScheduler();
+  const latestBackup = listBackupFiles(1)[0];
+  if (latestBackup) console.log(`[backup] 最近备份: ${latestBackup.kind}/${latestBackup.name} (${latestBackup.mtime})`);
   console.log('[server] 按 Ctrl+C 停止服务');
 })();
 
@@ -2819,6 +3756,8 @@ let httpServer = null;
 function shutdown(signal) {
   console.log(`\n[server] 收到 ${signal}，正在关闭服务...`);
   const finish = () => {
+    if (autoBackupTimer) { try { clearInterval(autoBackupTimer); } catch (e) { /* ignore */ } }
+    try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (e) { /* ignore */ }
     try { db.close(); console.log('[server] 数据库连接已关闭'); } catch { /* ignore */ }
     process.exit(0);
   };

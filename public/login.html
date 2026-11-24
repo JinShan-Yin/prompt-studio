@@ -86,7 +86,7 @@
         <div class="brand-point"><i></i>AI 润色 / 模板库 / 回归评测一站式</div>
       </div>
     </div>
-    <div class="brand-foot">NewRock AI Workbench v1.60 · 仅限本机访问</div>
+    <div class="brand-foot">NewRock AI Workbench v1.62 · 仅限本机或局域网内访问</div>
   </section>
 
   <section class="form-panel">
@@ -109,6 +109,7 @@
         </div>
         <button id="login-submit" class="btn-primary" type="submit">登 录</button>
         <p class="hint">首次部署可用默认超管账号登录，登录后系统会提醒修改密码。</p>
+        <p class="hint" id="register-closed-hint" style="display:none;">当前已关闭自助注册：账号由管理员在「系统管理」中创建，请联系管理员。</p>
       </form>
     </div>
 
@@ -249,6 +250,21 @@
   document.getElementById('pwd-skip').addEventListener('click', enterApp);
   // 已登录用户访问 login.html 直接进入
   fetch('/api/auth/me').then(function (r) { return r.json(); }).then(function (d) { if (d && d.success) window.location.href = '/'; }).catch(function () {});
+  // V1.62：按服务端配置决定是否显示注册入口（局域网模式默认关闭）
+  fetch('/api/auth/config').then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.success) return;
+    var data = d.data || {};
+    if (data.register_enabled === false) {
+      var regTab = document.querySelector('.tab[data-panel="register"]');
+      if (regTab) regTab.style.display = 'none';
+      if (panels.register) panels.register.classList.remove('active');
+      var closedHint = document.getElementById('register-closed-hint');
+      if (closedHint) closedHint.style.display = 'block';
+      showPanel('login');
+    }
+    var foot = document.querySelector('.brand-foot');
+    if (foot) foot.textContent = 'NewRock AI Workbench ' + (data.version || 'v1.62') + (data.lan_mode ? ' · 局域网模式' : ' · 仅限本机访问');
+  }).catch(function () {});
   showPanel('login');
 })();
 </script>

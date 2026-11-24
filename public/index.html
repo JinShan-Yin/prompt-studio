@@ -1081,6 +1081,32 @@
     .audit-level-danger { background: #fdf3f2; color: #c0392b; border: 1px solid rgba(192, 57, 43, 0.3); }
     .audit-ip { font-family: var(--font-mono); color: #475569; white-space: nowrap; }
     .audit-hint { font-size: 12px; color: #6b7280; line-height: 1.6; }
+    /* V1.62：系统管理面板 */
+    .sysadmin-box { width: 1080px; max-width: calc(100vw - 32px); max-height: 90vh; display: flex; flex-direction: column; }
+    .sysadmin-body { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: hidden; }
+    .sysadmin-tabs { display: flex; gap: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; }
+    .sysadmin-tab { border: none; background: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; color: #475569; font-family: inherit; }
+    .sysadmin-tab:hover { background: #f1f5f9; }
+    .sysadmin-tab.active { background: #ecf5ff; color: #0c479b; font-weight: 600; }
+    .sysadmin-pane { overflow: auto; min-height: 0; padding-right: 4px; }
+    .sysadmin-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+    .sysadmin-inline { display: flex; gap: 8px; align-items: center; }
+    .sysadmin-status { font-size: 12px; color: #64748b; margin-left: auto; }
+    .sysadmin-table-wrap { overflow: auto; border: 1px solid #e5e7eb; border-radius: 10px; max-height: 52vh; }
+    .sysadmin-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .sysadmin-table th { position: sticky; top: 0; background: #f8fafc; z-index: 1; white-space: nowrap; }
+    .sysadmin-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .sysadmin-section-title { font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 8px; }
+    .sysadmin-hint { font-size: 12px; color: #64748b; line-height: 1.7; }
+    .sysadmin-list { display: flex; flex-wrap: wrap; gap: 10px; max-height: 46vh; overflow: auto; }
+    .sysadmin-check { display: flex; align-items: center; gap: 6px; font-size: 12px; border: 1px solid #e5e7eb; padding: 6px 10px; border-radius: 999px; }
+    .feature-row { display: flex; align-items: center; gap: 14px; padding: 6px 0; font-size: 13px; }
+    .feature-row > span:first-child { width: 120px; color: #334155; }
+    .status-pill { display: inline-flex; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .status-active { background: #ecfdf5; color: #16a34a; }
+    .status-disabled { background: #fdf3f2; color: #c0392b; }
+    .sysadmin-table .btn-link { margin-right: 8px; }
+
     /* Tab1 顶部 Token 进度工具栏 */
     .token-toolbar { margin-bottom: 16px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f8fafc; }
     .token-toolbar-head { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #64748b; margin-bottom: 8px; }
@@ -1162,10 +1188,11 @@
         </div>
         <div class="header-title">当前项目： <span id="current-name">请选择左侧项目</span><span id="public-badge" class="public-badge" style="display:none;">公共参考项目 · 只读</span></div>
         <div class="header-right">
+          <button type="button" class="icon-btn" id="system-admin-btn" onclick="openSystemAdmin()" title="系统管理（用户/权限/备份）" aria-label="系统管理" style="display:none;">⚙️</button>
           <button type="button" class="icon-btn" id="audit-log-btn" onclick="openAuditLogPanel()" title="审计日志（黑匣子）" aria-label="审计日志" style="display:none;">📜</button>
           <button type="button" class="icon-btn" id="shortcuts-btn" onclick="openShortcutsModal()" title="快捷键面板" aria-label="快捷键面板">⌨️</button>
-          <button type="button" class="icon-btn" id="backup-export-btn" onclick="exportBackup()" title="导出备份 JSON" aria-label="导出备份 JSON">💾</button>
-          <button type="button" class="icon-btn" id="backup-import-btn" onclick="document.getElementById('backup-import-file').click()" title="导入备份 JSON（覆盖全部数据）" aria-label="导入备份 JSON">📥</button>
+          <button type="button" class="icon-btn" id="backup-export-btn" onclick="exportBackup()" title="导出备份 JSON" aria-label="导出备份 JSON" style="display:none;">💾</button>
+          <button type="button" class="icon-btn" id="backup-import-btn" onclick="document.getElementById('backup-import-file').click()" title="导入备份 JSON（覆盖全部数据）" aria-label="导入备份 JSON" style="display:none;">📥</button>
           <input type="file" id="backup-import-file" accept=".json,application/json" style="display: none;" onchange="handleBackupImport(event.target.files)" />
           <button type="button" class="icon-btn" id="api-key-btn" onclick="openModelConfigModal()" title="模型配置中心" aria-label="模型配置中心">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -1474,6 +1501,11 @@
         <button type="button" class="model-close-btn" onclick="closeModelConfigModal()" title="关闭" aria-label="关闭">×</button>
       </div>
       <div class="modal-body model-body">
+        <div id="model-trial-bar" style="grid-column: 1 / -1; display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid #dbeafe; background:#eff6ff; border-radius:10px; font-size:13px; color:#1e40af;">
+          <span id="model-trial-text">免费试用状态加载中…</span>
+          <span style="flex:1;"></span>
+          <span style="font-size:12px; color:#64748b;">个人 Key 仅加密保存在本机数据库，不随页面回显</span>
+        </div>
         <div>
           <div class="model-section-title">
             <span>已配置模型</span>
@@ -1481,6 +1513,23 @@
           </div>
           <div class="model-list" id="model-list">
             <div class="model-empty">加载中...</div>
+          </div>
+        </div>
+        <div id="model-quick-add" style="border:1px solid #dbeafe; background:#f8fafc; border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:8px;">
+          <div style="font-size:13px; font-weight:600; color:#1e40af;">⚡ 添加我的 API Key（仅本人使用）</div>
+          <select id="quick-provider" class="form-input">
+            <option value="deepseek" selected>DeepSeek</option>
+            <option value="openai">OpenAI</option>
+            <option value="qwen">通义千问</option>
+            <option value="zhipu">智谱</option>
+            <option value="moonshot">Moonshot</option>
+            <option value="custom">自定义（需展开下方完整表单）</option>
+          </select>
+          <input id="quick-api-key" class="form-input" type="password" autocomplete="new-password" placeholder="粘贴 API Key（保存后不再显示明文）" />
+          <input id="quick-model-name" class="form-input" type="text" placeholder="模型名（留空使用厂商预设）" />
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button type="button" class="btn-plain" id="quick-key-save-btn" onclick="quickSaveMyKey()">保存并启用</button>
+            <span style="font-size:12px; color:#64748b;">保存后所有 AI 功能使用你的额度，不再消耗试用次数</span>
           </div>
         </div>
         <div class="model-form">
@@ -1532,6 +1581,137 @@
       <div class="modal-footer model-footer">
         <span style="font-size: 12px; color: var(--text-muted);">API Key 仅以 masked 展示；保存后立即生效</span>
         <button class="btn btn-link" style="color: #606266;" type="button" onclick="closeModelConfigModal()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- V1.62：跨公司克隆弹窗 -->
+  <div id="clone-project-modal" class="modal-mask" onclick="if (event.target === this) closeCloneModal();">
+    <div class="modal-box" style="width: 560px; max-width: calc(100vw - 32px);">
+      <div class="modal-header">
+        <span>📄 克隆项目</span>
+        <button type="button" class="btn-link" onclick="closeCloneModal()" aria-label="关闭">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">源项目</label>
+          <div id="clone-source-label" class="form-input" style="background:#f8fafc; color:#475569;">-</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="clone-target-company">目标公司</label>
+          <select id="clone-target-company" class="form-input"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="clone-project-name">新项目名</label>
+          <input id="clone-project-name" class="form-input" type="text" maxlength="100" placeholder="默认：源项目名（副本）" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">快照复制</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0;"><input type="radio" name="clone-copy-mode" value="latest" checked /> 仅最新一个（推荐，克隆后可回滚到原提示词）</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0;"><input type="radio" name="clone-copy-mode" value="all" /> 全部历史快照</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0;"><input type="radio" name="clone-copy-mode" value="none" /> 不复制快照</label>
+        </div>
+        <div style="font-size:12px; color:#64748b; line-height:1.6;">复制品归你所有，可自由修改；公共参考项目与共享只读项目同样可以克隆。</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-link" onclick="closeCloneModal()">取消</button>
+        <button type="button" class="btn btn-primary" id="clone-submit-btn" onclick="submitClone()">开始克隆</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- V1.62：系统管理面板（用户 / 功能权限 / 项目授权 / 备份运维） -->
+  <div id="system-admin-modal" class="modal-mask" onclick="if (event.target === this) closeSystemAdmin();">
+    <div class="modal-box sysadmin-box">
+      <div class="modal-header">
+        <span>⚙️ 系统管理</span>
+        <button type="button" class="btn-link" onclick="closeSystemAdmin()" aria-label="关闭">✕</button>
+      </div>
+      <div class="modal-body sysadmin-body">
+        <div class="sysadmin-tabs">
+          <button type="button" class="sysadmin-tab active" data-satab="users" onclick="switchSystemAdminTab('users')">用户与团队</button>
+          <button type="button" class="sysadmin-tab" data-satab="features" onclick="switchSystemAdminTab('features')">功能权限</button>
+          <button type="button" class="sysadmin-tab" data-satab="grants" onclick="switchSystemAdminTab('grants')">项目只读授权</button>
+          <button type="button" class="sysadmin-tab" data-satab="backups" onclick="switchSystemAdminTab('backups')">备份与运维</button>
+        </div>
+
+        <div class="sysadmin-pane" data-sapane="users">
+          <div class="sysadmin-toolbar">
+            <button type="button" class="btn btn-secondary" onclick="toggleCreateUserForm()">➕ 新建账号</button>
+            <div class="sysadmin-inline">
+              <input id="new-team-name" class="form-input" style="width: 180px;" type="text" placeholder="新团队名称" />
+              <button type="button" class="btn btn-plain" onclick="createTeam()">创建团队</button>
+            </div>
+            <button type="button" class="btn-link" onclick="loadSystemAdminUsers()">刷新</button>
+            <span id="sysadmin-user-status" class="sysadmin-status"></span>
+          </div>
+          <div id="sysadmin-create-user" style="display:none; border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:12px;">
+            <div class="model-form-row">
+              <div class="form-group"><label class="form-label" for="new-user-username">账号（手机号 / 邮箱）</label><input id="new-user-username" class="form-input" type="text" /></div>
+              <div class="form-group"><label class="form-label" for="new-user-password">初始密码（≥6 位）</label><input id="new-user-password" class="form-input" type="text" /></div>
+            </div>
+            <div class="model-form-row">
+              <div class="form-group"><label class="form-label" for="new-user-role">角色</label>
+                <select id="new-user-role" class="form-input"><option value="user">普通用户</option><option value="teamadmin">团队管理员</option></select>
+              </div>
+              <div class="form-group"><label class="form-label" for="new-user-team">团队</label><select id="new-user-team" class="form-input"><option value="">（无）</option></select></div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn-plain" onclick="submitCreateUser()">创建</button>
+              <button type="button" class="btn-link" onclick="toggleCreateUserForm(false)">取消</button>
+            </div>
+          </div>
+          <div class="sysadmin-table-wrap">
+            <table class="table sysadmin-table">
+              <thead><tr><th>账号</th><th>角色</th><th>团队</th><th>状态</th><th>最后登录</th><th>操作</th></tr></thead>
+              <tbody id="sysadmin-user-tbody"><tr><td colspan="6" style="text-align:center;color:#909399;">加载中...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="sysadmin-pane" data-sapane="features" style="display:none;">
+          <div class="sysadmin-section-title">角色默认功能（新建/未单独配置的账号按此生效；超管永久全开）</div>
+          <div id="feature-matrix-box"></div>
+          <div style="margin-top:10px;"><button type="button" class="btn-plain" onclick="saveFeatureMatrix()">保存角色默认</button><span id="feature-matrix-status" class="sysadmin-status"></span></div>
+          <div class="sysadmin-section-title" style="margin-top:18px;">个人微调（覆盖角色默认；留「跟随角色」即不覆盖）</div>
+          <div class="sysadmin-toolbar">
+            <select id="feature-user-select" class="form-input" style="width: 300px;" onchange="renderUserFeatureEditor()"></select>
+            <button type="button" class="btn-plain" onclick="saveUserFeatures()">保存个人权限</button>
+            <span id="feature-status" class="sysadmin-status"></span>
+          </div>
+          <div id="feature-user-editor"></div>
+        </div>
+
+        <div class="sysadmin-pane" data-sapane="grants" style="display:none;">
+          <div class="sysadmin-toolbar">
+            <select id="grant-project-select" class="form-input" style="width: 340px;" onchange="loadProjectGrants()"></select>
+            <button type="button" class="btn-link" onclick="loadProjectGrants()">刷新</button>
+            <span id="grant-status" class="sysadmin-status"></span>
+          </div>
+          <div class="sysadmin-hint" style="margin-bottom:10px;">被授权人可只读访问该项目的提示词、知识库与历史快照；所有写操作会被服务端拒绝。</div>
+          <div id="grant-user-list" class="sysadmin-list"></div>
+          <div style="margin-top:14px;"><button type="button" class="btn-plain" onclick="saveProjectGrants()">保存只读授权</button></div>
+        </div>
+
+        <div class="sysadmin-pane" data-sapane="backups" style="display:none;">
+          <div class="sysadmin-toolbar">
+            <button type="button" class="btn btn-secondary" onclick="runBackupNow()">立即备份</button>
+            <button type="button" class="btn btn-plain" onclick="exportBackup('business')">导出业务数据</button>
+            <button type="button" class="btn btn-plain" onclick="exportBackup('full')">导出全量（含账号）</button>
+            <button type="button" class="btn btn-plain" onclick="document.getElementById('backup-import-file').click()">导入备份</button>
+            <button type="button" class="btn-link" onclick="loadBackupList()">刷新</button>
+          </div>
+          <div id="sysadmin-runtime" class="sysadmin-hint" style="margin-bottom:10px;"></div>
+          <div class="sysadmin-table-wrap">
+            <table class="table sysadmin-table">
+              <thead><tr><th>类型</th><th>文件</th><th>大小</th><th>时间</th></tr></thead>
+              <tbody id="backup-tbody"><tr><td colspan="4" style="text-align:center;color:#909399;">加载中...</td></tr></tbody>
+            </table>
+          </div>
+          <div class="sysadmin-hint" style="margin-top:10px;">全量备份包含 bcrypt 密码哈希与加密后的模型 Key，属敏感文件；跨机恢复模型 Key 需同时复制 data/.vault-key。</div>
+        </div>
       </div>
     </div>
   </div>
@@ -1649,7 +1829,7 @@
   <script>
     let companies = [];
     let activeProjectId = '';
-    let pinnedIds = JSON.parse(localStorage.getItem('pinnedIds') || '[]');
+    // V1.62：置顶改为服务端持久化（project_pins，每人一套），前端只读 p.pinned
     let currentDropdownTarget = null;
     let currentKbPairs = []; // 暂存解析出来的问答对
 
@@ -1666,6 +1846,11 @@
     // 安全 JSON 解析工具，防止后端返回 HTML 报错导致前端崩溃
     async function safeFetchJson(url, options = {}) {
       const res = await fetch(url, options);
+      // V1.62：账号被禁用/踢下线/会话过期时，任何请求 401 都直接回登录页
+      if (res.status === 401 && !String(url).includes('/api/auth/login')) {
+        window.location.href = '/login.html';
+        throw new Error('登录状态已失效，请重新登录');
+      }
       const text = await res.text();
       try {
         return JSON.parse(text);
@@ -1731,7 +1916,9 @@
     let multiSelectMode = false;
     let selectedProjectIds = [];
     let currentUserInfo = null;
+    let currentFeatures = null;
     window.isPublicProject = false;
+    window.readOnlyReason = '';
 
     function findProjectById(projectId) {
       for (const c of (typeof companies !== 'undefined' && Array.isArray(companies) ? companies : [])) {
@@ -1750,6 +1937,10 @@
     /** 切换 Tab：只控制既有卡片显隐，绝不重建/移动卡片内部 DOM */
     function switchTab(tab) {
       if (!activeProjectId) { showToast('请先选择左侧项目'); return; }
+      if (currentFeatures && currentFeatures[tab] === false && (!currentUserInfo || currentUserInfo.role !== 'superadmin')) {
+        showToast('该功能已被管理员关闭');
+        return;
+      }
       currentTab = tab;
       document.querySelectorAll('#tab-bar .tab-item').forEach((btn) => {
         btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
@@ -1827,7 +2018,33 @@
     }
     window.initTabsAndHeader = initTabsAndHeader;
 
-    /** 顶部登录用户信息 / 退出登录（v1.60 已移除“剩余试用”组件） */
+    /** V1.62：按生效功能隐藏入口（超管永远全开；全部关闭时给出明确提示） */
+    function applyFeatureGate(features) {
+      currentFeatures = features || null;
+      const tabs = ['edit', 'kb', 'eval', 'snapshot'];
+      let firstEnabled = '';
+      tabs.forEach((key) => {
+        const enabled = !currentFeatures || currentFeatures[key] !== false;
+        if (enabled && !firstEnabled) firstEnabled = key;
+        const btn = document.querySelector('#tab-bar .tab-item[data-tab="' + key + '"]');
+        if (btn) btn.style.display = enabled ? '' : 'none';
+        if (!enabled) {
+          const card = document.querySelector('#main-content .card[data-tab="' + key + '"]');
+          if (card) card.style.display = 'none';
+        }
+      });
+      window.__firstEnabledTab = firstEnabled || 'edit';
+      if (!firstEnabled) {
+        const main = document.getElementById('main-content');
+        if (main) main.style.display = 'none';
+        const empty = document.getElementById('empty-state');
+        if (empty) empty.style.display = '';
+        showToast('管理员未开放任何功能，请联系管理员');
+      }
+    }
+    window.applyFeatureGate = applyFeatureGate;
+
+    /** 顶部登录用户信息 / 退出登录（v1.62：功能门禁 + 管理入口） */
     async function loadCurrentUser() {
       try {
         const res = await fetch('/api/auth/me');
@@ -1835,8 +2052,17 @@
         const d = await res.json();
         if (!d || !d.success) return;
         currentUserInfo = d.user;
+        applyFeatureGate(d.user.features || null);
+        const isManager = ['superadmin', 'teamadmin'].includes(d.user.role);
+        const isSuper = d.user.role === 'superadmin';
         const auditBtn = document.getElementById('audit-log-btn');
-        if (auditBtn) auditBtn.style.display = d.user.role === 'superadmin' ? 'inline-flex' : 'none';
+        if (auditBtn) auditBtn.style.display = isSuper ? 'inline-flex' : 'none';
+        const adminBtn = document.getElementById('system-admin-btn');
+        if (adminBtn) adminBtn.style.display = isManager ? 'inline-flex' : 'none';
+        const backupExportBtn = document.getElementById('backup-export-btn');
+        if (backupExportBtn) backupExportBtn.style.display = isSuper ? 'inline-flex' : 'none';
+        const backupImportBtn = document.getElementById('backup-import-btn');
+        if (backupImportBtn) backupImportBtn.style.display = isSuper ? 'inline-flex' : 'none';
       } catch (e) { /* 静默 */ }
     }
     async function logoutSession() {
@@ -1924,26 +2150,30 @@
     window.closeAuditLogPanel = closeAuditLogPanel;
     window.loadAuditLogs = loadAuditLogs;
 
-    /** 公共参考项目只读模式 */
+    /** V1.62：只读模式（公共参考项目 / 共享只读项目共用），以服务端 can_write 为准 */
     function setPublicProjectMode(project) {
-      const isPublic = !!(project && Number(project.is_public) === 1);
-      window.isPublicProject = isPublic;
-      document.body.classList.toggle('public-readonly', isPublic);
+      const readOnly = !!(project && Number(project.can_write) === 0);
+      window.isPublicProject = readOnly;
+      window.readOnlyReason = project && Number(project.is_public) === 1 ? 'public' : (readOnly ? 'shared' : '');
+      document.body.classList.toggle('public-readonly', readOnly);
       const badge = document.getElementById('public-badge');
-      if (badge) badge.style.display = isPublic ? 'inline-flex' : 'none';
+      if (badge) {
+        badge.style.display = readOnly ? 'inline-flex' : 'none';
+        badge.innerText = window.readOnlyReason === 'public' ? '公共参考项目 · 只读' : '共享只读项目 · 只读';
+      }
       ['val-system'].forEach((id) => {
         const el = document.getElementById(id);
-        if (el) el.readOnly = isPublic;
+        if (el) el.readOnly = readOnly;
       });
       ['generate-snapshot-btn', 'clean-format-btn', 'polish-system'].forEach((id) => {
         const el = document.getElementById(id);
-        if (el) el.disabled = isPublic;
+        if (el) el.disabled = readOnly;
       });
     }
-    /** 所有写操作统一前置拦截（公共项目禁止修改） */
+    /** 所有写操作统一前置拦截（公共项目 / 共享只读项目禁止修改） */
     function guardPublicProject() {
       if (window.isPublicProject) {
-        showToast('无权修改公共项目');
+        showToast(window.readOnlyReason === 'public' ? '无权修改公共项目' : '该项目为共享只读权限，无法修改');
         return true;
       }
       return false;
@@ -2064,20 +2294,22 @@
         return;
       }
 
-      // 渲染置顶区
+      // V1.62：置顶区只渲染项目（项目级整体置顶，显示所属公司），下方树过滤掉置顶项避免重复
       let pinnedHtml = '';
       companies.forEach(c => {
-        if (pinnedIds.includes(c.id)) pinnedHtml += createTreeItemHTML(c, 'company', true);
         c.children.forEach(p => {
-          if (pinnedIds.includes(p.id)) pinnedHtml += createTreeItemHTML(p, 'project', true);
+          if (Number(p.pinned) === 1) {
+            pinnedHtml += createTreeItemHTML(Object.assign({}, p, { __label: p.name + ' · ' + c.name }), 'project', true);
+          }
         });
       });
       if (pinnedHtml) {
         html += `<div style="padding: 8px 16px; font-size: 12px; color: #909399;">置顶</div>${pinnedHtml}<div style="height: 1px; background: #e4e7ed; margin: 8px 16px;"></div>`;
       }
 
-      // 渲染全部
+      // 渲染全部（已置顶项目不再重复出现在公司下）
       companies.forEach(c => {
+        const visibleChildren = c.children.filter(p => Number(p.pinned) !== 1);
         html += `
           <div class="menu-parent" onclick="toggleCompany('${c.id}')">
             <div style="display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden;">
@@ -2089,7 +2321,7 @@
             </div>
           </div>
           <div style="display: ${c.open ? 'block' : 'none'};">
-            ${c.children.map(p => createTreeItemHTML(p, 'project', false)).join('')}
+            ${visibleChildren.map(p => createTreeItemHTML(p, 'project', false)).join('')}
           </div>
         `;
       });
@@ -2113,7 +2345,7 @@
       return `
         <div class="menu-child ${activeClass} ${isChecked ? 'tree-item-selected' : ''}" style="${paddingStyle}" onclick="${clickHandler}">
           ${checkboxWrap}
-          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex:1; padding-right:8px;">${escapeHtml(item.name)}</span>
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex:1; padding-right:8px;">${escapeHtml(item.__label || item.name)}</span>
           <div class="more-btn" onclick="event.stopPropagation(); showMenu(event, '${item.id}', '${type}')">
             <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
           </div>
@@ -2142,7 +2374,7 @@
       document.getElementById('empty-state').style.display = 'none';
       setTabsEnabled(true);
       setPublicProjectMode(findProjectById(id));
-      switchTab('edit');
+      switchTab(window.__firstEnabledTab || 'edit');
       resetKbSelection();
       renderTree();
       
@@ -2900,6 +3132,8 @@
         });
         // 在途期间已切换项目 / 已重置：丢弃响应，避免旧助手气泡出现在新项目
         if (seq !== chatSeq || activeProjectId !== projectIdAtSend) return;
+        // V1.62：试用额度用完时引导添加自己的 API Key
+        if (maybeHandleTrialExhausted(d)) return;
         if (d && d.success && typeof d.reply === 'string') {
           const reply = d.reply.trim();
           if (!reply) {
@@ -3067,6 +3301,11 @@
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ project_id: activeProjectId, count: 15 })
         });
+        if (maybeHandleTrialExhausted(d)) {
+          currentTestCases = [];
+          renderGeneratedQuestions();
+          return;
+        }
         if (!d || !d.success) {
           const msg = (d && (d.error || d.message)) || '生成失败';
           currentTestCases = [];
@@ -3223,6 +3462,7 @@
               })
             });
             if (isAborted) break;
+            if (maybeHandleTrialExhausted(chatResp)) { isAborted = true; break; }
             const botReply = chatResp && typeof chatResp.reply === 'string' ? chatResp.reply : '';
             // 2) 调用 /api/eval/run 打分
             const evalResp = await safeFetchJson('/api/eval/run', {
@@ -3974,13 +4214,13 @@
       });
       if (!targetItem) return;
 
-      const isPinned = pinnedIds.includes(id);
+      const isPinned = Number(targetItem.pinned) === 1;
+      const isManager = !!(currentUserInfo && ['superadmin', 'teamadmin'].includes(currentUserInfo.role));
       let menuHtml = '';
 
       if (type === 'company') {
         menuHtml = `
           <div class="dropdown-item" onclick="openCreateModal('project', '${id}')">➕ 新项目</div>
-          <div class="dropdown-item" onclick="togglePin('${id}')">📌 ${isPinned ? '取消置顶' : '置顶'}</div>
           <div class="dropdown-item" onclick="enterMultiSelectMode()">☑️ 多选</div>
           <div class="dropdown-item" onclick="openEditModal('company', '${id}', '${targetItem.name}')">✏️ 重命名</div>
           <div class="dropdown-divider"></div>
@@ -3988,8 +4228,9 @@
         `;
       } else {
         menuHtml = `
-          <div class="dropdown-item" onclick="togglePin('${id}')">📌 ${isPinned ? '取消置顶' : '置顶'}</div>
+          <div class="dropdown-item" onclick="togglePin('${id}', ${isPinned ? 'false' : 'true'})">📌 ${isPinned ? '取消置顶' : '置顶'}</div>
           <div class="dropdown-item" onclick="cloneProject('${id}')">📄 克隆项目</div>
+          ${isManager ? `<div class="dropdown-item" onclick="openProjectGrants('${id}')">🔗 共享只读…</div>` : ''}
           <div class="dropdown-item" onclick="enterMultiSelectMode()">☑️ 多选</div>
           <div class="dropdown-item" onclick="openEditModal('project', '${id}', '${targetItem.name}')">✏️ 重命名</div>
           <div class="dropdown-divider"></div>
@@ -4229,13 +4470,28 @@
       };
     }
 
-    function togglePin(id) {
+    /** V1.62：项目置顶/取消置顶（服务端持久化，每人一套） */
+    async function togglePin(id, nextPinned) {
       closeMenu();
-      const idx = pinnedIds.indexOf(id);
-      if (idx > -1) pinnedIds.splice(idx, 1); else pinnedIds.push(id);
-      localStorage.setItem('pinnedIds', JSON.stringify(pinnedIds));
-      renderTree();
+      const project = findProjectById(id);
+      const pinned = typeof nextPinned === 'boolean' ? nextPinned : !(project && Number(project.pinned) === 1);
+      try {
+        const d = await safeFetchJson('/api/projects/pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: id, pinned }),
+        });
+        if (d && d.success) {
+          showToast(d.message || (pinned ? '已置顶' : '已取消置顶'));
+          await fetchData();
+        } else {
+          showToast((d && (d.error || d.message)) || '操作失败');
+        }
+      } catch (e) {
+        showToast((e && e.message) || '操作失败');
+      }
     }
+    window.togglePin = togglePin;
 
     function closeModal() {
       document.getElementById('global-modal').style.display = 'none';
@@ -4412,7 +4668,15 @@
       if (!modal) return;
       resetModelForm();
       modal.style.display = 'flex';
+      // V1.62：普通用户不再看到必然 403 的「.env Key」入口
+      const envBtn = document.getElementById('model-quick-key-btn');
+      if (envBtn) envBtn.style.display = (currentUserInfo && currentUserInfo.role === 'superadmin') ? '' : 'none';
+      const quickKey = document.getElementById('quick-api-key');
+      if (quickKey) quickKey.value = '';
+      const quickName = document.getElementById('quick-model-name');
+      if (quickName) quickName.value = '';
       loadModels();
+      refreshModelTrialBar();
       const providerEl = document.getElementById('model-provider');
       if (providerEl && typeof providerEl.focus === 'function') providerEl.focus();
     }
@@ -4424,6 +4688,8 @@
       // 安全：关闭时立即清空 Key 输入框，Key 不留在 DOM 中
       const keyEl = document.getElementById('model-api-key');
       if (keyEl) keyEl.value = '';
+      const quickKeyEl = document.getElementById('quick-api-key');
+      if (quickKeyEl) quickKeyEl.value = '';
       modelBusy = false;
       setModelButtonsBusy(false, '');
     }
@@ -4477,9 +4743,29 @@
         const meta = document.createElement('div');
         meta.className = 'model-item-meta';
         const keyText = model.masked_key || (model.has_key ? '已配置' : '未配置');
-        meta.textContent = `${model.provider || '-'} · ${model.model_name || '-'} · ${model.base_url || '-'} · Key: ${keyText}`;
+        meta.textContent = `${model.provider || '-'} · ${model.model_name || '-'} · ${model.base_url || '-'} · Key: ${keyText}`
+          + (model.owner_username ? ` · 归属: ${model.owner_username}` : '');
         item.appendChild(titleRow);
         item.appendChild(meta);
+        // V1.62：模型管理操作（设为当前 / 删除），点击不触发「载入编辑」
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display:flex; gap:10px; margin-top:6px;';
+        if (!model.is_active) {
+          const activeBtn = document.createElement('button');
+          activeBtn.type = 'button';
+          activeBtn.className = 'btn-link';
+          activeBtn.textContent = '设为当前';
+          activeBtn.onclick = (ev) => { ev.stopPropagation(); setModelActive(model.id); };
+          actions.appendChild(activeBtn);
+        }
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn-link';
+        delBtn.style.color = '#d9534f';
+        delBtn.textContent = '删除';
+        delBtn.onclick = (ev) => { ev.stopPropagation(); deleteModelConfig(model.id); };
+        actions.appendChild(delBtn);
+        item.appendChild(actions);
         item.addEventListener('click', () => selectModelForEdit(item.dataset.modelId));
         listEl.appendChild(item);
       });
@@ -4628,6 +4914,147 @@
     }
     window.openQuickApiKeyFromModel = openQuickApiKeyFromModel;
 
+    /** V1.62：刷新试用状态条（每次打开模型中心时与服务端对齐） */
+    async function refreshModelTrialBar() {
+      let count = currentUserInfo ? Number(currentUserInfo.trial_count) || 0 : 0;
+      let limit = currentUserInfo && currentUserInfo.trial_limit ? Number(currentUserInfo.trial_limit) : 3;
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const d = await res.json();
+          if (d && d.success && d.user) {
+            currentUserInfo = d.user;
+            count = Number(d.user.trial_count) || 0;
+            limit = Number(d.user.trial_limit) || 3;
+          }
+        }
+      } catch (e) { /* 静默 */ }
+      const textEl = document.getElementById('model-trial-text');
+      if (!textEl) return;
+      if (currentUserInfo && currentUserInfo.role === 'superadmin') {
+        textEl.innerText = '系统管理员：直接使用系统 Key 或自己的模型，不消耗试用额度';
+      } else {
+        const remaining = Math.max(0, limit - count);
+        textEl.innerText = `公共 Key 免费试用剩余 ${remaining}/${limit} 次；配置自己的 Key 后不再消耗`;
+      }
+    }
+    window.refreshModelTrialBar = refreshModelTrialBar;
+
+    /** V1.62：一键添加并启用个人 API Key（厂商预设自动填 Base URL / 模型名） */
+    async function quickSaveMyKey() {
+      if (modelBusy) return;
+      const providerEl = document.getElementById('quick-provider');
+      const keyEl = document.getElementById('quick-api-key');
+      const nameEl = document.getElementById('quick-model-name');
+      const provider = providerEl ? providerEl.value : 'deepseek';
+      if (provider === 'custom') { showToast('自定义厂商请使用下方完整表单填写 Base URL 与模型名'); return; }
+      const preset = MODEL_PROVIDER_PRESETS[provider] || MODEL_PROVIDER_PRESETS.deepseek;
+      const apiKey = keyEl ? keyEl.value.trim() : '';
+      if (!apiKey) { showToast('请粘贴 API Key'); return; }
+      const payload = {
+        provider,
+        base_url: preset.base_url,
+        model_name: (nameEl && nameEl.value.trim()) || preset.model_name,
+        display_name: (preset.label || provider) + '（我的）',
+        api_key: apiKey,
+        is_active: true,
+      };
+      const btn = document.getElementById('quick-key-save-btn');
+      modelBusy = true;
+      if (btn) { btn.disabled = true; btn.innerText = '保存中…'; }
+      try {
+        const d = await safeFetchJson('/api/models/save', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+        if (d && d.success) {
+          showToast(d.message || '已保存并启用');
+          if (keyEl) keyEl.value = '';
+          if (nameEl) nameEl.value = '';
+          await loadModels();
+          await refreshModelTrialBar();
+        } else {
+          showToast((d && (d.error || d.message)) || '保存失败');
+        }
+      } catch (e) {
+        showToast((e && e.message) || '保存失败');
+      } finally {
+        modelBusy = false;
+        if (btn) { btn.disabled = false; btn.innerText = '保存并启用'; }
+      }
+    }
+    window.quickSaveMyKey = quickSaveMyKey;
+
+    /** V1.62：把某个已保存模型设为当前（不填 Key，后端保留原值） */
+    async function setModelActive(id) {
+      const model = modelConfigList.find((m) => String(m.id) === String(id));
+      if (!model) return;
+      try {
+        const d = await safeFetchJson('/api/models/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: model.id,
+            provider: model.provider,
+            base_url: model.base_url,
+            model_name: model.model_name,
+            display_name: model.display_name,
+            temperature: model.temperature,
+            is_active: true,
+          }),
+        });
+        if (d && d.success) {
+          showToast('已设为当前模型');
+          await loadModels();
+          await refreshModelTrialBar();
+        } else {
+          showToast((d && (d.error || d.message)) || '切换失败');
+        }
+      } catch (e) {
+        showToast((e && e.message) || '切换失败');
+      }
+    }
+    window.setModelActive = setModelActive;
+
+    /** V1.62：删除模型配置（二次确认） */
+    function deleteModelConfig(id) {
+      const model = modelConfigList.find((m) => String(m.id) === String(id));
+      const label = (model && (model.display_name || model.model_name)) || id;
+      openConfirmModal('删除模型配置', `确认删除「${label}」？删除后该 Key 不再可用，且不可恢复。`, async () => {
+        try {
+          const d = await safeFetchJson('/api/models/delete', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+          });
+          closeModal();
+          if (d && d.success) {
+            showToast(d.message || '已删除');
+            await loadModels();
+            await refreshModelTrialBar();
+          } else {
+            showToast((d && (d.error || d.message)) || '删除失败');
+          }
+        } catch (e) {
+          closeModal();
+          showToast((e && e.message) || '删除失败');
+        }
+      });
+    }
+    window.deleteModelConfig = deleteModelConfig;
+
+    /** V1.62：试用额度耗尽 → 引导添加个人 Key（只处理明确错误码，避免误扰） */
+    function maybeHandleTrialExhausted(d) {
+      if (d && d.code === 'TRIAL_EXHAUSTED') {
+        showToast(d.error || '免费试用额度已用完，请添加自己的 API Key');
+        setTimeout(() => {
+          openModelConfigModal();
+          const quickKey = document.getElementById('quick-api-key');
+          if (quickKey && typeof quickKey.focus === 'function') quickKey.focus();
+        }, 350);
+        return true;
+      }
+      return false;
+    }
+    window.maybeHandleTrialExhausted = maybeHandleTrialExhausted;
+
     /** 模型配置中心 UI 初始化：厂商联动 / 遮罩点击关闭 / Esc 关闭 */
     function initModelConfigUI() {
       const providerEl = document.getElementById('model-provider');
@@ -4652,6 +5079,8 @@
           () => { if (isVisible(document.getElementById('template-apply-modal'))) { closeTemplateApplyModal(); return true; } return false; },
           () => { if (isVisible(document.getElementById('shortcuts-modal'))) { closeShortcutsModal(); return true; } return false; },
           () => { if (isVisible(document.getElementById('kb-edit-modal'))) { closeKbEditModal(); return true; } return false; },
+          () => { if (isVisible(document.getElementById('clone-project-modal'))) { closeCloneModal(); return true; } return false; },
+          () => { if (isVisible(document.getElementById('system-admin-modal'))) { closeSystemAdmin(); return true; } return false; },
           () => { if (isVisible(document.getElementById('model-config-modal'))) { closeModelConfigModal(); return true; } return false; },
           () => { if (isVisible(document.getElementById('global-modal'))) { closeModal(); return true; } return false; },
           () => { if (isVisible(document.getElementById('global-dropdown'))) { closeMenu(); return true; } return false; },
@@ -5331,6 +5760,7 @@
           signal: controller.signal
         });
         if (activeProjectId !== projectIdAtRequest) return; // 响应回来时项目已切换：丢弃
+        if (maybeHandleTrialExhausted(d)) return;
 
         if (d && d.success && d.data && typeof d.data === 'object') {
           const data = d.data;
@@ -5716,6 +6146,7 @@
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ layer, content }),
         });
+        if (maybeHandleTrialExhausted(d)) return;
         if (d && d.success && typeof d.content === 'string') {
           const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
           setter.call(textarea, d.content);
@@ -5798,11 +6229,24 @@
     window.closeShortcutsModal = closeShortcutsModal;
 
     // ==================== V4.0 阶段三：备份导出 / 导入（全表替换语义） ====================
-    async function exportBackup() {
+    /** V1.62：导出备份（business=业务数据；full=含账号/团队/权限/审计） */
+    async function exportBackup(scope) {
+      const exportScope = scope === 'full' ? 'full' : 'business';
+      if (exportScope === 'full') {
+        openConfirmModal(
+          '导出全量备份（含账号）',
+          '全量备份包含所有账号（bcrypt 哈希）、团队、功能权限、只读授权与审计日志，属于敏感文件，请妥善保管。确认导出？',
+          () => { closeModal(); doExportBackup('full'); }
+        );
+        return;
+      }
+      await doExportBackup('business');
+    }
+    async function doExportBackup(exportScope) {
       const btn = document.getElementById('backup-export-btn');
       if (btn) btn.disabled = true;
       try {
-        const d = await safeFetchJson('/api/backup/export');
+        const d = await safeFetchJson('/api/backup/export?scope=' + exportScope);
         if (!d || !d.tables || typeof d.tables !== 'object') throw new Error('备份数据格式异常');
         const tableNames = Object.keys(d.tables);
         const totalRows = tableNames.reduce((sum, name) => sum + (Array.isArray(d.tables[name]) ? d.tables[name].length : 0), 0);
@@ -5811,12 +6255,12 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `newrock-ai-workbench-backup-${stamp}.json`;
+        a.download = `newrock-ai-workbench-backup-${exportScope}-${stamp}.json`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 1500);
-        showToast(`备份已导出（${tableNames.length} 张表 / ${totalRows} 条记录）`);
+        showToast(`备份已导出（${exportScope === 'full' ? '全量' : '业务数据'}，${tableNames.length} 张表 / ${totalRows} 条记录）`);
       } catch (e) {
         showToast((e && e.message) || '备份导出失败');
       } finally {
@@ -5824,6 +6268,7 @@
       }
     }
     window.exportBackup = exportBackup;
+    window.doExportBackup = doExportBackup;
 
     /** 📥 导入备份：读文件 → JSON.parse → 基础结构检查 → 手写确认框 → POST /api/backup/import（后端严格校验+事务回滚） */
     async function handleBackupImport(fileList) {
@@ -5845,16 +6290,20 @@
       }
       const tableNames = Object.keys(parsed.tables);
       const totalRows = tableNames.reduce((sum, name) => sum + (Array.isArray(parsed.tables[name]) ? parsed.tables[name].length : 0), 0);
+      const isFull = parsed.scope === 'full' || Number(parsed.version) >= 2;
+      const scopeText = isFull ? '全量（会同时替换账号、团队与权限，导入后可能需要重新登录）' : '业务数据（账号体系保持不变）';
       openConfirmModal(
-        '⚠️ 导入备份（覆盖全部数据）',
-        `即将用备份文件「${file.name}」替换当前全部数据：${tableNames.length} 张表 / ${totalRows} 条记录。\n当前数据会被清空替换（后端事务失败会自动回滚），是否继续？`,
+        '⚠️ 导入备份（覆盖当前数据）',
+        `即将用备份文件「${file.name}」替换当前数据：${tableNames.length} 张表 / ${totalRows} 条记录。\n类型：${scopeText}\n后端会在事务内替换并在失败时回滚，是否继续？`,
         async () => {
           const d = await safeFetchJson('/api/backup/import', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parsed),
           });
           if (d && d.success) {
-            showToast(d.message || '备份导入成功');
+            const warn = Array.isArray(d.warnings) && d.warnings.length ? '；' + d.warnings.join('；') : '';
+            showToast((d.message || '备份导入成功') + warn);
             closeModal();
+            if (d.relogin_required) { setTimeout(() => { window.location.href = '/login.html'; }, 1200); return; }
             await fetchData();
             setTimeout(() => location.reload(), 900);
           } else {
@@ -5865,26 +6314,596 @@
     }
     window.handleBackupImport = handleBackupImport;
 
-    // ==================== V4.0 阶段三：项目深拷贝克隆（后端生成全新 id） ====================
-    async function cloneProject(id) {
+    // ==================== V1.62：系统管理面板（用户 / 权限 / 授权 / 备份） ====================
+    let systemAdminTab = 'users';
+    let systemAdminUsers = [];
+    let systemAdminTeams = [];
+    let systemAdminMatrix = null;
+    let systemAdminProjects = [];
+    let grantGranted = [];
+    let grantCandidates = [];
+    let grantPreselectProjectId = '';
+
+    function isManagerRole() {
+      return !!(currentUserInfo && ['superadmin', 'teamadmin'].includes(currentUserInfo.role));
+    }
+    function roleLabel(role) {
+      if (role === 'superadmin') return '超级管理员';
+      if (role === 'teamadmin') return '团队管理员';
+      return '普通用户';
+    }
+    function formatDateTime(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      return isNaN(d.getTime()) ? String(iso) : d.toLocaleString('zh-CN');
+    }
+
+    function openSystemAdmin(tab) {
+      if (!isManagerRole()) { showToast('需要管理权限'); return; }
+      const modal = document.getElementById('system-admin-modal');
+      if (!modal) return;
+      toggleCreateUserForm(false);
+      const teamNameEl = document.getElementById('new-team-name');
+      if (teamNameEl) teamNameEl.value = '';
+      modal.style.display = 'flex';
+      loadSystemAdminUsers().then(() => switchSystemAdminTab(tab || 'users'));
+    }
+    window.openSystemAdmin = openSystemAdmin;
+
+    function closeSystemAdmin() {
+      const modal = document.getElementById('system-admin-modal');
+      if (modal) modal.style.display = 'none';
+    }
+    window.closeSystemAdmin = closeSystemAdmin;
+
+    function switchSystemAdminTab(tab) {
+      systemAdminTab = tab;
+      document.querySelectorAll('.sysadmin-tab').forEach(function (btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-satab') === tab);
+      });
+      document.querySelectorAll('.sysadmin-pane').forEach(function (pane) {
+        pane.style.display = pane.getAttribute('data-sapane') === tab ? '' : 'none';
+      });
+      if (tab === 'users') loadSystemAdminUsers();
+      else if (tab === 'features') loadFeaturePanel();
+      else if (tab === 'grants') loadGrantPanel();
+      else if (tab === 'backups') loadBackupList();
+    }
+    window.switchSystemAdminTab = switchSystemAdminTab;
+
+    async function loadSystemAdminUsers() {
+      const statusEl = document.getElementById('sysadmin-user-status');
+      if (statusEl) statusEl.innerText = '加载中…';
+      try {
+        const results = await Promise.all([safeFetchJson('/api/admin/users'), safeFetchJson('/api/teams')]);
+        systemAdminUsers = results[0] && results[0].success && Array.isArray(results[0].data) ? results[0].data : [];
+        systemAdminTeams = results[1] && results[1].success && Array.isArray(results[1].data) ? results[1].data : [];
+        renderSystemAdminUsers();
+        renderCreateUserOptions();
+        renderFeatureUserSelect();
+        if (statusEl) statusEl.innerText = '共 ' + systemAdminUsers.length + ' 个账号';
+      } catch (e) {
+        if (statusEl) statusEl.innerText = '加载失败：' + (e.message || e);
+      }
+    }
+    window.loadSystemAdminUsers = loadSystemAdminUsers;
+
+    function renderSystemAdminUsers() {
+      const tbody = document.getElementById('sysadmin-user-tbody');
+      if (!tbody) return;
+      if (!systemAdminUsers.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#909399;">暂无账号</td></tr>';
+        return;
+      }
+      tbody.innerHTML = systemAdminUsers.map(function (u) {
+        const isSelf = !!(currentUserInfo && u.id === currentUserInfo.id);
+        const canManage = !isSelf && u.role !== 'superadmin';
+        const statusPill = u.status === 'disabled'
+          ? '<span class="status-pill status-disabled">已禁用</span>'
+          : '<span class="status-pill status-active">正常</span>';
+        const buttons = [];
+        if (u.role !== 'superadmin') {
+          buttons.push('<button type="button" class="btn-link" onclick="adminResetPassword(\'' + u.id + '\')">重置密码</button>');
+        }
+        if (canManage) {
+          buttons.push(u.status === 'disabled'
+            ? '<button type="button" class="btn-link" onclick="setUserStatus(\'' + u.id + '\', \'active\')">启用</button>'
+            : '<button type="button" class="btn-link" style="color:#d9534f;" onclick="setUserStatus(\'' + u.id + '\', \'disabled\')">禁用</button>');
+          buttons.push('<button type="button" class="btn-link" onclick="kickUser(\'' + u.id + '\')">强制下线</button>');
+          if (currentUserInfo && currentUserInfo.role === 'superadmin') {
+            buttons.push('<button type="button" class="btn-link" style="color:#d9534f;" onclick="deleteUserAccount(\'' + u.id + '\')">删除</button>');
+          }
+        }
+        return '<tr>'
+          + '<td>' + escapeHtml(u.username) + (isSelf ? '（我）' : '') + '</td>'
+          + '<td>' + roleLabel(u.role) + '</td>'
+          + '<td>' + escapeHtml(u.team_name || '—') + '</td>'
+          + '<td>' + statusPill + '</td>'
+          + '<td>' + escapeHtml(formatDateTime(u.last_login_at)) + '</td>'
+          + '<td>' + (buttons.join('') || '—') + '</td>'
+          + '</tr>';
+      }).join('');
+    }
+
+    function renderCreateUserOptions() {
+      const teamSel = document.getElementById('new-user-team');
+      if (teamSel) {
+        const options = ['<option value="">（无）</option>'].concat(systemAdminTeams.map(function (t) {
+          return '<option value="' + t.id + '">' + escapeHtml(t.name || t.id) + '</option>';
+        }));
+        teamSel.innerHTML = options.join('');
+        if (currentUserInfo && currentUserInfo.role === 'teamadmin' && currentUserInfo.team_id) teamSel.value = currentUserInfo.team_id;
+      }
+      const roleSel = document.getElementById('new-user-role');
+      if (roleSel) {
+        const isSuper = !!(currentUserInfo && currentUserInfo.role === 'superadmin');
+        roleSel.disabled = !isSuper;
+        if (!isSuper) roleSel.value = 'user';
+      }
+    }
+
+    function toggleCreateUserForm(force) {
+      const box = document.getElementById('sysadmin-create-user');
+      if (!box) return;
+      const show = typeof force === 'boolean' ? force : box.style.display === 'none';
+      box.style.display = show ? '' : 'none';
+      if (show) {
+        const usernameEl = document.getElementById('new-user-username');
+        const passwordEl = document.getElementById('new-user-password');
+        if (usernameEl) usernameEl.value = '';
+        if (passwordEl) passwordEl.value = '';
+      }
+    }
+    window.toggleCreateUserForm = toggleCreateUserForm;
+
+    async function submitCreateUser() {
+      const username = (document.getElementById('new-user-username') || {}).value || '';
+      const password = (document.getElementById('new-user-password') || {}).value || '';
+      const roleSel = document.getElementById('new-user-role');
+      const teamSel = document.getElementById('new-user-team');
+      const payload = {
+        username: username.trim(),
+        password: password,
+        role: roleSel ? roleSel.value : 'user',
+        team_id: teamSel ? teamSel.value : '',
+      };
+      if (!payload.username) { showToast('请填写账号'); return; }
+      if (payload.password.length < 6) { showToast('初始密码至少 6 位'); return; }
+      try {
+        const d = await safeFetchJson('/api/admin/users/create', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+        if (d && d.success) {
+          showToast(d.message || '账号已创建');
+          toggleCreateUserForm(false);
+          await loadSystemAdminUsers();
+        } else {
+          showToast((d && (d.error || d.message)) || '创建失败');
+        }
+      } catch (e) { showToast((e && e.message) || '创建失败'); }
+    }
+    window.submitCreateUser = submitCreateUser;
+
+    async function createTeam() {
+      const input = document.getElementById('new-team-name');
+      const name = input ? input.value.trim() : '';
+      if (!name) { showToast('请填写团队名称'); return; }
+      try {
+        const d = await safeFetchJson('/api/teams/create', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+        });
+        if (d && d.success) {
+          showToast('团队已创建');
+          if (input) input.value = '';
+          await loadSystemAdminUsers();
+        } else {
+          showToast((d && (d.error || d.message)) || '创建团队失败');
+        }
+      } catch (e) { showToast((e && e.message) || '创建团队失败'); }
+    }
+    window.createTeam = createTeam;
+
+    function adminResetPassword(id) {
+      const user = systemAdminUsers.find(function (u) { return u.id === id; });
+      openConfirmModal('重置密码', '确认把「' + (user ? user.username : id) + '」的密码重置为 123456？该账号在线会话会立即失效。', async function () {
+        try {
+          const d = await safeFetchJson('/api/admin/users/reset-password', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: id }),
+          });
+          closeModal();
+          showToast(d && d.success ? (d.message || '已重置') : ((d && (d.error || d.message)) || '重置失败'));
+        } catch (e) { closeModal(); showToast((e && e.message) || '重置失败'); }
+      });
+    }
+    window.adminResetPassword = adminResetPassword;
+
+    function setUserStatus(id, status) {
+      const user = systemAdminUsers.find(function (u) { return u.id === id; });
+      const label = user ? user.username : id;
+      const text = status === 'disabled'
+        ? '确认禁用「' + label + '」？该账号会立即被踢下线且无法登录，数据保留。'
+        : '确认启用「' + label + '」？';
+      openConfirmModal(status === 'disabled' ? '禁用账号' : '启用账号', text, async function () {
+        try {
+          const d = await safeFetchJson('/api/admin/users/status', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: id, status: status }),
+          });
+          closeModal();
+          showToast(d && d.success ? (d.message || '已更新') : ((d && (d.error || d.message)) || '操作失败'));
+          if (d && d.success) await loadSystemAdminUsers();
+        } catch (e) { closeModal(); showToast((e && e.message) || '操作失败'); }
+      });
+    }
+    window.setUserStatus = setUserStatus;
+
+    function kickUser(id) {
+      const user = systemAdminUsers.find(function (u) { return u.id === id; });
+      openConfirmModal('强制下线', '确认强制下线「' + (user ? user.username : id) + '」？该账号下次请求需重新登录。', async function () {
+        try {
+          const d = await safeFetchJson('/api/admin/users/kick', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: id }),
+          });
+          closeModal();
+          showToast(d && d.success ? (d.message || '已强制下线') : ((d && (d.error || d.message)) || '操作失败'));
+        } catch (e) { closeModal(); showToast((e && e.message) || '操作失败'); }
+      });
+    }
+    window.kickUser = kickUser;
+
+    function deleteUserAccount(id) {
+      const user = systemAdminUsers.find(function (u) { return u.id === id; });
+      openConfirmModal('删除账号', '确认删除「' + (user ? user.username : id) + '」？仅当该账号没有任何业务数据时才允许删除，删除不可恢复。', async function () {
+        try {
+          const d = await safeFetchJson('/api/admin/users/delete', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: id }),
+          });
+          closeModal();
+          if (d && d.success) {
+            showToast(d.message || '账号已删除');
+            await loadSystemAdminUsers();
+          } else if (d && d.code === 'USER_HAS_DATA' && d.counts) {
+            const detail = Object.keys(d.counts).map(function (k) { return k + ' ' + d.counts[k]; }).join('，');
+            showToast('该账号仍有业务数据（' + detail + '），请改用「禁用」');
+          } else {
+            showToast((d && (d.error || d.message)) || '删除失败');
+          }
+        } catch (e) { closeModal(); showToast((e && e.message) || '删除失败'); }
+      });
+    }
+    window.deleteUserAccount = deleteUserAccount;
+
+    // ---------- 功能权限 ----------
+    async function loadFeaturePanel() {
+      try {
+        const d = await safeFetchJson('/api/admin/features');
+        if (!d || !d.success) { showToast((d && (d.error || d.message)) || '加载功能权限失败'); return; }
+        systemAdminMatrix = d.data.matrix;
+        renderFeatureMatrix(d.data.features);
+        renderFeatureUserSelect();
+        renderUserFeatureEditor();
+      } catch (e) { showToast((e && e.message) || '加载功能权限失败'); }
+    }
+    window.loadFeaturePanel = loadFeaturePanel;
+
+    function renderFeatureMatrix(defs) {
+      const box = document.getElementById('feature-matrix-box');
+      if (!box) return;
+      const features = defs || [
+        { key: 'edit', label: '提示词编辑' }, { key: 'kb', label: '知识库管理' },
+        { key: 'eval', label: '智能体评测' }, { key: 'snapshot', label: '历史快照' },
+      ];
+      const roles = [['user', '普通用户'], ['teamadmin', '团队管理员'], ['superadmin', '超级管理员（永久全开）']];
+      box.innerHTML = features.map(function (f) {
+        const cells = roles.map(function (pair) {
+          const role = pair[0], label = pair[1];
+          const checked = role === 'superadmin' ? true : !!(systemAdminMatrix && systemAdminMatrix[role] && systemAdminMatrix[role][f.key]);
+          return '<label style="display:flex;align-items:center;gap:6px;margin-right:16px;">'
+            + '<input type="checkbox" data-role="' + role + '" data-feature="' + f.key + '"'
+            + (checked ? ' checked' : '') + (role === 'superadmin' ? ' disabled' : '')
+            + ' onchange="onMatrixToggle(this)" /> ' + label + '</label>';
+        }).join('');
+        return '<div class="feature-row"><span>' + escapeHtml(f.label) + '</span>' + cells + '</div>';
+      }).join('');
+    }
+    function onMatrixToggle(el) {
+      if (!systemAdminMatrix) systemAdminMatrix = { user: {}, teamadmin: {} };
+      if (!systemAdminMatrix[el.getAttribute('data-role')]) systemAdminMatrix[el.getAttribute('data-role')] = {};
+      systemAdminMatrix[el.getAttribute('data-role')][el.getAttribute('data-feature')] = !!el.checked;
+    }
+    window.onMatrixToggle = onMatrixToggle;
+
+    async function saveFeatureMatrix() {
+      const statusEl = document.getElementById('feature-matrix-status');
+      try {
+        const d = await safeFetchJson('/api/admin/features/matrix', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matrix: systemAdminMatrix || {} }),
+        });
+        if (d && d.success) {
+          systemAdminMatrix = d.matrix;
+          if (statusEl) statusEl.innerText = '已保存';
+          showToast('角色默认功能已保存');
+          renderFeatureMatrix();
+          renderUserFeatureEditor();
+        } else {
+          showToast((d && (d.error || d.message)) || '保存失败');
+        }
+      } catch (e) { showToast((e && e.message) || '保存失败'); }
+    }
+    window.saveFeatureMatrix = saveFeatureMatrix;
+
+    function renderFeatureUserSelect() {
+      const sel = document.getElementById('feature-user-select');
+      if (!sel) return;
+      const list = systemAdminUsers.filter(function (u) { return u.role !== 'superadmin'; });
+      const prev = sel.value;
+      sel.innerHTML = list.length ? list.map(function (u) {
+        return '<option value="' + u.id + '">' + escapeHtml(u.username) + '（' + roleLabel(u.role) + '）</option>';
+      }).join('') : '<option value="">（无可用账号）</option>';
+      if (prev && list.some(function (u) { return u.id === prev; })) sel.value = prev;
+    }
+    function renderUserFeatureEditor() {
+      const sel = document.getElementById('feature-user-select');
+      const box = document.getElementById('feature-user-editor');
+      if (!sel || !box) return;
+      const user = systemAdminUsers.find(function (u) { return u.id === sel.value; });
+      if (!user) { box.innerHTML = '<div class="sysadmin-hint">请选择账号</div>'; return; }
+      const features = [['edit', '提示词编辑'], ['kb', '知识库管理'], ['eval', '智能体评测'], ['snapshot', '历史快照']];
+      box.innerHTML = features.map(function (pair) {
+        const key = pair[0], label = pair[1];
+        const override = user.overrides && typeof user.overrides[key] === 'boolean' ? user.overrides[key] : null;
+        const value = override === null ? 'inherit' : (override ? 'on' : 'off');
+        const roleDefault = systemAdminMatrix && systemAdminMatrix[user.role] ? systemAdminMatrix[user.role][key] : true;
+        return '<div class="feature-row"><span>' + label + '</span>'
+          + '<select class="form-input" style="width:220px;" data-feature="' + key + '" onchange="onUserFeatureChange(this)">'
+          + '<option value="inherit"' + (value === 'inherit' ? ' selected' : '') + '>跟随角色（当前' + (roleDefault ? '开' : '关') + '）</option>'
+          + '<option value="on"' + (value === 'on' ? ' selected' : '') + '>强制开启</option>'
+          + '<option value="off"' + (value === 'off' ? ' selected' : '') + '>强制关闭</option>'
+          + '</select></div>';
+      }).join('');
+    }
+    window.renderUserFeatureEditor = renderUserFeatureEditor;
+
+    function onUserFeatureChange(el) {
+      const sel = document.getElementById('feature-user-select');
+      if (!sel) return;
+      const user = systemAdminUsers.find(function (u) { return u.id === sel.value; });
+      if (!user) return;
+      if (!user.overrides) user.overrides = {};
+      const key = el.getAttribute('data-feature');
+      if (el.value === 'inherit') delete user.overrides[key];
+      else user.overrides[key] = el.value === 'on';
+    }
+    window.onUserFeatureChange = onUserFeatureChange;
+
+    async function saveUserFeatures() {
+      const sel = document.getElementById('feature-user-select');
+      const statusEl = document.getElementById('feature-status');
+      if (!sel || !sel.value) { showToast('请选择账号'); return; }
+      const user = systemAdminUsers.find(function (u) { return u.id === sel.value; });
+      if (!user) return;
+      const overrides = {};
+      ['edit', 'kb', 'eval', 'snapshot'].forEach(function (key) {
+        if (user.overrides && typeof user.overrides[key] === 'boolean') overrides[key] = user.overrides[key];
+      });
+      try {
+        const d = await safeFetchJson('/api/admin/users/features', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.id, overrides: overrides }),
+        });
+        if (d && d.success) {
+          if (statusEl) statusEl.innerText = '已保存';
+          showToast('个人功能权限已保存');
+          await loadSystemAdminUsers();
+        } else {
+          showToast((d && (d.error || d.message)) || '保存失败');
+        }
+      } catch (e) { showToast((e && e.message) || '保存失败'); }
+    }
+    window.saveUserFeatures = saveUserFeatures;
+
+    // ---------- 项目只读授权 ----------
+    async function loadGrantPanel() {
+      try {
+        const d = await safeFetchJson('/api/projects');
+        systemAdminProjects = d && d.success && Array.isArray(d.data) ? d.data : [];
+        const sel = document.getElementById('grant-project-select');
+        if (!sel) return;
+        sel.innerHTML = systemAdminProjects.length ? systemAdminProjects.map(function (p) {
+          return '<option value="' + p.id + '">' + escapeHtml(p.name || p.id) + '</option>';
+        }).join('') : '<option value="">（暂无项目）</option>';
+        if (grantPreselectProjectId && systemAdminProjects.some(function (p) { return p.id === grantPreselectProjectId; })) {
+          sel.value = grantPreselectProjectId;
+        }
+        await loadProjectGrants();
+      } catch (e) { showToast((e && e.message) || '加载项目失败'); }
+    }
+    window.loadGrantPanel = loadGrantPanel;
+
+    async function loadProjectGrants() {
+      const sel = document.getElementById('grant-project-select');
+      const statusEl = document.getElementById('grant-status');
+      const projectId = sel ? sel.value : '';
+      if (!projectId) {
+        const listEl = document.getElementById('grant-user-list');
+        if (listEl) listEl.innerHTML = '<div class="sysadmin-hint">暂无可授权项目</div>';
+        return;
+      }
+      if (statusEl) statusEl.innerText = '加载中…';
+      try {
+        const d = await safeFetchJson('/api/projects/grants?project_id=' + encodeURIComponent(projectId));
+        if (!d || !d.success) {
+          if (statusEl) statusEl.innerText = '';
+          showToast((d && (d.error || d.message)) || '加载授权失败');
+          return;
+        }
+        grantGranted = (d.data.granted || []).map(function (g) { return g.grantee_user_id; });
+        grantCandidates = d.data.candidates || [];
+        renderGrantUserList();
+        if (statusEl) statusEl.innerText = '已授权 ' + grantGranted.length + ' 人';
+      } catch (e) {
+        if (statusEl) statusEl.innerText = '';
+        showToast((e && e.message) || '加载授权失败');
+      }
+    }
+    window.loadProjectGrants = loadProjectGrants;
+
+    function renderGrantUserList() {
+      const box = document.getElementById('grant-user-list');
+      if (!box) return;
+      if (!grantCandidates.length) {
+        box.innerHTML = '<div class="sysadmin-hint">暂无可授权用户（超级管理员与项目所有者天然可读，无需授权）</div>';
+        return;
+      }
+      box.innerHTML = grantCandidates.map(function (u) {
+        const checked = grantGranted.indexOf(u.id) >= 0 ? ' checked' : '';
+        return '<label class="sysadmin-check"><input type="checkbox" value="' + u.id + '"' + checked + ' /> '
+          + escapeHtml(u.username) + (u.team_name ? ' · ' + escapeHtml(u.team_name) : '') + '</label>';
+      }).join('');
+    }
+
+    async function saveProjectGrants() {
+      const sel = document.getElementById('grant-project-select');
+      const projectId = sel ? sel.value : '';
+      if (!projectId) { showToast('请选择项目'); return; }
+      const userIds = Array.from(document.querySelectorAll('#grant-user-list input[type="checkbox"]:checked')).map(function (el) { return el.value; });
+      try {
+        const d = await safeFetchJson('/api/projects/grants/save', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: projectId, user_ids: userIds }),
+        });
+        if (d && d.success) {
+          showToast(d.message || '只读授权已保存');
+          await loadProjectGrants();
+        } else {
+          showToast((d && (d.error || d.message)) || '保存失败');
+        }
+      } catch (e) { showToast((e && e.message) || '保存失败'); }
+    }
+    window.saveProjectGrants = saveProjectGrants;
+
+    function openProjectGrants(projectId) {
+      grantPreselectProjectId = projectId || '';
+      openSystemAdmin('grants');
+    }
+    window.openProjectGrants = openProjectGrants;
+
+    // ---------- 备份与运维 ----------
+    async function loadBackupList() {
+      const tbody = document.getElementById('backup-tbody');
+      const runtimeEl = document.getElementById('sysadmin-runtime');
+      try {
+        const results = await Promise.all([
+          safeFetchJson('/api/admin/backups'),
+          fetch('/api/health').then(function (res) { return res.json(); }).catch(function () { return null; }),
+        ]);
+        const rows = results[0] && results[0].success && Array.isArray(results[0].data) ? results[0].data : [];
+        if (tbody) {
+          tbody.innerHTML = rows.length ? rows.map(function (r) {
+            return '<tr><td>' + (r.kind === 'startup' ? '启动前快照' : '自动/手动') + '</td>'
+              + '<td>' + escapeHtml(r.name) + '</td>'
+              + '<td>' + Math.round(Number(r.size || 0) / 1024) + ' KB</td>'
+              + '<td>' + escapeHtml(formatDateTime(r.mtime)) + '</td></tr>';
+          }).join('') : '<tr><td colspan="4" style="text-align:center;color:#909399;">暂无备份（启动 1 分钟后生成首份自动备份）</td></tr>';
+        }
+        const health = results[1];
+        if (runtimeEl && health && health.success) {
+          runtimeEl.innerText = '版本 ' + health.version
+            + ' · 已运行 ' + Math.floor((Number(health.uptime_s) || 0) / 60) + ' 分钟'
+            + ' · 模式 ' + (health.mode === 'lan' ? '局域网' : '仅本机')
+            + ' · 数据库 ' + (health.db_ok ? '正常' : '异常')
+            + ' · 端口 ' + health.port;
+        }
+      } catch (e) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="color:#c0392b;">加载失败：' + escapeHtml(e.message || '') + '</td></tr>';
+      }
+    }
+    window.loadBackupList = loadBackupList;
+
+    async function runBackupNow() {
+      try {
+        const d = await safeFetchJson('/api/admin/backups/run', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        });
+        if (d && d.success) {
+          showToast('备份已完成：' + (d.file || ''));
+          await loadBackupList();
+        } else {
+          showToast((d && (d.error || d.message)) || '备份失败');
+        }
+      } catch (e) { showToast((e && e.message) || '备份失败'); }
+    }
+    window.runBackupNow = runBackupNow;
+
+
+    // ==================== V1.62：跨公司克隆（弹窗选择目标公司与快照复制模式） ====================
+    let cloneSourceId = '';
+    function cloneProject(id) {
       closeMenu();
       if (!id) { showToast('项目 ID 无效'); return; }
+      const project = findProjectById(id);
+      if (!project) { showToast('项目不存在或无权访问'); return; }
+      cloneSourceId = id;
+      const sourceLabel = document.getElementById('clone-source-label');
+      if (sourceLabel) sourceLabel.innerText = project.name || id;
+      const companySelect = document.getElementById('clone-target-company');
+      if (companySelect) {
+        const list = Array.isArray(companies) ? companies : [];
+        companySelect.innerHTML = list.length
+          ? list.map((c) => `<option value="${c.id}"${c.id === project.company_id ? ' selected' : ''}>${escapeHtml(c.name || '')}</option>`).join('')
+          : '<option value="">（暂无可选公司）</option>';
+      }
+      const nameInput = document.getElementById('clone-project-name');
+      if (nameInput) nameInput.value = (project.name || '未命名项目') + '（副本）';
+      const latest = document.querySelector('input[name="clone-copy-mode"][value="latest"]');
+      if (latest) latest.checked = true;
+      const modal = document.getElementById('clone-project-modal');
+      if (modal) modal.style.display = 'flex';
+    }
+    window.cloneProject = cloneProject;
+
+    function closeCloneModal() {
+      const modal = document.getElementById('clone-project-modal');
+      if (modal) modal.style.display = 'none';
+      cloneSourceId = '';
+    }
+    window.closeCloneModal = closeCloneModal;
+
+    async function submitClone() {
+      if (!cloneSourceId) { showToast('请选择源项目'); return; }
+      const companySelect = document.getElementById('clone-target-company');
+      const targetCompanyId = companySelect ? companySelect.value : '';
+      if (!targetCompanyId) { showToast('请选择目标公司'); return; }
+      const nameInput = document.getElementById('clone-project-name');
+      const name = nameInput ? nameInput.value.trim() : '';
+      if (!name) { showToast('请填写新项目名'); return; }
+      const copyEl = document.querySelector('input[name="clone-copy-mode"]:checked');
+      const copyMode = copyEl ? copyEl.value : 'latest';
+      const submitBtn = document.getElementById('clone-submit-btn');
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.innerText = '克隆中…'; }
       try {
         const d = await safeFetchJson('/api/projects/clone', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: cloneSourceId, target_company_id: targetCompanyId, name, copy_mode: copyMode }),
         });
         if (d && d.success) {
           showToast(d.message || '克隆成功');
+          closeCloneModal();
           await fetchData();
+          const target = companies.find((c) => c.id === d.company_id);
+          if (target) { target.open = true; renderTree(); }
           if (d.project_id) selectProject(d.project_id, d.name || '');
         } else {
           showToast((d && (d.error || d.message)) || '克隆失败');
         }
       } catch (e) {
         showToast((e && e.message) || '克隆失败');
+      } finally {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = '开始克隆'; }
       }
     }
-    window.cloneProject = cloneProject;
+    window.submitClone = submitClone;
 
     /** V4.0 UI 初始化钩子（模板搜索 input 已用 inline oninput，此处保留扩展位） */
     function initV4UI() {

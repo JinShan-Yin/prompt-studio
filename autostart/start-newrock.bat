@@ -11,10 +11,17 @@ REM 若 node 不在系统 PATH，请把下面这行改成绝对路径，例如�
 REM   set NODE_EXE=C:\Program Files\nodejs\node.exe
 REM ============================================================
 set NODE_EXE=node
-set PORT=3100
 set LOG_DIR=%~dp0..\logs
 
+REM 读取 .env 的 PORT 仅用于提示与浏览器地址；不导出 PORT，避免覆盖 .env（dotenv 不会覆盖已存在的环境变量）
+set SHOW_PORT=3100
+if exist ".env" for /f "tokens=2 delims==" %%p in ('findstr /b /c:"PORT=" ".env" 2^>nul') do set "SHOW_PORT=%%p"
+set "SHOW_PORT=!SHOW_PORT: =!"
+
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
+
+REM Rotate service.log before starting node (Windows locks the open file)
+if exist "%LOG_DIR%\service.log" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0rotate-logs.ps1" >nul 2>&1
 
 echo [1/3] 检查 Node.js ...
 "%NODE_EXE%" -v >nul 2>&1
@@ -25,10 +32,10 @@ if errorlevel 1 (
 )
 for /f "delims=" %%v in ('"%NODE_EXE%" -v') do echo     Node %%v
 
-echo [2/3] 检查端口 %PORT% ...
-netstat -ano | findstr ":%PORT% " | findstr "LISTENING" >nul 2>&1
+echo [2/3] 检查端口 %SHOW_PORT% ...
+netstat -ano | findstr ":%SHOW_PORT% " | findstr "LISTENING" >nul 2>&1
 if not errorlevel 1 (
-  echo [提示] 端口 %PORT% 已被占用，server.js 会自动尝试释放后重启。
+  echo [提示] 端口 %SHOW_PORT% 已被占用，server.js 会自动尝试释放后重启。
 )
 
 if not exist "node_modules" (
@@ -38,7 +45,7 @@ if not exist "node_modules" (
 )
 
 echo [3/3] 启动服务 ...
-start "" http://127.0.0.1:%PORT%
+start "" http://127.0.0.1:%SHOW_PORT%
 "%NODE_EXE%" server.js
 set EXITCODE=%errorlevel%
 
