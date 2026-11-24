@@ -250,16 +250,6 @@
     .editor-stats .stat-strong { color: #1a1a1a; font-weight: bold; font-family: Consolas, Monaco, monospace; }
     .editor-stats .stat-token { color: #67c23a; font-weight: bold; font-family: Consolas, Monaco, monospace; }
 
-    /* ==================== 模块二：语境配置 Tag 输入 ==================== */
-    .var-hint { color: #f59e0b; font-weight: normal; font-size: 12px; margin-left: 4px; font-family: Consolas, Monaco, monospace; }
-    .tag-input-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 40px; padding: 6px 8px; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; cursor: text; transition: border-color 0.2s; }
-    .tag-input-wrap:focus-within { border-color: #1a1a1a; }
-    .tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
-    .tag-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px; background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; border-radius: 12px; font-size: 12px; line-height: 18px; }
-    .tag-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
-    .tag-chip-del { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: none; border-radius: 50%; background: transparent; color: #6b7280; font-size: 14px; line-height: 1; cursor: pointer; transition: all 0.2s; }
-    .tag-chip-del:hover { background: #1a1a1a; color: #fff; }
-    .tag-input { flex: 1 1 140px; min-width: 120px; padding: 4px 0; border: none; outline: none; background: transparent; font-family: inherit; font-size: 14px; color: #606266; }
     .btn[disabled], .btn.loading { opacity: 0.6; cursor: not-allowed; }
 
     /* ==================== 模块三：知识库增强（搜索 / 冲突检测 / 批量导入） ==================== */
@@ -394,14 +384,6 @@
     .custom-dropdown { border-radius: var(--radius-md); border: 1px solid var(--border); box-shadow: var(--shadow-modal); }
     .dropdown-item { color: var(--text-main); transition: var(--transition); }
     .dropdown-item:hover { background: var(--primary-light); color: var(--primary); }
-    .tag-chip { background: var(--primary-light); color: var(--primary); border: 1px solid #e0e7ff; }
-    .tag-chip-del { color: var(--primary); }
-    .tag-chip-del:hover { background: var(--primary); color: #fff; }
-    .tag-input-wrap { border-color: var(--border-strong); border-radius: var(--radius-sm); transition: var(--transition); }
-    .tag-input-wrap:hover { border-color: #b6bcc8; }
-    .tag-input-wrap:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
-    .tag-input { color: var(--text-main); }
-
     /* ---- 编辑器：两层对齐规则保持完全一致，仅统一边框/focus 视觉 ---- */
     .editor-input, .editor-mirror { border-color: var(--border-strong); border-radius: var(--radius-sm); }
     .editor-mirror { color: var(--text-main); }
@@ -430,7 +412,6 @@
     .batch-fail-item .batch-fail-title { color: var(--danger); }
     .batch-all-pass { background: var(--success-light); border-color: #d1fae5; color: var(--success); border-radius: var(--radius-md); }
     .kb-banner { border-radius: var(--radius-sm); }
-    .var-hint { color: var(--warning); }
 
     /* ---- 弹窗 / Toast / 滚动条 ---- */
     .modal-box { border-radius: var(--radius-card); border: 1px solid var(--border); box-shadow: var(--shadow-modal); }
@@ -479,14 +460,8 @@
     .model-quick-link:hover { color: var(--primary); }
     .model-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
-    /* ==================== V3.0 阶段三：插入变量下拉（中文选项 → 英文占位符） ==================== */
     .label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
     .label-row .form-label { margin-bottom: 0; }
-    .insert-var-select { padding: 4px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; color: var(--text-secondary); background: #fff; cursor: pointer; font-family: inherit; outline: none; transition: var(--transition); max-width: 240px; }
-    .insert-var-select:hover { border-color: var(--primary); color: var(--primary); }
-    .insert-var-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
-    /* 变量高亮 span 的中文 title 提示（仅悬浮提示，不改变镜像文本） */
-    .editor-mirror span[title] { cursor: help; }
 
     /* ==================== V3.0 阶段四：功能样式 ==================== */
     /* 2) 左侧树搜索（深色侧边栏适配） */
@@ -508,9 +483,6 @@
     .token-progress-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
     .token-progress-meta .limit-warning { color: var(--danger); font-weight: 600; }
 
-    /* P2-A：镜像变量自定义中文 tooltip（镜像层 pointer-events:none，span 原生 title 不可 hover） */
-    .var-tooltip { position: fixed; z-index: 10250; display: none; padding: 4px 10px; background: rgba(31, 41, 55, 0.96); color: #fff; font-size: 12px; line-height: 1.5; border-radius: var(--radius-sm); box-shadow: var(--shadow-modal); pointer-events: none; white-space: nowrap; transform: translate(-50%, -100%); }
-    .var-tooltip::after { content: ''; position: absolute; left: 50%; bottom: -4px; width: 8px; height: 8px; margin-left: -4px; background: rgba(31, 41, 55, 0.96); transform: rotate(45deg); }
 
     /* 3) AI 生成刁钻测试题 */
     .gen-question-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -617,9 +589,6 @@
     .menu-child { min-width: 0; }
     .menu-child > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tree-container { overflow-x: hidden; }
-    .tag-chip { max-width: 200px; min-width: 0; flex: 0 1 auto; }
-    .tag-chip-label { max-width: 156px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .tag-chip-del { flex: 0 0 16px; width: 16px; height: 16px; min-width: 16px; }
     /* 全局弹窗：内容过多时内部滚动，底部按钮不被顶出屏幕 */
     .modal-box, .model-box, .kb-edit-box, .diff-panel {
       max-height: 85vh !important;
@@ -683,7 +652,7 @@
     .modal-mask, #global-modal, #model-config-modal, #kb-edit-modal, .diff-mask { z-index: 9999 !important; }
     .toast { z-index: 10000 !important; }
     /* 带图标的按钮/菜单强制 Flex 居中 */
-    .btn, .btn-link, .btn-new, .icon-btn, .tag-chip,
+    .btn, .btn-link, .btn-new, .icon-btn,
     .more-btn, .model-close-btn, .model-quick-link {
       display: inline-flex;
       align-items: center;
@@ -706,7 +675,7 @@
     .menu-parent, .menu-child { display: flex; align-items: center; justify-content: space-between; }
     /* 全局可交互元素过渡 */
     .btn, button, a, input, textarea, select,
-    .menu-parent, .menu-child, .dropdown-item, .tag-chip, .icon-btn,
+    .menu-parent, .menu-child, .dropdown-item, .icon-btn,
     .more-btn, .card, .table tr, .tree-search-input, .modal-box {
       transition: all 0.2s ease-in-out;
     }
@@ -802,24 +771,6 @@
       border: 1px solid rgba(192, 57, 43, 0.3) !important;
     }
     .btn-danger-outline:hover { background: #fdf3f2 !important; color: #c0392b !important; border-color: rgba(192, 57, 43, 0.45) !important; }
-    /* AI 智能提取：浅灰底 + 深灰字 + 细灰边（无阴影） */
-    #ctx-extract-btn {
-      background: #f3f4f6 !important;
-      color: #374151 !important;
-      border: 1px solid #e5e7eb !important;
-      border-radius: 6px !important;
-      box-shadow: none !important;
-      width: auto !important;
-      flex: 0 0 auto !important;
-      padding: 7px 14px !important;
-      font-size: 13px !important;
-    }
-    #ctx-extract-btn:hover:not(:disabled) {
-      background: #e9eaed !important;
-      color: #1a1a1a !important;
-      border-color: #d1d5db !important;
-      box-shadow: none !important;
-    }
     /* ---------- 三、布局与对齐：按钮区 Flex 右对齐（防全宽塌陷） ---------- */
     .editor-actions {
       display: flex !important;
@@ -843,27 +794,6 @@
     }
     .menu-child.active:hover { background: #f3f4f6 !important; color: #1a1a1a !important; }
     .menu-child:hover:not(.active) { background: #f3f4f6 !important; color: var(--ui-text) !important; }
-    .tag-chip {
-      background: #f3f4f6 !important;
-      color: #374151 !important;
-      border: 1px solid #e5e7eb !important;
-      border-radius: 4px !important;
-      max-width: 150px !important;
-      min-width: 0 !important;
-      padding: 2px 8px !important;
-      overflow: hidden;
-    }
-    .tag-chip-label {
-      max-width: 100% !important;
-      min-width: 0 !important;
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-      white-space: nowrap !important;
-      display: block;
-      flex: 1 1 auto;
-    }
-    .tag-chip-del { flex: 0 0 16px !important; width: 16px !important; height: 16px !important; color: #6b7280 !important; }
-    .tag-chip-del:hover { background: #1a1a1a !important; color: #ffffff !important; }
     /* Token 进度条：0-80% 深空灰 / >80%-100% 橙 / 满 100% 及超限 红 */
     .token-progress-fill { background: #1a1a1a !important; transition: width 0.2s ease, background-color 0.2s ease !important; }
     .token-progress-fill.warn { background: #f59e0b !important; }
@@ -934,9 +864,6 @@
     .tab-bar.disabled { opacity: .45; pointer-events: none; }
     #main-content .card[data-tab] { animation: tabFadeIn .2s ease; }
     @keyframes tabFadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
-    .context-header-actions { display: flex; align-items: center; gap: 12px; }
-    .context-card.collapsed .card-body { display: none; }
-    .context-card .card-header { cursor: pointer; }
     .kb-main-grid { display: grid; grid-template-columns: 7fr 3fr; gap: 20px; align-items: start; }
     .kb-right { border-left: 1px solid #e5e7eb; padding-left: 20px; }
     .kb-right-title { font-size: 14px; font-weight: 600; color: #334155; margin-bottom: 6px; }
@@ -1073,7 +1000,6 @@
     body.public-readonly .btn-primary,
     body.public-readonly .polish-btn,
     body.public-readonly #clean-format-btn,
-    body.public-readonly #ctx-extract-btn,
     body.public-readonly #kb-batch-delete-btn { opacity: .5; }
     @media (max-width: 900px) { .kb-main-grid { grid-template-columns: 1fr; } .kb-right { border-left: none; padding-left: 0; } }
     /* 审计日志面板（仅超管） */
@@ -1252,16 +1178,6 @@
                 <label class="form-label" for="val-system">系统提示词</label>
                 <div class="label-actions">
                   <button class="btn-link polish-btn" id="polish-system" type="button" onclick="polishLayer('SYSTEM')">✨ AI 润色</button>
-                  <select id="insert-var-select" class="insert-var-select" title="插入变量占位符（中文选项 → 英文变量，插入到光标处）">
-                  <option value="">➕ 插入变量</option>
-                  <option value="{{industry}}">行业/公司名（{{industry}}）</option>
-                  <option value="{{business_scene}}">业务场景（{{business_scene}}）</option>
-                  <option value="{{core_goal}}">核心目标（{{core_goal}}）</option>
-                  <option value="{{user_name}}">用户姓名（{{user_name}}）</option>
-                  <option value="{{company_name}}">公司名称（{{company_name}}）</option>
-                  <option value="{{current_date}}">当前日期（{{current_date}}）</option>
-                  <option value="{{custom_var}}">自定义变量（{{custom_var}}）</option>
-                </select>
                 </div>
               </div>
               <div class="editor-wrap">
@@ -1281,40 +1197,6 @@
               <button class="btn btn-primary" id="generate-snapshot-btn" onclick="generateSnapshot()">生成历史快照</button>
               <button class="btn btn-secondary" id="copy-prompt-btn" type="button" onclick="copyPromptAsText()">复制为txt</button>
             </div>
-          </div>
-        </div>
-
-        <!-- V1.62：恢复语境配置面板（变量实际取值入口） -->
-        <div class="card context-card" data-tab="edit" id="context-card">
-          <div class="card-header">
-            <span>🎯 语境配置</span>
-            <div class="context-header-actions">
-              <button class="btn btn-link" type="button" id="ctx-toggle-btn" onclick="toggleContextPanel()">收起</button>
-              <button class="btn btn-primary" id="ctx-extract-btn" type="button" onclick="aiExtractContext()" style="padding: 6px 14px; font-size: 13px;">
-                <span class="ctx-extract-label">✨ AI 智能提取</span>
-              </button>
-            </div>
-          </div>
-          <div class="card-body" id="context-card-body">
-            <div class="form-group">
-              <label class="form-label">行业 <span class="var-hint">{{industry}}</span></label>
-              <input id="ctx-industry" class="form-input" type="text" placeholder="例如：汽车服务 / 金融 / 电商零售" maxlength="60" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">业务场景 <span class="var-hint">{{business_scene}}</span></label>
-              <div class="tag-input-wrap" id="ctx-scene-wrap">
-                <div class="tag-list" id="ctx-scene-tags"></div>
-                <input id="ctx-scene-input" class="tag-input" type="text" placeholder="输入后按回车添加，可添加多个" maxlength="60" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">核心目标 <span class="var-hint">{{core_goal}}</span></label>
-              <div class="tag-input-wrap" id="ctx-goal-wrap">
-                <div class="tag-list" id="ctx-goal-tags"></div>
-                <input id="ctx-goal-input" class="tag-input" type="text" placeholder="输入后按回车添加，可添加多个" maxlength="60" />
-              </div>
-            </div>
-            <div style="font-size: 12px; color: #909399;">提示：生成快照 / 复制 txt / 对话时，会用这里的内容替换系统提示词中的 <span style="color:#f59e0b; font-family: Consolas, Monaco, monospace;">{{变量}}</span>；留空时替换为「通用」。</div>
           </div>
         </div>
 
@@ -1810,9 +1692,6 @@
     </div>
   </div>
 
-  <!-- P2-A：镜像变量中文自定义 tooltip（跟随鼠标命中 span 显示） -->
-  <div id="var-tooltip" class="var-tooltip" role="tooltip" aria-hidden="true"></div>
-
   <!-- V4.0 阶段一：提取新模板 Modal（三层 textarea 可微调后保存） -->
   <div id="template-extract-modal" class="modal-mask">
     <div class="modal-box tpl-box">
@@ -1829,7 +1708,7 @@
           <label class="form-label" for="template-system-input">系统提示词</label>
           <textarea id="template-system-input" class="form-textarea" rows="10" placeholder="系统提示词内容..."></textarea>
         </div>
-        <div class="tpl-hint">提示：可自由微调后再保存；{{变量}} 占位符会原样保留。</div>
+        <div class="tpl-hint">提示：可自由微调后再保存。</div>
         <div id="template-extract-error" class="model-test-result" style="min-height: 0;"></div>
       </div>
       <div class="modal-footer">
@@ -2026,18 +1905,6 @@
       updateEditorStats();
     }
 
-    /** 语境配置折叠面板（展开时强制重算编辑器布局） */
-    function toggleContextPanel(force) {
-      const card = document.getElementById('context-card');
-      const btn = document.getElementById('ctx-toggle-btn');
-      if (!card) return;
-      const expand = typeof force === 'boolean' ? !force : card.classList.contains('collapsed');
-      card.classList.toggle('collapsed', !expand);
-      if (btn) btn.innerText = expand ? '收起' : '展开';
-      if (expand) setTimeout(() => { refreshEditorLayoutAfterTabShow(); }, 0);
-    }
-    window.toggleContextPanel = toggleContextPanel;
-
     /** 页面初始化：Tab 初始态（仅 Tab1 可见）+ 头部用户信息 + 草稿监听 */
     function initTabsAndHeader() {
       document.querySelectorAll('#tab-bar .tab-item').forEach((btn) => {
@@ -2211,14 +2078,6 @@
         if (el) el.readOnly = readOnly;
       });
       ['generate-snapshot-btn', 'clean-format-btn', 'polish-system'].forEach((id) => {
-        const el = document.getElementById(id);
-        if (el) el.disabled = readOnly;
-      });
-      setContextReadOnly(readOnly);
-    }
-    /** V1.62：语境配置的只读联动（输入框、提取按钮禁用；Tag 增删另在函数入口守卫） */
-    function setContextReadOnly(readOnly) {
-      ['ctx-industry', 'ctx-scene-input', 'ctx-goal-input', 'ctx-extract-btn'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.disabled = readOnly;
       });
@@ -2464,8 +2323,6 @@
       }
       // Tab 1 强制布局重算（防高亮错位）
       setTimeout(() => { refreshEditorLayoutAfterTabShow(); }, 0);
-      // 模块二：加载该项目的语境配置（先 clearContext 清空，再异步回填）
-      loadProjectContext(id);
     }
 
     // --- 右侧功能区逻辑 ---
@@ -2496,7 +2353,6 @@
               { layer: "SYSTEM", name: "系统提示词", content: systemPrompt }
             ],
             evalData: { user_query: '测试', standard_answer: '测试', bot_reply: '<speak>测试</speak>' },
-            context_data: getContextDataForSnapshot(),
             remark: remarkText
           })
         });
@@ -3179,7 +3035,6 @@
           body: JSON.stringify({
             project_id: projectIdAtSend,
             layers: getCurrentLayers(),
-            context_data: getContextDataForSnapshot(),
             messages: chatHistory.map((m) => ({ role: m.role, content: m.content }))
           })
         });
@@ -3510,7 +3365,6 @@
               body: JSON.stringify({
                 project_id: activeProjectId,
                 layers: getCurrentLayers(),
-                context_data: getContextDataForSnapshot(),
                 messages: [{ role: 'user', content: q }]
               })
             });
@@ -4200,7 +4054,6 @@
         body: JSON.stringify({
           project_id: activeProjectId,
           layers: getCurrentLayers(),
-          context_data: getContextDataForSnapshot(),
         })
       });
       if (d && d.success) return String(d.final_prompt || '');
@@ -5191,8 +5044,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             project_id: activeProjectId,
-            layers: getCurrentLayers(),
-            context_data: getContextDataForSnapshot()
+            layers: getCurrentLayers()
           })
         });
         // CQO 纯净度要求：复制到剪贴板的文本不得带首尾冗余空白（内部 ### 层级结构保留）
@@ -5326,7 +5178,7 @@
     }
     window.cleanupFormatting = cleanupFormatting;
 
-    // ==================== 模块一：{{变量}} 橙色高亮（镜像 div + 透明 textarea） ====================
+    // ==================== 模块一：双层镜像编辑器（镜像 div + 透明 textarea） ====================
     // 绝不使用 contenteditable：保留原生 textarea（generateSnapshot 等依赖 .value），
     // 底层 mirror div 只负责着色渲染，上层 textarea 透明文字负责输入，两层像素级对齐。
     let editorResizeTimer = null;
@@ -5344,79 +5196,19 @@
         .replace(/>/g, '&gt;');
     }
 
-    /** 变量中文提示映射：仅用于镜像 span 的 title 悬浮提示，绝不把中文渲染进镜像文本（防光标/对齐错位） */
-    const VARIABLE_TITLE_MAP = {
-      industry: '行业/公司名',
-      business_scene: '业务场景',
-      core_goal: '核心目标',
-      user_name: '用户姓名',
-      company_name: '公司名称',
-      current_date: '当前日期',
-    };
-    function getVariableTitle(rawName) {
-      const name = String(rawName == null ? '' : rawName)
-        .replace(/^\s*\{\{/, '')
-        .replace(/\}\}\s*$/, '')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .trim();
-      if (Object.prototype.hasOwnProperty.call(VARIABLE_TITLE_MAP, name)) return VARIABLE_TITLE_MAP[name];
-      return '变量：' + (name || '未知');
-    }
-    window.getVariableTitle = getVariableTitle;
-
-    /** 镜像层渲染：转义 → \n 换 <br>、空格换 &nbsp; → {{xxx}} 包橙色 span（带中文 title）→ 末尾换行补 <br> 防错位 */
+    /** 镜像层渲染：转义 → \n 换 <br>、空格换 &nbsp; → 末尾换行补 <br> 防错位 */
     function renderEditorMirror(textarea) {
       const mirror = getEditorMirror(textarea);
       if (!textarea || !mirror) return;
       const value = textarea.value || '';
       let html = escapeEditorHtml(value);
       html = html.replace(/\n/g, '<br>').replace(/ /g, '&nbsp;');
-      // span 文本保持英文占位符原样（$& 内容不变），仅额外加 title 中文提示
-      html = html.replace(/{{[\s\S]*?}}/g, (match) => {
-        const title = escapeHtml(getVariableTitle(match));
-        return `<span style="color:#f59e0b;" title="${title}">${match}</span>`;
-      });
       // value 以 \n 结尾时，末尾换行会丢掉占位高度导致两层错位，补一个 <br> 撑住
       if (value.slice(-1) === '\n') html += '<br>';
       mirror.innerHTML = html; // 单次赋值，5000+ 字符 / 数百行也不卡
       syncEditorScroll(textarea);
     }
 
-    // ==================== v1.60：系统提示词「插入变量」下拉（中文选项 → 英文占位符） ====================
-    /** 在指定 textarea 光标处插入英文占位符，并刷新镜像高亮 / 自动撑高 / Token 统计 */
-    function insertVariableAtCursor(textareaId, placeholder) {
-      const el = document.getElementById(textareaId);
-      if (!el || !placeholder) return false;
-      const start = typeof el.selectionStart === 'number' ? el.selectionStart : (el.value || '').length;
-      const end = typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
-      if (typeof el.setRangeText === 'function') {
-        el.setRangeText(placeholder, start, end, 'end');
-      } else {
-        el.value = (el.value || '').slice(0, start) + placeholder + (el.value || '').slice(end);
-      }
-      const caret = start + placeholder.length;
-      el.dispatchEvent(new Event('input', { bubbles: true })); // 统一走 input：镜像/高度/统计刷新
-      if (typeof el.focus === 'function') el.focus();
-      try { el.setSelectionRange(caret, caret); } catch (e) { /* 旧浏览器忽略 */ }
-      showToast(`已插入 ${placeholder}（${getVariableTitle(placeholder)}）`);
-      return true;
-    }
-    window.insertVariableAtCursor = insertVariableAtCursor;
-
-    /** 绑定系统提示词上方的「插入变量」下拉：选择后插入光标处并复位下拉 */
-    function initInsertVariableSelect() {
-      const select = document.getElementById('insert-var-select');
-      if (!select) return;
-      select.addEventListener('change', () => {
-        const placeholder = select.value;
-        if (!placeholder) return;
-        insertVariableAtCursor('val-system', placeholder);
-        select.value = '';
-      });
-    }
 
     /** 滚动严格同步：textarea 隐藏滚动条但仍可编程滚动，mirror 跟随 scrollTop / scrollLeft */
     function syncEditorScroll(textarea) {
@@ -5491,397 +5283,8 @@
       updateEditorStats();
     }
 
-    // ==================== P2-A：镜像变量中文自定义 tooltip ====================
-    // 镜像层 pointer-events:none 且透明 textarea 在上层（z-index:2），底层 span 的原生 title 永远无法 hover 触发；
-    // 改为在 textarea 上监听 mousemove（rAF 节流），按坐标命中 mirror 内 span[title] 的 getBoundingClientRect 后自绘 tooltip。
-    let varTooltipRafId = null;
-    let varTooltipPending = null;
 
-    function hideVarTooltip() {
-      if (varTooltipRafId != null) {
-        if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(varTooltipRafId);
-        else clearTimeout(varTooltipRafId);
-        varTooltipRafId = null;
-      }
-      varTooltipPending = null;
-      const tip = document.getElementById('var-tooltip');
-      if (tip) tip.style.display = 'none';
-    }
-    window.hideVarTooltip = hideVarTooltip;
 
-    /** 在命中 span 上方显示中文提示（tooltip 使用 fixed + translate(-50%,-100%)，边界内 clamp） */
-    function showVarTooltipAt(text, rect) {
-      const tip = document.getElementById('var-tooltip');
-      if (!tip || !rect) return;
-      tip.textContent = text;
-      tip.style.display = 'block';
-      const halfWidth = Math.max(40, Math.min(180, rect.width / 2 + 20));
-      let left = rect.left + rect.width / 2;
-      left = Math.max(halfWidth, Math.min(left, (window.innerWidth || 1024) - halfWidth));
-      const top = Math.max(8, rect.top - 8);
-      tip.style.left = left + 'px';
-      tip.style.top = top + 'px';
-    }
-    window.showVarTooltipAt = showVarTooltipAt;
-
-    /** 命中检测：遍历对应 mirror 的 span[title]，坐标落在某 span 矩形内则返回该 span */
-    function hitTestVariableSpan(mirror, clientX, clientY) {
-      if (!mirror) return null;
-      const spans = mirror.querySelectorAll('span[title]');
-      for (let i = 0; i < spans.length; i++) {
-        const span = spans[i];
-        const rect = span.getBoundingClientRect();
-        if (!rect || rect.width <= 0 || rect.height <= 0) continue;
-        if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) return span;
-      }
-      return null;
-    }
-    window.hitTestVariableSpan = hitTestVariableSpan;
-
-    /** mousemove 节流（rAF ≤60fps）：命中显示 tooltip，未命中隐藏；不改变 textarea 输入/光标/选中 */
-    function handleEditorVarTooltipMove(textarea, clientX, clientY) {
-      varTooltipPending = { textarea, clientX, clientY };
-      if (varTooltipRafId != null) return;
-      const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb) => setTimeout(cb, 16);
-      varTooltipRafId = schedule(() => {
-        varTooltipRafId = null;
-        const pending = varTooltipPending;
-        if (!pending) return;
-        varTooltipPending = null;
-        const mirror = getEditorMirror(pending.textarea);
-        const span = hitTestVariableSpan(mirror, pending.clientX, pending.clientY);
-        if (!span) { hideVarTooltip(); return; }
-        const text = span.getAttribute('title') || '';
-        if (!text) { hideVarTooltip(); return; }
-        showVarTooltipAt(text, span.getBoundingClientRect());
-      });
-    }
-    window.handleEditorVarTooltipMove = handleEditorVarTooltipMove;
-
-    /** 绑定：三个编辑框 mousemove/mouseleave/scroll/input/blur + 全局滚动/resize 均隐藏 */
-    function initVariableTooltip() {
-      EDITOR_LAYERS.forEach(layer => {
-        const textarea = document.getElementById('val-' + layer.toLowerCase());
-        if (!textarea) return;
-        textarea.addEventListener('mousemove', (e) => handleEditorVarTooltipMove(textarea, e.clientX, e.clientY));
-        textarea.addEventListener('mouseleave', () => hideVarTooltip());
-        textarea.addEventListener('scroll', () => hideVarTooltip());
-        textarea.addEventListener('input', () => hideVarTooltip());
-        textarea.addEventListener('blur', () => hideVarTooltip());
-      });
-      window.addEventListener('scroll', () => hideVarTooltip(), true); // capture：编辑器内部滚动也会触发
-      window.addEventListener('resize', () => hideVarTooltip());
-    }
-    window.initVariableTooltip = initVariableTooltip;
-
-    // ==================== 模块二：语境配置（行业 / 业务场景 / 核心目标） ====================
-    // state 结构：{ industry: '', business_scene: [], core_goal: [] }
-    const state = {
-      industry: '',
-      business_scene: [],
-      core_goal: []
-    };
-    const CONTEXT_TAG_CONFIG = {
-      business_scene: { tagsId: 'ctx-scene-tags', inputId: 'ctx-scene-input', wrapId: 'ctx-scene-wrap' },
-      core_goal: { tagsId: 'ctx-goal-tags', inputId: 'ctx-goal-input', wrapId: 'ctx-goal-wrap' }
-    };
-    let extractAbortController = null; // AI 提取请求的 AbortController（防竞态串号）
-    let contextSaveTimer = null;
-    let pendingContextSave = null; // V1.62：待提交的语境快照（切项目/关页前可立即落库）
-
-    /** 清空语境：state 置空 + 输入框清空 + 标签 DOM 清空（切换项目时先调用） */
-    function clearContext() {
-      state.industry = '';
-      state.business_scene = [];
-      state.core_goal = [];
-      const industryEl = document.getElementById('ctx-industry');
-      if (industryEl) industryEl.value = '';
-      Object.keys(CONTEXT_TAG_CONFIG).forEach(kind => {
-        const cfg = CONTEXT_TAG_CONFIG[kind];
-        const inputEl = document.getElementById(cfg.inputId);
-        if (inputEl) inputEl.value = '';
-        renderTagList(kind);
-      });
-    }
-
-    /** 渲染某个字段的 Tag chips：文案用 textContent，× 用 DOM 事件绑定，避免标签文本注入 HTML */
-    function renderTagList(kind) {
-      const cfg = CONTEXT_TAG_CONFIG[kind];
-      if (!cfg) return;
-      const container = document.getElementById(cfg.tagsId);
-      if (!container) return;
-      container.innerHTML = '';
-      const list = Array.isArray(state[kind]) ? state[kind] : [];
-      list.forEach((text, index) => {
-        const chip = document.createElement('span');
-        chip.className = 'tag-chip';
-        const label = document.createElement('span');
-        label.className = 'tag-chip-label';
-        label.textContent = text;
-        label.title = text;
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'tag-chip-del';
-        del.title = '删除该标签';
-        del.textContent = '\u00d7';
-        del.addEventListener('click', (e) => {
-          e.stopPropagation();
-          removeContextTag(kind, index);
-        });
-        chip.appendChild(label);
-        chip.appendChild(del);
-        container.appendChild(chip);
-      });
-    }
-
-    /** 添加标签：先 trim、空字符串过滤、同数组去重后才 add（成功返回 true） */
-    function addContextTag(kind, rawValue) {
-      if (window.isPublicProject) { showToast('只读项目不能修改语境配置'); return false; }
-      const value = String(rawValue == null ? '' : rawValue).trim();
-      if (!value) return false;
-      if (!Array.isArray(state[kind])) state[kind] = [];
-      if (state[kind].indexOf(value) > -1) return false;
-      state[kind].push(value);
-      renderTagList(kind);
-      scheduleContextSave();
-      return true;
-    }
-
-    function removeContextTag(kind, index) {
-      if (window.isPublicProject) { showToast('只读项目不能修改语境配置'); return; }
-      if (!Array.isArray(state[kind])) return;
-      if (index < 0 || index >= state[kind].length) return;
-      state[kind].splice(index, 1);
-      renderTagList(kind);
-      scheduleContextSave();
-    }
-
-    /** 绑定 Tag 输入框：回车添加、退格删除末尾标签；中文输入法组合中 Enter 必须直接 return */
-    function bindContextTagInput(kind) {
-      const cfg = CONTEXT_TAG_CONFIG[kind];
-      if (!cfg) return;
-      const input = document.getElementById(cfg.inputId);
-      const wrap = document.getElementById(cfg.wrapId);
-      if (!input) return;
-      if (wrap) {
-        wrap.addEventListener('click', (e) => {
-          if (e.target && e.target.closest && e.target.closest('.tag-chip-del')) return;
-          input.focus();
-        });
-      }
-      input.addEventListener('keydown', (e) => {
-        // ⚠️ 中文输入法坑：Enter/空格用于候选上屏，组合状态（keyCode 229）必须直接 return
-        if (e.isComposing || e.keyCode === 229) return;
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          addContextTag(kind, input.value);
-          input.value = ''; // 添加后清空输入框并保持焦点
-          input.focus();
-          return;
-        }
-        if (e.key === 'Backspace' && input.value === '') {
-          const list = Array.isArray(state[kind]) ? state[kind] : [];
-          if (list.length > 0) {
-            e.preventDefault();
-            removeContextTag(kind, list.length - 1);
-          }
-        }
-      });
-    }
-
-    /** 组装快照时传给后端的 context_data（industry 以输入框当前值 trim 为准） */
-    function getContextDataForSnapshot() {
-      const industryEl = document.getElementById('ctx-industry');
-      return {
-        industry: String(industryEl ? industryEl.value : state.industry || '').trim(),
-        business_scene: Array.isArray(state.business_scene) ? state.business_scene.slice() : [],
-        core_goal: Array.isArray(state.core_goal) ? state.core_goal.slice() : []
-      };
-    }
-    window.getContextDataForSnapshot = getContextDataForSnapshot;
-
-    /** 静默保存语境（POST /api/context/save 为可选调用，失败不打扰用户，也不影响主流程） */
-    // 竞态修复：调度时就把 payload 深拷贝 + projectId 捕获进 timer 闭包，回调内不再读 DOM；
-    // 避免 A→B→A 快速切换时，旧 timer 在 DOM 已被清空后读值把空语境覆盖到已存语境上。
-    function scheduleContextSave() {
-      if (contextSaveTimer) clearTimeout(contextSaveTimer);
-      const projectIdAtSave = activeProjectId;
-      if (!projectIdAtSave) return;
-      const payload = JSON.parse(JSON.stringify(getContextDataForSnapshot()));
-      pendingContextSave = { projectId: projectIdAtSave, payload: payload };
-      contextSaveTimer = setTimeout(() => {
-        contextSaveTimer = null;
-        pendingContextSave = null;
-        // 只校验项目未变，payload 一律用调度时的快照，绝不在回调内读 DOM
-        if (!projectIdAtSave || projectIdAtSave !== activeProjectId) return;
-        saveContextSilently(projectIdAtSave, payload);
-      }, 800);
-    }
-
-    /** V1.62：切换项目/离开前立即提交待保存语境，避免 800ms 防抖窗口内丢值 */
-    function flushContextSave() {
-      if (!pendingContextSave) return;
-      const projectId = pendingContextSave.projectId;
-      const payload = pendingContextSave.payload;
-      pendingContextSave = null;
-      if (contextSaveTimer) { clearTimeout(contextSaveTimer); contextSaveTimer = null; }
-      if (!projectId) return;
-      saveContextSilently(projectId, payload, true);
-    }
-    window.flushContextSave = flushContextSave;
-
-    async function saveContextSilently(projectId, payload, force) {
-      // force=true 仅用于 flush：payload 在仍是可写项目时生成，切换后也要落库
-      if (!force && window.isPublicProject) return;
-      try {
-        await safeFetchJson(`/api/context/save`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project_id: projectId, context_data: payload })
-        });
-      } catch (e) {
-        // 接口可选 / 未就绪：静默降级
-      }
-    }
-
-    /** 拉取并回填项目语境（异常/旧数据一律降级为空值，不报错、不阻塞页面） */
-    async function loadProjectContext(projectId) {
-      if (!projectId) return;
-      // V1.62：先把上一个项目待保存的语境立即落库，再清理定时器（防切项目丢最后输入）
-      flushContextSave();
-      // 丢弃残留定时器，避免其闭包 payload 串写到当前项目
-      if (contextSaveTimer) {
-        clearTimeout(contextSaveTimer);
-        contextSaveTimer = null;
-      }
-      abortExtractRequest();
-      clearContext();
-      try {
-        const d = await safeFetchJson(`/api/context/get?project_id=${encodeURIComponent(projectId)}`);
-        if (activeProjectId !== projectId) return; // 竞态：响应回来前用户已切到别的项目
-        if (!d || !d.success || !d.data || typeof d.data !== 'object') return;
-        const data = d.data;
-        const industry = typeof data.industry === 'string' ? data.industry : '';
-        const scenes = Array.isArray(data.business_scene)
-          ? data.business_scene.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim())
-          : [];
-        const goals = Array.isArray(data.core_goal)
-          ? data.core_goal.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim())
-          : [];
-        const industryEl = document.getElementById('ctx-industry');
-        state.industry = industry;
-        if (industryEl) industryEl.value = industry;
-        state.business_scene = scenes;
-        state.core_goal = goals;
-        renderTagList('business_scene');
-        renderTagList('core_goal');
-      } catch (e) {
-        // 接口未实现 / 返回非 JSON 时保持空语境，控制台留痕即可
-        console.warn('[context] 语境加载失败，已降级为空值：', e && e.message ? e.message : e);
-      }
-    }
-    window.loadProjectContext = loadProjectContext;
-
-    /** 中断进行中的 AI 提取请求（切项目 / 重复触发时防竞态串号） */
-    function abortExtractRequest() {
-      if (extractAbortController) {
-        try { extractAbortController.abort(); } catch (e) { /* 忽略 */ }
-        extractAbortController = null;
-      }
-    }
-
-    function setExtractBtnLoading(loading) {
-      const btn = document.getElementById('ctx-extract-btn');
-      if (!btn) return;
-      btn.disabled = !!loading;
-      btn.classList.toggle('loading', !!loading);
-      const label = btn.querySelector('.ctx-extract-label');
-      if (label) label.innerText = loading ? 'AI 提取中...' : '✨ AI 智能提取';
-    }
-
-    /** ✨ AI 智能提取：无项目先提示 → 先查知识库非空 → AbortController 请求 → 校验项目未切换后回填 */
-    async function aiExtractContext() {
-      if (guardPublicProject()) return;
-      if (!activeProjectId) {
-        showToast('请先选择一个项目');
-        return;
-      }
-      const btn = document.getElementById('ctx-extract-btn');
-      if (btn && btn.disabled) return; // 进行中不重复触发
-      const projectIdAtRequest = activeProjectId;
-
-      abortExtractRequest();
-      const controller = new AbortController();
-      extractAbortController = controller;
-      setExtractBtnLoading(true);
-
-      try {
-        // 1. 先拉知识库列表，空库直接提示并 return，不调用 extract
-        const kbJson = await safeFetchJson(`/api/kb/list?project_id=${encodeURIComponent(projectIdAtRequest)}`, { signal: controller.signal });
-        if (activeProjectId !== projectIdAtRequest) return;
-        const kbList = kbJson && kbJson.success && Array.isArray(kbJson.data) ? kbJson.data : [];
-        if (kbList.length === 0) {
-          showToast('知识库为空，请先导入知识内容再进行 AI 提取');
-          return;
-        }
-
-        // 2. 调 AI 提取接口（带 signal，切项目可中断）
-        const d = await safeFetchJson(`/api/context/extract`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project_id: projectIdAtRequest }),
-          signal: controller.signal
-        });
-        if (activeProjectId !== projectIdAtRequest) return; // 响应回来时项目已切换：丢弃
-        if (maybeHandleTrialExhausted(d)) return;
-
-        if (d && d.success && d.data && typeof d.data === 'object') {
-          const data = d.data;
-          if (typeof data.industry === 'string') {
-            state.industry = data.industry.trim();
-            const industryEl = document.getElementById('ctx-industry');
-            if (industryEl) industryEl.value = state.industry;
-          }
-          state.business_scene = Array.isArray(data.business_scene)
-            ? data.business_scene.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim())
-            : [];
-          state.core_goal = Array.isArray(data.core_goal)
-            ? data.core_goal.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim())
-            : [];
-          renderTagList('business_scene');
-          renderTagList('core_goal');
-          scheduleContextSave(); // 提取结果静默落库，避免未生成快照就切项目丢失
-          showToast('AI 提取完成，请确认后生成快照');
-        } else {
-          showToast((d && (d.message || d.error)) || 'AI 提取失败，请稍后重试');
-        }
-      } catch (e) {
-        if (e && e.name === 'AbortError') return; // 主动中断：静默
-        showToast((e && e.message) || 'AI 提取请求失败');
-      } finally {
-        // 只有当前请求（或已无请求）才能恢复按钮状态，避免旧请求覆盖新请求的 loading
-        if (extractAbortController === controller || extractAbortController === null) {
-          if (extractAbortController === controller) extractAbortController = null;
-          setExtractBtnLoading(false);
-        }
-      }
-    }
-    window.aiExtractContext = aiExtractContext;
-
-    /** 语境配置 UI 初始化：行业输入绑定 + 两个 Tag 输入绑定 + 空标签渲染 */
-    function initContextUI() {
-      const industryEl = document.getElementById('ctx-industry');
-      if (industryEl) {
-        industryEl.addEventListener('input', () => {
-          state.industry = industryEl.value;
-          scheduleContextSave();
-        });
-      }
-      bindContextTagInput('business_scene');
-      bindContextTagInput('core_goal');
-      renderTagList('business_scene');
-      renderTagList('core_goal');
-    }
 
     /** 模块三 UI 初始化：知识库列表首次渲染（搜索/冲突/导入按钮均为 inline onclick） */
     function initKbUI() {
@@ -6988,14 +6391,11 @@
 
     // 页面初始化（脚本在 body 末尾，DOM 已就绪）
     initEditorMirrors();
-    initContextUI();
     initKbUI();
     initChatUI();
     initShortcuts(); // 模块六：Ctrl/Cmd + S 快捷键
-    initInsertVariableSelect(); // v1.60：系统提示词插入变量下拉
     initModelConfigUI(); // V3.0 阶段二：模型配置中心
     initGlobalEscHandler(); // V3.0 阶段四：Esc 关闭最上层弹层
-    initVariableTooltip(); // P2-A：镜像变量中文自定义 tooltip
     initV4UI(); // V4.0：模板/快捷键/备份 UI 初始化
     initTabsAndHeader(); // V5.0 阶段二：Tab 初始态 + 顶部用户信息 + 草稿监听
     updateTokenProgress(0); // V3.0 阶段四：Token 进度条初始态
