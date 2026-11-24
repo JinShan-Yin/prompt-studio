@@ -830,9 +830,6 @@
     .polish-btn.loading { opacity: 0.6; pointer-events: none; }
     .tpl-box { width: 860px; max-width: calc(100vw - 32px); max-height: 90vh; display: flex; flex-direction: column; }
     .tpl-body { overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; }
-    .tpl-body .form-textarea { min-height: 82px; font-family: var(--font-mono); }
-    .tpl-name-row { display: flex; gap: 12px; align-items: center; }
-    .tpl-name-row .form-input { flex: 1; }
     .tpl-search { margin-bottom: 0; }
     .tpl-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; padding-right: 2px; }
     .tpl-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-card); transition: var(--transition); }
@@ -1156,7 +1153,6 @@
           <div class="card-header">
             <span>📝 提示词编辑</span>
             <div class="card-header-actions">
-              <button class="btn-link" id="extract-template-btn" type="button" onclick="extractPromptTemplate()">✨ 提取新模板</button>
               <button class="btn-link" id="apply-template-btn" type="button" onclick="openTemplateApplyModal()">📂 应用模板</button>
               <button class="btn-link" id="restore-template-btn" type="button" onclick="restoreInitialTemplate()" style="display: none;">↩️ 恢复初始模板</button>
               <button class="btn-link" id="clean-format-btn" type="button" onclick="cleanupFormatting()">🧹 清理排版</button>
@@ -1688,32 +1684,6 @@
       </div>
       <div class="diff-body" id="diff-body">
         <div class="diff-loading">点击快照行「对比当前」后在此展示行级差异…</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- V4.0 阶段一：提取新模板 Modal（三层 textarea 可微调后保存） -->
-  <div id="template-extract-modal" class="modal-mask">
-    <div class="modal-box tpl-box">
-      <div class="modal-header">
-        <span>✨ 提取新模板</span>
-        <button type="button" class="model-close-btn" onclick="closeTemplateExtractModal()" title="关闭" aria-label="关闭">×</button>
-      </div>
-      <div class="modal-body tpl-body">
-        <div class="tpl-name-row">
-          <label class="form-label" for="template-name-input" style="white-space: nowrap; margin: 0;">模板名称</label>
-          <input type="text" id="template-name-input" class="form-input" placeholder="给模板起个名字（如：客服通用基座）" />
-        </div>
-        <div class="form-group" style="margin: 0;">
-          <label class="form-label" for="template-system-input">系统提示词</label>
-          <textarea id="template-system-input" class="form-textarea" rows="10" placeholder="系统提示词内容..."></textarea>
-        </div>
-        <div class="tpl-hint">提示：可自由微调后再保存。</div>
-        <div id="template-extract-error" class="model-test-result" style="min-height: 0;"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-link" style="color: #606266;" type="button" onclick="closeTemplateExtractModal()">取消</button>
-        <button class="btn-plain" id="template-save-btn" type="button" onclick="saveTemplateFromModal()">💾 保存模板</button>
       </div>
     </div>
   </div>
@@ -4981,7 +4951,6 @@
         const isVisible = (el) => !!el && getComputedStyle(el).display !== 'none';
         const layers = [
           () => { if (isVisible(document.getElementById('diff-modal'))) { closeDiffModal(); return true; } return false; },
-          () => { if (isVisible(document.getElementById('template-extract-modal'))) { closeTemplateExtractModal(); return true; } return false; },
           () => { if (isVisible(document.getElementById('template-apply-modal'))) { closeTemplateApplyModal(); return true; } return false; },
           () => { if (isVisible(document.getElementById('shortcuts-modal'))) { closeShortcutsModal(); return true; } return false; },
           () => { if (isVisible(document.getElementById('kb-edit-modal'))) { closeKbEditModal(); return true; } return false; },
@@ -5344,8 +5313,6 @@
 
     // ==================== V4.0 阶段一：提示词模板库 ====================
     let templateCache = [];
-    let templateExtracting = false;
-    let templateSaving = false;
     let templateRestoreState = null; // 应用模板前的三层原文（用于「↩️ 恢复初始模板」）
 
     function getEditorLayerValues() {
@@ -5371,101 +5338,6 @@
     }
     window.setEditorLayerValues = setEditorLayerValues;
 
-    function setTemplateExtractError(text) {
-      const el = document.getElementById('template-extract-error');
-      if (!el) return;
-      el.className = 'model-test-result' + (text ? ' err' : '');
-      el.innerText = text || '';
-    }
-
-    /** ✨ 提取新模板：POST /api/templates/extract（LLM 分析）→ 弹窗预填三层供微调 */
-    async function extractPromptTemplate() {
-      if (templateExtracting) return;
-      const values = getEditorLayerValues();
-      if (!values.SYSTEM.trim()) {
-        showToast('当前系统提示词为空，请先填写内容或回填快照');
-        return;
-      }
-      templateExtracting = true;
-      const btn = document.getElementById('extract-template-btn');
-      const originalText = btn ? btn.innerText : '';
-      if (btn) { btn.disabled = true; btn.innerText = '✨ 分析中...'; }
-      try {
-        const d = await safeFetchJson('/api/templates/extract', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ system_prompt: values.SYSTEM }),
-        });
-        if (d && d.success && d.data) {
-          openTemplateExtractModal(d.data);
-        } else {
-          showToast((d && (d.error || d.message)) || '模板提取失败');
-        }
-      } catch (e) {
-        showToast((e && e.message) || '模板提取失败');
-      } finally {
-        templateExtracting = false;
-        if (btn) { btn.disabled = false; btn.innerText = originalText; }
-      }
-    }
-    window.extractPromptTemplate = extractPromptTemplate;
-
-    function openTemplateExtractModal(data) {
-      const modal = document.getElementById('template-extract-modal');
-      if (!modal) return;
-      document.getElementById('template-name-input').value = (data && data.name) || `模板-${new Date().toISOString().slice(0, 10)}`;
-      document.getElementById('template-system-input').value = (data && data.system_prompt) || '';
-      setTemplateExtractError('');
-      modal.style.display = 'flex';
-      const nameEl = document.getElementById('template-name-input');
-      if (nameEl && typeof nameEl.focus === 'function') nameEl.focus();
-    }
-    window.openTemplateExtractModal = openTemplateExtractModal;
-
-    function closeTemplateExtractModal() {
-      const modal = document.getElementById('template-extract-modal');
-      if (modal) modal.style.display = 'none';
-      setTemplateExtractError('');
-      templateSaving = false;
-      const saveBtn = document.getElementById('template-save-btn');
-      if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = '💾 保存模板'; }
-    }
-    window.closeTemplateExtractModal = closeTemplateExtractModal;
-
-    /** 💾 保存模板（可微调后保存）：POST /api/templates/save */
-    async function saveTemplateFromModal() {
-      if (templateSaving) return;
-      const name = document.getElementById('template-name-input').value.trim();
-      const systemPrompt = document.getElementById('template-system-input').value;
-      if (!name) { setTemplateExtractError('模板名称不能为空'); showToast('模板名称不能为空'); return; }
-      if (!systemPrompt.trim()) { setTemplateExtractError('系统提示词不能为空'); showToast('系统提示词不能为空'); return; }
-      templateSaving = true;
-      const saveBtn = document.getElementById('template-save-btn');
-      if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = '保存中...'; }
-      try {
-        const d = await safeFetchJson('/api/templates/save', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, system_prompt: systemPrompt }),
-        });
-        if (d && d.success) {
-          showToast(d.message || '模板已保存');
-          closeTemplateExtractModal();
-          const applyModal = document.getElementById('template-apply-modal');
-          if (applyModal && getComputedStyle(applyModal).display !== 'none') await loadTemplates();
-        } else {
-          const msg = (d && (d.error || d.message)) || '模板保存失败';
-          setTemplateExtractError(msg);
-          showToast(msg);
-        }
-      } catch (e) {
-        const msg = (e && e.message) || '模板保存失败';
-        setTemplateExtractError(msg);
-        showToast(msg);
-      } finally {
-        templateSaving = false;
-        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = '💾 保存模板'; }
-      }
-    }
-    window.saveTemplateFromModal = saveTemplateFromModal;
 
     /** 📂 打开应用模板弹窗（搜索 + 列表） */
     async function openTemplateApplyModal() {
@@ -5512,7 +5384,7 @@
       if (templateCache.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'tpl-empty';
-        empty.innerText = '暂无模板：先点「✨ 提取新模板」创建，或从其他项目提取后保存。';
+        empty.innerText = '暂无模板。';
         listEl.appendChild(empty);
         return;
       }
@@ -6381,14 +6253,6 @@
     }
     window.submitClone = submitClone;
 
-    /** V4.0 UI 初始化钩子（模板搜索 input 已用 inline oninput，此处保留扩展位） */
-    function initV4UI() {
-      const nameEl = document.getElementById('template-name-input');
-      if (nameEl) {
-        nameEl.onkeydown = (e) => { if (e.key === 'Enter') saveTemplateFromModal(); };
-      }
-    }
-
     // 页面初始化（脚本在 body 末尾，DOM 已就绪）
     initEditorMirrors();
     initKbUI();
@@ -6396,7 +6260,6 @@
     initShortcuts(); // 模块六：Ctrl/Cmd + S 快捷键
     initModelConfigUI(); // V3.0 阶段二：模型配置中心
     initGlobalEscHandler(); // V3.0 阶段四：Esc 关闭最上层弹层
-    initV4UI(); // V4.0：模板/快捷键/备份 UI 初始化
     initTabsAndHeader(); // V5.0 阶段二：Tab 初始态 + 顶部用户信息 + 草稿监听
     updateTokenProgress(0); // V3.0 阶段四：Token 进度条初始态
 
