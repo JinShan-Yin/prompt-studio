@@ -40,8 +40,10 @@ import { parseMarkdownChunks } from './lib/markdownChunker.js'; // v1.61：本�
 // 一、常量与运行环境
 // ============================================================
 
-const APP_VERSION = '1.62.0';
+const APP_VERSION = '1.63.0';
 const PORT = Number(process.env.PORT) || 3100;
+/** V1.63：知识库单文件上传上限（MB），前端通过 /api/auth/config 读取 */
+const KB_MAX_FILE_MB = Math.max(1, Math.min(200, Number(process.env.KB_MAX_FILE_MB) || 20));
 /** V1.62：局域网开关。默认关闭，保持与 V1.61 完全一致的本机监听口径 */
 const LAN_ACCESS = /^(1|true|yes|on)$/i.test(String(process.env.LAN_ACCESS || '').trim());
 const HOST = String(process.env.BIND_HOST || '').trim() || (LAN_ACCESS ? '0.0.0.0' : '127.0.0.1');
@@ -89,6 +91,11 @@ const VAULT_KEY_PATH = path.join(DATA_DIR, '.vault-key');
 const ADMIN_DEFAULT_PASSWORD = 'newrock123';
 const TRIAL_LIMIT = 3;
 const requestContext = new AsyncLocalStorage();
+/** V1.63：把当前请求关联的项目写入请求上下文（供 LLM 用量统计使用） */
+function setRequestProjectId(projectId) {
+  const store = requestContext.getStore();
+  if (store && projectId) store.projectId = String(projectId);
+}
 
 let vaultKeyCache = null;
 function getVaultKey() {
@@ -648,6 +655,96 @@ function initDb() {
     console.error('[v1.60] prompt_templates 扁平化迁移失败（旧表保留，服务继续运行）:', e.message);
   }
 
+
+  // ============================================================
+  // V1.63：评测历史 / 软删除回收站 / 客户级授权 / 用量统计
+  // 全部为幂等加列/加表，不重建、不删除任何既有数据
+  // ============================================================
+  try {
+    const ensureColumn = (table, column, definition) => {
+      const cols = database.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+      if (cols.length === 0) return;
+      if (!cols.includes(column)) {
+        database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`);
+        console.log(`[v1.63] ${table} 补充列: ${column}`);
+      }
+    };
+    // 1) 评测历史
+    ensureColumn('eval_runs', 'project_id', 'TEXT');
+    ensureColumn('eval_runs', 'prompt_hash', "TEXT DEFAULT ''");
+    ensureColumn('eval_runs', 'case_total', 'INTEGER DEFAULT 0');
+    ensureColumn('eval_runs', 'case_passed', 'INTEGER DEFAULT 0');
+    ensureColumn('eval_runs', 'p0_failures', 'INTEGER DEFAULT 0');
+    ensureColumn('eval_runs', 'details_json', "TEXT DEFAULT ''");
+    ensureColumn('eval_runs', 'created_at', "TEXT DEFAULT ''");
+    // 2) 软删除（回收站）
+    for (const table of ['companies', 'projects', 'kb_items', 'snapshots']) {
+      ensureColumn(table, 'deleted_at', "TEXT DEFAULT ''");
+      ensureColumn(table, 'deleted_by', "TEXT DEFAULT ''");
+      ensureColumn(table, 'deleted_batch', "TEXT DEFAULT ''");
+    }
+    // 3) 模型单价（元 / 百万 token）
+    ensureColumn('model_configs', 'price_input_per_m', 'REAL DEFAULT 0');
+    ensureColumn('model_configs', 'price_output_per_m', 'REAL DEFAULT 0');
+    // 4) 新表与索引
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS read_grants (
+        id TEXT PRIMARY KEY,
+        scope_type TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        grantee_type TEXT NOT NULL,
+        grantee_id TEXT DEFAULT '',
+        granted_by TEXT DEFAULT '',
+        created_at TEXT DEFAULT '',
+        UNIQUE(scope_type, scope_id, grantee_type, grantee_id)
+      );
+      CREATE TABLE IF NOT EXISTS llm_usage (
+        id TEXT PRIMARY KEY,
+        user_id TEXT DEFAULT '',
+        project_id TEXT DEFAULT '',
+        provider TEXT DEFAULT '',
+        model_name TEXT DEFAULT '',
+        route_kind TEXT DEFAULT '',
+        purpose TEXT DEFAULT '',
+        status TEXT DEFAULT '',
+        prompt_tokens INTEGER DEFAULT 0,
+        completion_tokens INTEGER DEFAULT 0,
+        total_tokens INTEGER DEFAULT 0,
+        latency_ms INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT ''
+      );
+      CREATE INDEX IF NOT EXISTS idx_kb_items_project ON kb_items(project_id);
+      CREATE INDEX IF NOT EXISTS idx_snapshots_project ON snapshots(project_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_eval_runs_project ON eval_runs(project_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_llm_usage_created ON llm_usage(created_at);
+      CREATE INDEX IF NOT EXISTS idx_llm_usage_user ON llm_usage(user_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_read_grants_scope ON read_grants(scope_type, scope_id);
+      CREATE INDEX IF NOT EXISTS idx_companies_deleted ON companies(deleted_at);
+      CREATE INDEX IF NOT EXISTS idx_projects_deleted ON projects(deleted_at);
+      CREATE INDEX IF NOT EXISTS idx_kb_items_deleted ON kb_items(deleted_at);
+      CREATE INDEX IF NOT EXISTS idx_snapshots_deleted ON snapshots(deleted_at);
+    `);
+    // 5) 旧「单项目 → 单用户」授权幂等迁入 read_grants（旧表保留，便于回滚）
+    try {
+      const legacyGrants = database.prepare('SELECT project_id, grantee_user_id, granted_by, created_at FROM project_grants').all();
+      const insertGrant = database.prepare('INSERT OR IGNORE INTO read_grants (id, scope_type, scope_id, grantee_type, grantee_id, granted_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+      for (const grant of legacyGrants) {
+        if (!grant.project_id || !grant.grantee_user_id) continue;
+        insertGrant.run('rg-' + crypto.randomUUID().split('-')[0], 'project', grant.project_id, 'user', grant.grantee_user_id, grant.granted_by || '', grant.created_at || '');
+      }
+    } catch (e) {
+      console.warn('[v1.63] 旧授权迁移失败（不影响启动）:', e.message);
+    }
+    // 6) 回收站保留期默认 30 天
+    try {
+      const retentionRow = database.prepare("SELECT value FROM app_settings WHERE key = 'recycle_retention_days'").get();
+      if (!retentionRow) database.prepare("INSERT INTO app_settings (key, value) VALUES ('recycle_retention_days', '30')").run();
+    } catch (e) { /* ignore */ }
+    console.log('[v1.63] 数据库升级完成（评测历史/回收站/授权/用量）');
+  } catch (e) {
+    console.error('[v1.63] 数据库升级失败（旧数据保持不变，服务继续运行）:', e.message);
+  }
+
   return database;
 }
 
@@ -915,6 +1012,14 @@ function applyContextReplace(text, rawContext) {
     .replace(/\{\{\s*core_goal\s*\}\}/g, () => values.core_goal);
 }
 
+/** V1.63 修复：去除大模型返回的 Markdown 代码围栏（此前 /api/ai/polish 因缺少该函数直接 500） */
+function stripCodeFence(text) {
+  let output = String(text ?? '').trim();
+  const fence = output.match(/^```[a-zA-Z0-9_-]*\s*\n?([\s\S]*?)\n?```\s*$/);
+  if (fence) output = fence[1].trim();
+  return output;
+}
+
 /** 容错解析 JSON（防大模型输出带 Markdown） */
 function safeParseJson(raw) {
   try {
@@ -977,6 +1082,11 @@ function safeParseLayers(raw) {
   } catch { return []; }
 }
 
+/** V1.63：提示词内容哈希（评测与提交关联用，便于判断是否为同一版提示词） */
+function sha256Hex(text) {
+  return crypto.createHash('sha256').update(String(text ?? ''), 'utf8').digest('hex');
+}
+
 /** body.context_data 必须是「对象且非空」才优先于数据库 */
 function isUsableContextData(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0;
@@ -984,6 +1094,20 @@ function isUsableContextData(value) {
 
 // ---------- 3.4 评测 / 多轮对话（原 eval-runner） ----------
 
+/**
+ * V1.63：中文数字播报检测（收紧规则，修掉「一起/十分/三点/千万」等常用词误判）
+ * 只拦三类明确违规：≥3 位连续中文数字、中文数字 + 元、数字与中文数字混排
+ */
+const CN_NUMERAL_CHARS = '零〇一二三四五六七八九十百千万亿幺';
+function detectSpokenNumbers(text) {
+  const source = String(text ?? '');
+  const patterns = [
+    new RegExp('[' + CN_NUMERAL_CHARS + ']{3,}'),
+    new RegExp('[' + CN_NUMERAL_CHARS + ']{2,}元'),
+    new RegExp('\\d[' + CN_NUMERAL_CHARS + ']|[' + CN_NUMERAL_CHARS + ']\\d'),
+  ];
+  return patterns.some((re) => re.test(source));
+}
 /** L1 确定性断言 */
 function checkL1(agentOutput) {
   const output = typeof agentOutput === 'string' ? agentOutput : String(agentOutput ?? '');
@@ -993,7 +1117,7 @@ function checkL1(agentOutput) {
   if (speakIndex === -1 && toolIndex !== -1) errors.push('违规：检测到工具调用，但缺少播报话术 <speak>');
   else if (speakIndex !== -1 && toolIndex !== -1 && speakIndex > toolIndex) errors.push('违规时序：工具调用 <tool> 出现在了语音播报 <speak> 之前');
   if (/\*\*|^#+\s|^\s*-\s/m.test(output)) errors.push('违规格式：包含 Markdown 标记');
-  if (/[一二三四五六七八九十百千万]+/g.test(output)) errors.push('违规播报：检测到中文数字单位，电话号码必须逐位播报');
+  if (detectSpokenNumbers(output)) errors.push('违规播报：检测到中文数字单位，电话号码必须逐位播报');
   return { pass: errors.length === 0, errors };
 }
 
@@ -1010,7 +1134,7 @@ async function evaluateL2(userQuery, standardAnswer, botReply) {
   const rawReply = await chatCompletion(DEFAULT_LLM_CONFIG, [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
-  ]);
+  ], 'eval_l2');
   return safeParseJson(rawReply);
 }
 
@@ -1113,29 +1237,73 @@ function buildEnvLlmConfig(temperature) {
   };
 }
 
-/** 发起一次 Chat Completions 请求（含超时；错误由上层统一脱敏） */
-async function requestChatCompletion(config, messages, timeoutMs = LLM_REQUEST_TIMEOUT_MS) {
+/** V1.63：记录一次 LLM 调用的 token / 耗时（失败绝不阻断主流程） */
+function recordLlmUsage(meta, usage, status, latencyMs, errorText) {
+  try {
+    const store = requestContext.getStore() || {};
+    const safeUsage = usage && typeof usage === 'object' ? usage : {};
+    const promptTokens = Math.max(0, Number(safeUsage.prompt_tokens) || 0);
+    const completionTokens = Math.max(0, Number(safeUsage.completion_tokens) || 0);
+    const totalTokens = Math.max(0, Number(safeUsage.total_tokens) || (promptTokens + completionTokens));
+    db.prepare('INSERT INTO llm_usage (id, user_id, project_id, provider, model_name, route_kind, purpose, status, prompt_tokens, completion_tokens, total_tokens, latency_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(
+        'use-' + crypto.randomUUID().split('-')[0],
+        String(store.userId || ''),
+        String(store.projectId || ''),
+        String((meta && meta.provider) || ''),
+        String((meta && meta.modelName) || ''),
+        String((meta && meta.routeKind) || ''),
+        String((meta && meta.purpose) || 'chat'),
+        String(status || 'ok'),
+        promptTokens,
+        completionTokens,
+        totalTokens,
+        Math.max(0, Number(latencyMs) || 0),
+        new Date().toISOString(),
+      );
+  } catch (e) {
+    // 用量统计不得影响业务调用
+  }
+}
+
+/** 发起一次 Chat Completions 请求（含超时；错误由上层统一脱敏；V1.63 记录 usage） */
+async function requestChatCompletion(config, messages, timeoutOrOptions = LLM_REQUEST_TIMEOUT_MS) {
+  const options = timeoutOrOptions && typeof timeoutOrOptions === 'object' ? timeoutOrOptions : { timeoutMs: timeoutOrOptions };
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : LLM_REQUEST_TIMEOUT_MS;
+  const meta = {
+    provider: String(options.provider || 'env'),
+    modelName: String(config.model_name || DEFAULT_LLM_CONFIG.model_name),
+    routeKind: String(options.routeKind || ''),
+    purpose: String(options.purpose || 'chat'),
+  };
+  const startedAt = Date.now();
   const baseUrl = String(config.base_url || DEFAULT_LLM_CONFIG.base_url).replace(/\/$/, '');
   const apiKey = config.api_key;
   if (!apiKey) throw new Error('未提供 API Key，且环境变量中未找到 DEEPSEEK_API_KEY');
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: config.model_name || DEFAULT_LLM_CONFIG.model_name,
-      messages,
-      temperature: Number.isFinite(Number(config.temperature)) ? Number(config.temperature) : DEFAULT_LLM_CONFIG.temperature,
-    }),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`LLM 调用失败 (${response.status}): ${String(errorText).slice(0, 500)}`);
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: config.model_name || DEFAULT_LLM_CONFIG.model_name,
+        messages,
+        temperature: Number.isFinite(Number(config.temperature)) ? Number(config.temperature) : DEFAULT_LLM_CONFIG.temperature,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`LLM 调用失败 (${response.status}): ${String(errorText).slice(0, 500)}`);
+    }
+    const data = await response.json();
+    recordLlmUsage(meta, data && data.usage, 'ok', Date.now() - startedAt, '');
+    const content = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : null;
+    if (typeof content !== 'string') throw new Error('LLM 返回内容为空或格式异常');
+    return content;
+  } catch (error) {
+    recordLlmUsage(meta, null, 'error', Date.now() - startedAt, error && error.message);
+    throw error;
   }
-  const data = await response.json();
-  const content = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : null;
-  if (typeof content !== 'string') throw new Error('LLM 返回内容为空或格式异常');
-  return content;
 }
 
 /**
@@ -1147,7 +1315,7 @@ async function requestChatCompletion(config, messages, timeoutMs = LLM_REQUEST_T
  * 函数签名保持 chatCompletion(config, messages)，现有 context/extract、kb/parse、eval/run、
  * chat/reply 调用点无需改动（config 中的 temperature 仅用于 .env 回退分支）。
  */
-async function chatCompletion(config, messages) {
+async function chatCompletion(config, messages, purpose = 'chat') {
   const callerConfig = { ...DEFAULT_LLM_CONFIG, ...(config || {}) };
   return llmLimit(async () => {
     const contextUserId = (requestContext.getStore() && requestContext.getStore().userId) || '';
@@ -1167,13 +1335,13 @@ async function chatCompletion(config, messages) {
               model_name: activeModel.model_name || DEFAULT_LLM_CONFIG.model_name,
               api_key: key,
               temperature: Number.isFinite(Number(activeModel.temperature)) ? Number(activeModel.temperature) : callerConfig.temperature,
-            }, messages);
+            }, messages, { purpose, provider: activeModel.provider || '', routeKind: 'global' });
           }
         } catch (dbError) {
           console.warn('[LLM] DB 激活模型调用失败，自动回落 .env:', redactSecrets(dbError && dbError.message ? dbError.message : dbError));
         }
       }
-      return requestChatCompletion(buildEnvLlmConfig(callerConfig.temperature), messages);
+      return requestChatCompletion(buildEnvLlmConfig(callerConfig.temperature), messages, { purpose, provider: 'env', routeKind: 'global-env' });
     }
 
     const isSuperadmin = contextUser.role === 'superadmin';
@@ -1233,7 +1401,7 @@ async function chatCompletion(config, messages) {
     if (usingTrial) consumeTrialOrThrow(contextUser.id);
     console.log(`[LLM] 路由: ${route.kind} (${route.row ? (route.row.display_name || route.row.id) : '.env'}) user=${contextUser.username}${usingTrial ? ' / trial+1' : ''}`);
     try {
-      return await requestChatCompletion(dbConfig, messages);
+      return await requestChatCompletion(dbConfig, messages, { purpose, provider: route.row ? (route.row.provider || '') : 'env', routeKind: route.kind });
     } catch (error) {
       // 大模型报错/超时 → 回滚本次试用扣减
       if (usingTrial) rollbackTrial(contextUser.id);
@@ -1241,7 +1409,7 @@ async function chatCompletion(config, messages) {
         // 管理员私有模型失败 → 仍回落 .env（保持既有韧性；不涉及试用）
         try {
           console.warn('[LLM] 管理员私有模型失败，自动回落 .env:', redactSecrets(error && error.message ? error.message : error, [route.key]));
-          return await requestChatCompletion(buildEnvLlmConfig(callerConfig.temperature), messages);
+          return await requestChatCompletion(buildEnvLlmConfig(callerConfig.temperature), messages, { purpose, provider: 'env', routeKind: 'fallback-env' });
         } catch (envError) {
           throw new Error(redactSecrets(envError && envError.message ? envError.message : envError));
         }
@@ -1305,7 +1473,7 @@ async function parseTxt(rawText) {
       const rawReply = await chatCompletion(DEFAULT_LLM_CONFIG, [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: chunk },
-      ]);
+      ], 'kb_parse');
       const pairs = safeParseJson(rawReply);
       return Array.isArray(pairs) ? pairs : [];
     } catch {
@@ -1449,7 +1617,7 @@ app.use('/api', (req, res, next) => {
   return next();
 });
 // JSON body 解析（10MB，覆盖长提示词/批量导入）
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '32mb' })); // V1.63：知识库 20MB 文件 base64 后约 27MB
 // 兜底 JSON 解析：兼容未带 application/json 头的 POST（旧插件是手写裸流解析）
 app.use(async (req, res, next) => {
   if (!['POST', 'PUT', 'PATCH'].includes(req.method)) return next();
@@ -1592,7 +1760,10 @@ function visibleOwnerIds(user) {
   if (!user) return [];
   if (user.role === 'superadmin') return null;
   if (user.role === 'teamadmin') {
-    const rows = db.prepare('SELECT id FROM users WHERE team_id = ?').all(user.team_id || '');
+    // V1.63 修复：团队管理员未分配团队时只能看自己的数据，不能把「所有无团队用户」当成同团队
+    const teamId = String(user.team_id || '').trim();
+    if (!teamId) return [user.id];
+    const rows = db.prepare('SELECT id FROM users WHERE team_id = ?').all(teamId);
     return rows.map((r) => r.id);
   }
   return [user.id];
@@ -1625,31 +1796,46 @@ function canReadPublicProject(project, user) {
   }
   return false;
 }
-/** V1.62：项目是否被显式只读授权给该用户 */
-function hasProjectGrant(projectId, userId) {
-  if (!projectId || !userId) return false;
+/**
+ * V1.63：统一只读授权判定（read_grants）
+ * 命中条件：项目级或所属客户级授权 ∩（指定用户 / 指定团队 / 所有团队）
+ * 客户级授权对该客户下后续新建项目自动生效。
+ */
+function hasReadGrant(project, user) {
+  if (!project || !user) return false;
+  const projectId = String(project.id || '');
+  const companyId = String(project.company_id || '');
+  if (!projectId && !companyId) return false;
   try {
-    return !!db.prepare('SELECT 1 FROM project_grants WHERE project_id = ? AND grantee_user_id = ? LIMIT 1').get(String(projectId), String(userId));
+    const teamId = String(user.team_id || '').trim() || '__no_team__';
+    return !!db.prepare(
+      "SELECT 1 FROM read_grants WHERE ((scope_type = 'project' AND scope_id = ?) OR (scope_type = 'company' AND scope_id = ?)) AND ((grantee_type = 'user' AND grantee_id = ?) OR (grantee_type = 'team' AND grantee_id = ?) OR grantee_type = 'all') LIMIT 1"
+    ).get(projectId, companyId, String(user.id || ''), teamId);
   } catch (e) {
     return false;
   }
 }
-/** V1.62：当前用户是否只能通过「只读授权」访问该项目（所有者/同团队团管不算） */
+/** V1.63：当前用户是否只能通过「只读授权」访问该项目（所有者/同团队团管不算） */
 function isReadOnlyGrantee(project, user) {
   if (!project || !user) return false;
   if (canAccessOwner(project.user_id, user)) return false;
-  return hasProjectGrant(project.id, user.id);
+  return hasReadGrant(project, user);
 }
 /** V1.62：统一读权限判定（所有者 / 公共参考 / 只读授权） */
 function canReadProject(project, user) {
   if (!project) return false;
   return canAccessOwner(project.user_id, user)
     || canReadPublicProject(project, user)
-    || hasProjectGrant(project.id, user && user.id);
+    || hasReadGrant(project, user);
 }
-function requireProjectAccess(projectId, user) {
+/** V1.63：行是否在回收站（'' 与 NULL 都视为未删除） */
+function isRowDeleted(row) {
+  return !!(row && String(row.deleted_at || '').trim() !== '');
+}
+function requireProjectAccess(projectId, user, options = {}) {
   const project = projectId ? db.prepare('SELECT * FROM projects WHERE id = ?').get(String(projectId)) : null;
   if (!project) throw httpError(404, '项目不存在或无权访问');
+  if (!options.allowDeleted && isRowDeleted(project)) throw httpError(404, '项目已在回收站');
   if (!canReadProject(project, user)) throw httpError(403, '无权访问该项目');
   return project;
 }
@@ -1671,31 +1857,37 @@ function assertProjectWritableByRow(project, user) {
   return project;
 }
 /** 校验公司访问权 */
-function requireCompanyAccess(companyId, user) {
+function requireCompanyAccess(companyId, user, options = {}) {
   const company = companyId ? db.prepare('SELECT * FROM companies WHERE id = ?').get(String(companyId)) : null;
   if (!company) throw httpError(404, '客户/行业不存在或无权访问');
+  if (!options.allowDeleted && isRowDeleted(company)) throw httpError(404, '客户/行业已在回收站');
   if (!canAccessOwner(company.user_id, user)) throw httpError(403, '无权访问该客户/行业');
   return company;
 }
 /** 校验快照访问权（优先 user_id，缺失则回落到项目归属） */
-function requireSnapshotAccess(snapshotId, user) {
+function requireSnapshotAccess(snapshotId, user, options = {}) {
   const snapshot = snapshotId ? db.prepare('SELECT * FROM snapshots WHERE id = ?').get(String(snapshotId)) : null;
   if (!snapshot) throw httpError(404, '快照不存在或无权访问');
+  if (!options.allowDeleted && isRowDeleted(snapshot)) throw httpError(404, '提交记录已在回收站');
   let ownerId = snapshot.user_id;
   let projectRow = null;
   if (snapshot.project_id) {
     projectRow = db.prepare('SELECT * FROM projects WHERE id = ?').get(snapshot.project_id) || null;
     if (!ownerId && projectRow) ownerId = projectRow.user_id;
   }
+  if (!options.allowDeleted && projectRow && isRowDeleted(projectRow)) throw httpError(404, '所属项目已在回收站');
   if (!canAccessOwner(ownerId, user) && !(projectRow && canReadProject(projectRow, user))) throw httpError(403, '无权访问该快照');
   return snapshot;
 }
 /** 校验知识库条目访问权（回落到所属项目） */
-function requireKbAccess(kbId, user) {
+function requireKbAccess(kbId, user, options = {}) {
   const item = kbId ? db.prepare('SELECT * FROM kb_items WHERE id = ?').get(String(kbId)) : null;
   if (!item) throw httpError(404, '知识条目不存在或无权访问');
+  if (!options.allowDeleted && isRowDeleted(item)) throw httpError(404, '知识条目已在回收站');
   const project = item.project_id ? db.prepare('SELECT * FROM projects WHERE id = ?').get(item.project_id) : null;
-  if (!project || !canReadProject(project, user)) throw httpError(403, '无权访问该知识条目');
+  if (!project) throw httpError(404, '所属项目不存在');
+  if (!options.allowDeleted && isRowDeleted(project)) throw httpError(404, '所属项目已在回收站');
+  if (!canReadProject(project, user)) throw httpError(403, '无权访问该知识条目');
   return { item, project };
 }
 
@@ -1745,6 +1937,13 @@ function getLoginFailureState(key) {
 }
 function recordLoginFailure(key) {
   const now = Date.now();
+  // V1.63：失败记录上限保护，防止长期运行内存无限增长
+  if (loginFailures.size > 10000) {
+    for (const [k, v] of loginFailures) {
+      if (!v || v.resetAt <= now) loginFailures.delete(k);
+    }
+    if (loginFailures.size > 10000) loginFailures.clear();
+  }
   const item = getLoginFailureState(key);
   const next = item.count > 0 ? item : { count: 0, resetAt: now + LOGIN_FAIL_WINDOW_MS };
   next.count += 1;
@@ -1756,7 +1955,7 @@ function recordLoginFailure(key) {
 route(['GET'], '/api/auth/config', async (req, res) => {
   return sendJson(res, 200, {
     success: true,
-    data: { register_enabled: SELF_REGISTER_ENABLED, lan_mode: LAN_ACCESS, version: APP_VERSION },
+    data: { register_enabled: SELF_REGISTER_ENABLED, lan_mode: LAN_ACCESS, version: APP_VERSION, kb_max_file_mb: KB_MAX_FILE_MB },
   });
 });
 
@@ -2031,7 +2230,7 @@ route(['POST'], '/api/admin/users/kick', async (req, res) => {
   return sendJson(res, 200, { success: true, message: '已强制下线，该账号下次请求需重新登录' });
 });
 
-/** V1.62：删除账号（仅超管；有业务数据的一律拒绝，改用禁用） */
+/** V1.63：删除账号（超管；有数据时须显式 force + data_mode） */
 route(['POST'], '/api/admin/users/delete', async (req, res) => {
   const admin = currentSessionUser(req);
   if (!admin || admin.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可删除账号' });
@@ -2041,6 +2240,8 @@ route(['POST'], '/api/admin/users/delete', async (req, res) => {
   if (!target) return sendJson(res, 404, { success: false, error: '用户不存在' });
   if (target.id === admin.id) return sendJson(res, 403, { success: false, error: '不能删除自己的账号' });
   if (target.role === 'superadmin') return sendJson(res, 403, { success: false, error: '不能删除超级管理员账号' });
+  const force = body.force === true || body.force === 1 || body.force === '1';
+  const dataMode = body.data_mode === 'delete' ? 'delete' : 'transfer';
   const tables = [
     ['companies', '客户/行业'], ['projects', '项目'], ['kb_items', '知识条目'], ['snapshots', '提交记录'],
     ['model_configs', '模型配置'], ['prompt_templates', '提示词模板'],
@@ -2054,26 +2255,84 @@ route(['POST'], '/api/admin/users/delete', async (req, res) => {
       total += counts[label];
     } catch (e) { counts[label] = 0; }
   }
-  if (total > 0) {
+  if (total > 0 && !force) {
     return sendJson(res, 409, {
       success: false,
       code: 'USER_HAS_DATA',
       counts,
-      error: '该账号仍拥有业务数据，已阻止删除；请改用「禁用」，或先转移/清理其数据',
+      force_allowed: true,
+      error: '该账号仍拥有业务数据；可改用「禁用」，或选择强制删除（数据移交给当前超管 / 连同数据进回收站）',
     });
   }
   try {
+    if (total === 0) {
+      db.transaction(() => {
+        db.prepare('DELETE FROM read_grants WHERE (grantee_type = ? AND grantee_id = ?) OR granted_by = ?').run('user', target.id, target.id);
+        db.prepare('DELETE FROM project_grants WHERE grantee_user_id = ? OR granted_by = ?').run(target.id, target.id);
+        db.prepare('DELETE FROM project_pins WHERE user_id = ?').run(target.id);
+        db.prepare('DELETE FROM model_configs WHERE user_id = ?').run(target.id);
+        db.prepare('DELETE FROM users WHERE id = ?').run(target.id);
+      })();
+      logAction(admin.id, 'admin_delete_user', 'user', target.id, `username=${target.username} mode=empty`, 'Danger');
+      return sendJson(res, 200, { success: true, message: '账号已删除' });
+    }
+    if (dataMode === 'transfer') {
+      db.transaction(() => {
+        for (const table of ['companies', 'projects', 'kb_items', 'snapshots', 'prompt_templates', 'model_configs']) {
+          db.prepare(`UPDATE ${table} SET user_id = ? WHERE user_id = ?`).run(admin.id, target.id);
+        }
+        db.prepare('UPDATE read_grants SET granted_by = ? WHERE granted_by = ?').run(admin.id, target.id);
+        db.prepare('UPDATE project_grants SET granted_by = ? WHERE granted_by = ?').run(admin.id, target.id);
+        db.prepare('DELETE FROM read_grants WHERE grantee_type = ? AND grantee_id = ?').run('user', target.id);
+        db.prepare('DELETE FROM project_grants WHERE grantee_user_id = ?').run(target.id);
+        db.prepare('DELETE FROM project_pins WHERE user_id = ?').run(target.id);
+        db.prepare('DELETE FROM users WHERE id = ?').run(target.id);
+      })();
+      logAction(admin.id, 'admin_force_delete_user', 'user', target.id, `username=${target.username} mode=transfer counts=${JSON.stringify(counts)}`, 'Danger');
+      return sendJson(res, 200, { success: true, mode: 'transfer', message: `账号已删除，${total} 条业务数据已移交给当前超管` });
+    }
+    // 连同数据删除：公司与项目按批次进回收站，其余零散 KB/提交记录逐条进回收站
+    const companyIds = db.prepare("SELECT id FROM companies WHERE user_id = ? AND COALESCE(deleted_at, '') = ''").all(target.id).map((r) => r.id);
+    for (const companyId of companyIds) softDeleteCompany(companyId, admin);
+    const projectIds = db.prepare("SELECT id FROM projects WHERE user_id = ? AND COALESCE(deleted_at, '') = ''").all(target.id).map((r) => r.id);
+    for (const projectId of projectIds) softDeleteProject(projectId, admin);
+    const kbIds = db.prepare("SELECT id FROM kb_items WHERE user_id = ? AND COALESCE(deleted_at, '') = ''").all(target.id).map((r) => r.id);
+    for (const kbId of kbIds) softDeleteKbItem(kbId, admin);
+    const snapshotIds = db.prepare("SELECT id FROM snapshots WHERE user_id = ? AND COALESCE(deleted_at, '') = ''").all(target.id).map((r) => r.id);
+    for (const snapshotId of snapshotIds) softDeleteSnapshot(snapshotId, admin);
     db.transaction(() => {
+      db.prepare('DELETE FROM model_configs WHERE user_id = ?').run(target.id);
+      db.prepare('DELETE FROM prompt_templates WHERE user_id = ?').run(target.id);
+      db.prepare('DELETE FROM read_grants WHERE (grantee_type = ? AND grantee_id = ?) OR granted_by = ?').run('user', target.id, target.id);
       db.prepare('DELETE FROM project_grants WHERE grantee_user_id = ? OR granted_by = ?').run(target.id, target.id);
       db.prepare('DELETE FROM project_pins WHERE user_id = ?').run(target.id);
-      db.prepare('DELETE FROM model_configs WHERE user_id = ?').run(target.id);
       db.prepare('DELETE FROM users WHERE id = ?').run(target.id);
     })();
+    logAction(admin.id, 'admin_force_delete_user', 'user', target.id, `username=${target.username} mode=delete counts=${JSON.stringify(counts)}`, 'Danger');
+    return sendJson(res, 200, { success: true, mode: 'delete', message: `账号已删除，${total} 条业务数据已移入回收站（30 天内可恢复）` });
   } catch (e) {
     return sendJson(res, 500, { success: false, error: '删除失败：' + e.message });
   }
-  logAction(admin.id, 'admin_delete_user', 'user', target.id, `username=${target.username}`, 'Danger');
-  return sendJson(res, 200, { success: true, message: '账号已删除' });
+});
+
+/** V1.63：修改用户角色 / 团队（仅超管；不能改动超管自己） */
+route(['POST'], '/api/admin/users/role', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || admin.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可修改角色' });
+  const body = req.body || {};
+  const targetId = typeof body.user_id === 'string' ? body.user_id.trim() : '';
+  const role = body.role === 'teamadmin' ? 'teamadmin' : body.role === 'user' ? 'user' : '';
+  const teamId = typeof body.team_id === 'string' ? body.team_id.trim() : '';
+  if (!role) return sendJson(res, 400, { success: false, error: 'role 必须为 user 或 teamadmin' });
+  const target = targetId ? db.prepare('SELECT * FROM users WHERE id = ?').get(targetId) : null;
+  if (!target) return sendJson(res, 404, { success: false, error: '用户不存在' });
+  if (target.id === admin.id) return sendJson(res, 403, { success: false, error: '不能修改自己的角色' });
+  if (target.role === 'superadmin') return sendJson(res, 403, { success: false, error: '不能修改超级管理员角色' });
+  if (role === 'teamadmin' && !teamId) return sendJson(res, 400, { success: false, error: '团队管理员必须选择所属团队' });
+  if (teamId && !db.prepare('SELECT id FROM teams WHERE id = ?').get(teamId)) return sendJson(res, 404, { success: false, error: '团队不存在' });
+  db.prepare('UPDATE users SET role = ?, team_id = ?, session_version = COALESCE(session_version, 1) + 1 WHERE id = ?').run(role, teamId, target.id);
+  logAction(admin.id, 'admin_user_role', 'user', target.id, `role=${role} team=${teamId}`, 'Warn');
+  return sendJson(res, 200, { success: true, message: `已更新为${role === 'teamadmin' ? '团队管理员' : '普通用户'}，该账号需重新登录` });
 });
 
 route(['POST'], '/api/admin/users/reset-password', async (req, res) => {
@@ -2102,10 +2361,14 @@ route(['POST'], '/api/admin/users/assign-team', async (req, res) => {
   const teamId = typeof body.team_id === 'string' ? body.team_id.trim() : '';
   const target = targetId ? db.prepare('SELECT * FROM users WHERE id = ?').get(targetId) : null;
   if (!target) return sendJson(res, 404, { success: false, error: '用户不存在' });
+  if (target.role === 'superadmin') return sendJson(res, 403, { success: false, error: '不能修改超级管理员' });
   if (teamId && !db.prepare('SELECT id FROM teams WHERE id = ?').get(teamId)) return sendJson(res, 404, { success: false, error: '团队不存在' });
-  const nextRole = body.role === 'teamadmin' ? 'teamadmin' : (target.role === 'teamadmin' ? 'user' : target.role);
-  db.prepare('UPDATE users SET team_id = ?, role = ? WHERE id = ?').run(teamId, nextRole === 'superadmin' ? 'superadmin' : nextRole, target.id);
-  logAction(admin.id, 'assign_team', 'user', target.id, `team=${teamId} role=${nextRole}`);
+  // V1.63：显式角色优先，不再隐式把团队管理员降级为普通用户
+  const explicitRole = body.role === 'teamadmin' ? 'teamadmin' : body.role === 'user' ? 'user' : '';
+  const nextRole = explicitRole || target.role;
+  if (nextRole === 'teamadmin' && !teamId) return sendJson(res, 400, { success: false, error: '团队管理员必须分配团队' });
+  db.prepare('UPDATE users SET team_id = ?, role = ?, session_version = COALESCE(session_version, 1) + 1 WHERE id = ?').run(teamId, nextRole, target.id);
+  logAction(admin.id, 'assign_team', 'user', target.id, `team=${teamId} role=${nextRole}`, 'Warn');
   sendJson(res, 200, { success: true, message: '团队分配成功' });
 });
 
@@ -2183,6 +2446,86 @@ route(['GET'], '/api/admin/audit-logs', async (req, res) => {
 // 4.1 语境接口
 // ------------------------------------------------------------
 
+// ---------- V1.63：LLM 用量 / 成本汇总（管理员；团管按团队） ----------
+route(['GET'], '/api/admin/usage/summary', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+  const from = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
+  const ids = visibleOwnerIds(admin);
+  const selectSql = 'SELECT user_id, project_id, provider, model_name, purpose, status, prompt_tokens, completion_tokens, total_tokens, created_at FROM llm_usage WHERE created_at >= ?';
+  let rows = [];
+  if (ids === null) {
+    rows = db.prepare(selectSql + ' ORDER BY rowid DESC LIMIT 100000').all(from);
+  } else if (ids.length > 0) {
+    rows = db.prepare(selectSql + ` AND user_id IN (${ids.map(() => '?').join(', ')}) ORDER BY rowid DESC LIMIT 100000`).all(from, ...ids);
+  }
+  // 模型单价（同名列取较高单价，避免不同用户配置差异导致失真）
+  const priceMap = new Map();
+  try {
+    for (const row of db.prepare('SELECT model_name, price_input_per_m, price_output_per_m FROM model_configs').all()) {
+      const key = String(row.model_name || '');
+      const next = { input: Number(row.price_input_per_m) || 0, output: Number(row.price_output_per_m) || 0 };
+      const prev = priceMap.get(key);
+      if (!prev || next.input + next.output >= prev.input + prev.output) priceMap.set(key, next);
+    }
+  } catch (e) { /* ignore */ }
+  const usernames = new Map();
+  try {
+    for (const u of db.prepare('SELECT id, username FROM users').all()) usernames.set(u.id, u.username || '');
+  } catch (e) { /* ignore */ }
+  const emptyAgg = () => ({ requests: 0, prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, est_cost: 0 });
+  const totals = emptyAgg();
+  const byModel = new Map();
+  const byUser = new Map();
+  const byDay = new Map();
+  const byPurpose = new Map();
+  let errorRequests = 0;
+  const addTo = (target, prompt, completion, total, cost, isError) => {
+    target.requests += 1;
+    target.prompt_tokens += prompt;
+    target.completion_tokens += completion;
+    target.total_tokens += total;
+    target.est_cost += cost;
+    if (isError) target.errors = (target.errors || 0) + 1;
+  };
+  for (const row of rows) {
+    const prompt = Math.max(0, Number(row.prompt_tokens) || 0);
+    const completion = Math.max(0, Number(row.completion_tokens) || 0);
+    const total = Math.max(0, Number(row.total_tokens) || (prompt + completion));
+    const price = priceMap.get(String(row.model_name || '')) || { input: 0, output: 0 };
+    const cost = (prompt * price.input + completion * price.output) / 1000000;
+    const isError = String(row.status || '') === 'error';
+    if (isError) errorRequests += 1;
+    addTo(totals, prompt, completion, total, cost, isError);
+    const modelKey = String(row.model_name || '(未记录)') + '|' + String(row.provider || '');
+    if (!byModel.has(modelKey)) byModel.set(modelKey, { model_name: row.model_name || '', provider: row.provider || '', ...emptyAgg() });
+    addTo(byModel.get(modelKey), prompt, completion, total, cost, isError);
+    const userKey = String(row.user_id || '');
+    if (!byUser.has(userKey)) byUser.set(userKey, { user_id: userKey, username: usernames.get(userKey) || (userKey ? userKey : '(未知)'), ...emptyAgg() });
+    addTo(byUser.get(userKey), prompt, completion, total, cost, isError);
+    const dayKey = String(row.created_at || '').slice(0, 10) || '(未知)';
+    if (!byDay.has(dayKey)) byDay.set(dayKey, { date: dayKey, ...emptyAgg() });
+    addTo(byDay.get(dayKey), prompt, completion, total, cost, isError);
+    const purposeKey = String(row.purpose || 'chat');
+    if (!byPurpose.has(purposeKey)) byPurpose.set(purposeKey, { purpose: purposeKey, ...emptyAgg() });
+    addTo(byPurpose.get(purposeKey), prompt, completion, total, cost, isError);
+  }
+  const roundCost = (value) => Math.round(value * 1000000) / 1000000;
+  const finalize = (item) => ({ ...item, est_cost: roundCost(item.est_cost) });
+  sendJson(res, 200, {
+    success: true,
+    data: {
+      range: { days, from },
+      totals: { ...finalize(totals), error_requests: errorRequests },
+      by_model: [...byModel.values()].map(finalize).sort((a, b) => b.total_tokens - a.total_tokens),
+      by_user: [...byUser.values()].map(finalize).sort((a, b) => b.total_tokens - a.total_tokens),
+      by_day: [...byDay.values()].map(finalize).sort((a, b) => String(a.date).localeCompare(String(b.date))),
+      by_purpose: [...byPurpose.values()].map(finalize).sort((a, b) => b.total_tokens - a.total_tokens),
+    },
+  });
+});
+
 route(['GET'], '/api/context/get', async (req, res) => {
   const projectId = String(req.query.project_id || (req.body && req.body.project_id) || '');
   if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
@@ -2208,7 +2551,7 @@ route(['POST'], '/api/context/extract', async (req, res) => {
   if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
   requireProjectAccess(projectId, currentSessionUser(req));
 
-  const rows = db.prepare('SELECT question, answer FROM kb_items WHERE project_id = ?').all(projectId);
+  const rows = db.prepare("SELECT question, answer FROM kb_items WHERE project_id = ? AND COALESCE(deleted_at, '') = ''").all(projectId);
   if (rows.length === 0) {
     return sendJson(res, 200, { success: false, message: '知识库为空，请先解析入库知识库' });
   }
@@ -2230,7 +2573,7 @@ route(['POST'], '/api/context/extract', async (req, res) => {
   const rawReply = await chatCompletion(DEFAULT_LLM_CONFIG, [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
-  ]);
+  ], 'context_extract');
   sendJson(res, 200, { success: true, data: parseExtractResult(rawReply), message: '语境提取成功' });
 });
 
@@ -2278,6 +2621,9 @@ route(['POST'], '/api/kb/extract-text', async (req, res) => {
   } catch (e) {
     return sendJson(res, 400, { success: false, error: '文件 Base64 解码失败' });
   }
+  if (buffer.length > KB_MAX_FILE_MB * 1024 * 1024) {
+    return sendJson(res, 413, { success: false, code: 'FILE_TOO_LARGE', error: `文件超过 ${KB_MAX_FILE_MB}MB 上限，请拆分后再导入` });
+  }
   try {
     const rawText = await extractTextFromDocument(fileName, buffer);
     sendJson(res, 200, { success: true, raw_text: rawText });
@@ -2296,7 +2642,7 @@ route(['GET'], '/api/kb/export', async (req, res) => {
   if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
   requireProjectAccess(projectId, currentSessionUser(req));
   const project = db.prepare('SELECT name FROM projects WHERE id = ?').get(projectId);
-  const rows = db.prepare('SELECT id, question, answer FROM kb_items WHERE project_id = ? ORDER BY rowid ASC').all(projectId);
+  const rows = db.prepare("SELECT id, question, answer FROM kb_items WHERE project_id = ? AND COALESCE(deleted_at, '') = '' ORDER BY rowid ASC").all(projectId);
   let text;
   if (format === 'md') {
     const lines = [`# 知识库导出 - ${project ? project.name : projectId}`, `> 共 ${rows.length} 条，导出时间 ${new Date().toLocaleString('zh-CN')}`, ''];
@@ -2342,8 +2688,22 @@ route(['GET'], '/api/kb/list', async (req, res) => {
   const projectId = req.query.project_id || '';
   if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
   requireProjectAccess(projectId, currentSessionUser(req));
-  const rows = db.prepare('SELECT id, question, answer, structure_mode FROM kb_items WHERE project_id = ?').all(projectId);
-  sendJson(res, 200, { success: true, data: rows });
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(200, Math.max(1, Number(req.query.page_size) || 50));
+  const keyword = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  const where = ["project_id = ?", "COALESCE(deleted_at, '') = ''"];
+  const params = [String(projectId)];
+  if (keyword) {
+    const escaped = keyword.replace(/[\\%_]/g, (ch) => '\\' + ch);
+    where.push("(question LIKE ? ESCAPE '\\' OR answer LIKE ? ESCAPE '\\')");
+    params.push('%' + escaped + '%', '%' + escaped + '%');
+  }
+  const whereSql = where.join(' AND ');
+  const totalRow = db.prepare(`SELECT COUNT(*) AS c FROM kb_items WHERE ${whereSql}`).get(...params);
+  const total = totalRow ? Number(totalRow.c) || 0 : 0;
+  const offset = (page - 1) * pageSize;
+  const rows = db.prepare(`SELECT id, question, answer, structure_mode FROM kb_items WHERE ${whereSql} ORDER BY rowid ASC LIMIT ? OFFSET ?`).all(...params, pageSize, offset);
+  sendJson(res, 200, { success: true, data: rows, total, page, page_size: pageSize });
 });
 
 route(['POST'], '/api/kb/delete', async (req, res) => {
@@ -2352,10 +2712,9 @@ route(['POST'], '/api/kb/delete', async (req, res) => {
   const user = currentSessionUser(req);
   const kbAccess = requireKbAccess(body.id, user);
   assertProjectWritableByRow(kbAccess.project, user);
-  db.prepare('DELETE FROM kb_items WHERE id = ?').run(body.id);
-  db.prepare('UPDATE kb_item_versions SET is_deleted = 1 WHERE item_id = ?').run(body.id);
-  logAction(user.id, 'kb_delete', 'kb', body.id, '');
-  sendJson(res, 200, { success: true, message: '删除成功' });
+  const result = softDeleteKbItem(body.id, user);
+  logAction(user.id, 'kb_delete', 'kb', body.id, `batch=${result.batch} soft=1`);
+  sendJson(res, 200, { success: true, message: '已移入回收站（30 天内可恢复）', batch: result.batch });
 });
 
 // 知识库在线编辑（阶段四）：更新 question / answer，并写入新版本记录
@@ -2380,6 +2739,7 @@ route(['POST'], '/api/kb/update', async (req, res) => {
     db.prepare('INSERT INTO kb_item_versions (id, item_id, version_hash, content, is_deleted) VALUES (?, ?, ?, ?, 0)')
       .run('v-' + crypto.randomUUID().split('-')[0], id, versionHash, contentStr);
   })();
+  logAction(kbUser.id, 'kb_update', 'kb', id, question.slice(0, 120));
 
   sendJson(res, 200, { success: true, message: '更新成功' });
 });
@@ -2417,14 +2777,27 @@ route(['POST'], '/api/snapshots/create', async (req, res) => {
 
   const snapshotId = 'snap-' + crypto.randomUUID().split('-')[0];
   const now = new Date().toISOString();
+  // V1.63：eval_pass / eval_score 口径保持不变（1 / 5.0），仅额外关联同版提示词的最近评测记录
   db.prepare('INSERT INTO snapshots (id, project_id, module_versions_json, final_prompt_content, created_at, eval_pass, eval_score, user_id, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .run(snapshotId, project_id, JSON.stringify(layers), prompt, now, 1, 5.0, snapshotUser.id, snapshotRemark);
+  let linkedEvalRunId = '';
+  try {
+    const promptHash = sha256Hex(prompt);
+    const matchedRun = db.prepare('SELECT id FROM eval_runs WHERE project_id = ? AND prompt_hash = ? ORDER BY rowid DESC LIMIT 1').get(project_id, promptHash);
+    if (matchedRun) {
+      linkedEvalRunId = matchedRun.id;
+      db.prepare('UPDATE snapshots SET eval_run_id = ? WHERE id = ?').run(linkedEvalRunId, snapshotId);
+    }
+  } catch (e) {
+    console.warn('[v1.63] 评测记录关联失败（不影响提交）:', e.message);
+  }
 
   sendJson(res, 200, {
     success: true,
     snapshot_id: snapshotId,
     final_prompt: prompt,
     context_applied: contextToReplacements(context),
+    eval_run_id: linkedEvalRunId,
     message: '快照成功存入',
   });
 });
@@ -2432,7 +2805,7 @@ route(['POST'], '/api/snapshots/create', async (req, res) => {
 route(['GET'], '/api/snapshots/list', async (req, res) => {
   if (!req.query.project_id) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
   requireProjectAccess(req.query.project_id, currentSessionUser(req));
-  const rows = db.prepare('SELECT id, created_at, eval_pass, eval_score, remark FROM snapshots WHERE project_id = ? ORDER BY created_at DESC').all(req.query.project_id);
+  const rows = db.prepare("SELECT id, created_at, eval_pass, eval_score, remark FROM snapshots WHERE project_id = ? AND COALESCE(deleted_at, '') = '' ORDER BY created_at DESC").all(req.query.project_id);
   sendJson(res, 200, { success: true, data: rows });
 });
 
@@ -2465,8 +2838,9 @@ route(['POST'], '/api/snapshots/delete', async (req, res) => {
   const snapshot = requireSnapshotAccess(id, delUser);
   // 再确认其所属项目可写（公共只读项目禁止删除）
   if (snapshot.project_id) requireProjectWritable(snapshot.project_id, delUser);
-  const info = db.prepare('DELETE FROM snapshots WHERE id = ?').run(id);
-  sendJson(res, 200, { success: true, deleted: info.changes, id });
+  const result = softDeleteSnapshot(id, delUser);
+  logAction(delUser.id, 'snapshot_delete', 'snapshot', id, `batch=${result.batch} soft=1`);
+  sendJson(res, 200, { success: true, deleted: 1, id, batch: result.batch, message: '已移入回收站（30 天内可恢复）' });
 });
 
 route(['POST'], '/api/prompt/assemble', async (req, res) => {
@@ -2495,7 +2869,7 @@ route(['GET'], '/api/projects/export_zip', async (req, res) => {
   const project = db.prepare('SELECT id, name FROM projects WHERE id = ?').get(projectId);
   if (!project) return sendJson(res, 404, { success: false, error: '项目不存在' });
 
-  const snapshots = db.prepare('SELECT id, created_at, eval_pass, eval_score, final_prompt_content FROM snapshots WHERE project_id = ? ORDER BY created_at ASC').all(projectId);
+  const snapshots = db.prepare("SELECT id, created_at, eval_pass, eval_score, final_prompt_content FROM snapshots WHERE project_id = ? AND COALESCE(deleted_at, '') = '' ORDER BY created_at ASC").all(projectId);
   if (snapshots.length === 0) return sendJson(res, 404, { success: false, error: '该项目暂无提交记录可导出' });
 
   const manifest = {
@@ -2537,19 +2911,237 @@ route(['GET'], '/api/projects/export_zip', async (req, res) => {
 // 4.4 公司 / 项目接口
 // ------------------------------------------------------------
 
+// ============================================================
+// V1.63：回收站（软删除）辅助
+// ============================================================
+function recycleRetentionDays() {
+  try {
+    const row = db.prepare("SELECT value FROM app_settings WHERE key = 'recycle_retention_days'").get();
+    const days = Number(row && row.value);
+    if (Number.isFinite(days) && days >= 1 && days <= 365) return Math.floor(days);
+  } catch (e) { /* ignore */ }
+  return 30;
+}
+function recycleExpireAt(deletedAt) {
+  const days = recycleRetentionDays();
+  const time = Date.parse(String(deletedAt || ''));
+  if (!Number.isFinite(time)) return '';
+  return new Date(time + days * 86400000).toISOString();
+}
+function softDeleteCompany(companyId, user) {
+  const batch = 'del-' + crypto.randomUUID().split('-')[0];
+  const now = new Date().toISOString();
+  let projectCount = 0;
+  db.transaction(() => {
+    const projectIds = db.prepare("SELECT id FROM projects WHERE company_id = ? AND COALESCE(deleted_at, '') = ''").all(companyId).map((r) => r.id);
+    projectCount = projectIds.length;
+    for (const pid of projectIds) {
+      db.prepare("UPDATE projects SET deleted_at = ?, deleted_by = ?, deleted_batch = ? WHERE id = ?").run(now, user.id, batch, pid);
+      db.prepare("UPDATE kb_items SET deleted_at = ?, deleted_by = ?, deleted_batch = ? WHERE project_id = ? AND COALESCE(deleted_at, '') = ''").run(now, user.id, batch, pid);
+      db.prepare("UPDATE snapshots SET deleted_at = ?, deleted_by = ?, deleted_batch = ? WHERE project_id = ? AND COALESCE(deleted_at, '') = ''").run(now, user.id, batch, pid);
+      db.prepare('DELETE FROM project_pins WHERE project_id = ?').run(pid);
+    }
+    db.prepare("UPDATE companies SET deleted_at = ?, deleted_by = ?, deleted_batch = ? WHERE id = ?").run(now, user.id, batch, companyId);
+  })();
+  return { batch, projects: projectCount };
+}
+function softDeleteProject(projectId, user) {
+  const batch = 'del-' + crypto.randomUUID().split('-')[0];
+  const now = new Date().toISOString();
+  let kbCount = 0;
+  let snapshotCount = 0;
+  db.transaction(() => {
+    kbCount = db.prepare("UPDATE kb_items SET deleted_at = ?, deleted_by = ?, deleted_batch = ? WHERE project_id = ? AND COALESCE(deleted_at, '') = ''").run(now, user.id, batch, projectId).changes;
+    snapshotCount = db.prepare("UPDATE snapshots SET deleted_at = ?, deleted_by = ?, deleted_batch = ? WHERE project_id = ? AND COALESCE(deleted_at, '') = ''").run(now, user.id, batch, projectId).changes;
+    db.prepare("UPDATE projects SET deleted_at = ?, deleted_by = ?, deleted_batch = ? WHERE id = ?").run(now, user.id, batch, projectId);
+    db.prepare('DELETE FROM project_pins WHERE project_id = ?').run(projectId);
+  })();
+  return { batch, kb: kbCount, snapshots: snapshotCount };
+}
+function softDeleteKbItem(itemId, user) {
+  const batch = 'del-' + crypto.randomUUID().split('-')[0];
+  const now = new Date().toISOString();
+  db.transaction(() => {
+    db.prepare("UPDATE kb_items SET deleted_at = ?, deleted_by = ?, deleted_batch = ? WHERE id = ?").run(now, user.id, batch, itemId);
+    db.prepare('UPDATE kb_item_versions SET is_deleted = 1 WHERE item_id = ?').run(itemId);
+  })();
+  return { batch };
+}
+function softDeleteSnapshot(snapshotId, user) {
+  const batch = 'del-' + crypto.randomUUID().split('-')[0];
+  const now = new Date().toISOString();
+  db.prepare("UPDATE snapshots SET deleted_at = ?, deleted_by = ?, deleted_batch = ? WHERE id = ?").run(now, user.id, batch, snapshotId);
+  return { batch };
+}
+const RECYCLE_TYPE_TABLE = { company: 'companies', project: 'projects', kb: 'kb_items', snapshot: 'snapshots' };
+const RECYCLE_TABLE_TYPE = { companies: 'company', projects: 'project', kb_items: 'kb', snapshots: 'snapshot' };
+function recycleUserExists(userId) {
+  if (!userId) return false;
+  try { return !!db.prepare('SELECT 1 FROM users WHERE id = ?').get(userId); } catch (e) { return false; }
+}
+/** 原所有者账号已被删除时，恢复/移交的归属改为执行操作的管理员 */
+function recycleOwnerFor(row, actor) {
+  return recycleUserExists(row && row.user_id) ? row.user_id : actor.id;
+}
+function restoreRecycleEntity(type, id, user) {
+  const table = RECYCLE_TYPE_TABLE[type];
+  if (!table) throw httpError(400, '未知的回收站类型');
+  const row = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
+  if (!row) throw httpError(404, '记录不存在或已彻底删除');
+  if (!isRowDeleted(row)) throw httpError(409, '该记录不在回收站');
+  const batch = String(row.deleted_batch || '');
+  const ownerId = recycleOwnerFor(row, user);
+  const restore = db.prepare(`UPDATE ${table} SET deleted_at = '', deleted_by = '', deleted_batch = '' WHERE id = ?`);
+  if (type === 'company') {
+    db.transaction(() => {
+      db.prepare("UPDATE companies SET deleted_at = '', deleted_by = '', deleted_batch = '', user_id = ? WHERE id = ?").run(ownerId, id);
+      db.prepare("UPDATE projects SET deleted_at = '', deleted_by = '', deleted_batch = '', user_id = ? WHERE company_id = ? AND deleted_batch = ?").run(ownerId, id, batch);
+      db.prepare("UPDATE kb_items SET deleted_at = '', deleted_by = '', deleted_batch = '', user_id = ? WHERE deleted_batch = ? AND project_id IN (SELECT id FROM projects WHERE company_id = ?)").run(ownerId, batch, id);
+      db.prepare("UPDATE snapshots SET deleted_at = '', deleted_by = '', deleted_batch = '', user_id = ? WHERE deleted_batch = ? AND project_id IN (SELECT id FROM projects WHERE company_id = ?)").run(ownerId, batch, id);
+    })();
+    return { type, id, restored_children: batch ? 'batch' : 'self' };
+  }
+  if (type === 'project') {
+    const company = row.company_id ? db.prepare('SELECT * FROM companies WHERE id = ?').get(row.company_id) : null;
+    if (company && isRowDeleted(company)) throw httpError(409, '所属客户/行业仍在回收站，请先恢复客户/行业');
+    db.transaction(() => {
+      db.prepare("UPDATE projects SET deleted_at = '', deleted_by = '', deleted_batch = '', user_id = ? WHERE id = ?").run(ownerId, id);
+      db.prepare("UPDATE kb_items SET deleted_at = '', deleted_by = '', deleted_batch = '', user_id = ? WHERE project_id = ? AND deleted_batch = ?").run(ownerId, id, batch);
+      db.prepare("UPDATE snapshots SET deleted_at = '', deleted_by = '', deleted_batch = '', user_id = ? WHERE project_id = ? AND deleted_batch = ?").run(ownerId, id, batch);
+    })();
+    return { type, id, restored_children: batch ? 'batch' : 'self' };
+  }
+  if (type === 'kb') {
+    const project = row.project_id ? db.prepare('SELECT * FROM projects WHERE id = ?').get(row.project_id) : null;
+    if (project && isRowDeleted(project)) throw httpError(409, '所属项目仍在回收站，请先恢复项目');
+    db.prepare(`UPDATE ${table} SET deleted_at = '', deleted_by = '', deleted_batch = '', user_id = ? WHERE id = ?`).run(ownerId, id);
+    db.prepare('UPDATE kb_item_versions SET is_deleted = 0 WHERE item_id = ? AND version_hash = (SELECT version_hash FROM kb_item_versions WHERE item_id = ? ORDER BY rowid DESC LIMIT 1)').run(id, id);
+    return { type, id, restored_children: 'self' };
+  }
+  const project = row.project_id ? db.prepare('SELECT * FROM projects WHERE id = ?').get(row.project_id) : null;
+  if (project && isRowDeleted(project)) throw httpError(409, '所属项目仍在回收站，请先恢复项目');
+  restore.run(id);
+  return { type, id, restored_children: 'self' };
+}
+function purgeRecycleEntityByTable(table, id) {
+  if (table === 'snapshots') {
+    db.prepare('DELETE FROM snapshots WHERE id = ?').run(id);
+    return true;
+  }
+  if (table === 'kb_items') {
+    db.prepare('DELETE FROM kb_item_versions WHERE item_id = ?').run(id);
+    db.prepare('DELETE FROM kb_items WHERE id = ?').run(id);
+    return true;
+  }
+  if (table === 'projects') {
+    db.transaction(() => {
+      const kbIds = db.prepare('SELECT id FROM kb_items WHERE project_id = ?').all(id).map((r) => r.id);
+      for (const kbId of kbIds) db.prepare('DELETE FROM kb_item_versions WHERE item_id = ?').run(kbId);
+      db.prepare('DELETE FROM kb_items WHERE project_id = ?').run(id);
+      db.prepare('DELETE FROM snapshots WHERE project_id = ?').run(id);
+      db.prepare('DELETE FROM read_grants WHERE scope_type = ? AND scope_id = ?').run('project', id);
+      db.prepare('DELETE FROM project_grants WHERE project_id = ?').run(id);
+      db.prepare('DELETE FROM project_pins WHERE project_id = ?').run(id);
+      db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+    })();
+    return true;
+  }
+  if (table === 'companies') {
+    db.transaction(() => {
+      const projectIds = db.prepare('SELECT id FROM projects WHERE company_id = ?').all(id).map((r) => r.id);
+      for (const pid of projectIds) purgeRecycleEntityByTable('projects', pid);
+      db.prepare('DELETE FROM read_grants WHERE scope_type = ? AND scope_id = ?').run('company', id);
+      db.prepare('DELETE FROM companies WHERE id = ?').run(id);
+    })();
+    return true;
+  }
+  return false;
+}
+function purgeRecycleEntity(type, id) {
+  const table = RECYCLE_TYPE_TABLE[type];
+  if (!table) throw httpError(400, '未知的回收站类型');
+  const row = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
+  if (!row) throw httpError(404, '记录不存在或已彻底删除');
+  if (!isRowDeleted(row)) throw httpError(409, '只能彻底删除回收站中的记录');
+  purgeRecycleEntityByTable(table, id);
+}
+/** 串行清理过期回收站（严禁 Promise.all；SQLite 删除逐条事务） */
+function purgeExpiredRecycle() {
+  const cutoff = new Date(Date.now() - recycleRetentionDays() * 86400000).toISOString();
+  const targets = [];
+  for (const table of ['snapshots', 'kb_items', 'projects', 'companies']) {
+    try {
+      const rows = db.prepare(`SELECT id FROM ${table} WHERE COALESCE(deleted_at, '') <> '' AND deleted_at < ?`).all(cutoff);
+      for (const row of rows) targets.push([table, row.id]);
+    } catch (e) { /* ignore */ }
+  }
+  let purged = 0;
+  for (const [table, id] of targets) {
+    try {
+      if (purgeRecycleEntityByTable(table, id)) purged += 1;
+    } catch (e) {
+      console.warn('[recycle] 清理过期记录失败:', table, id, e.message);
+    }
+  }
+  if (purged > 0) console.log(`[recycle] 已自动清理 ${purged} 条过期回收站记录（保留 ${recycleRetentionDays()} 天）`);
+  return purged;
+}
+function recycleTypeName(item) {
+  if (item.type === 'company') return item.name || item.id;
+  if (item.type === 'project') return item.name || item.id;
+  if (item.type === 'kb') return (item.question || '').slice(0, 80) || item.id;
+  return item.remark || item.id;
+}
+function listRecycleItems(user, typeFilter, page, pageSize) {
+  const ids = visibleOwnerIds(user);
+  const ownerSet = ids === null ? null : new Set(ids);
+  const items = [];
+  const pushRow = (type, row, extra) => {
+    if (ownerSet && !ownerSet.has(String(row.user_id || ''))) return;
+    items.push({
+      type,
+      id: row.id,
+      name: recycleTypeName({ ...row, type }),
+      deleted_at: row.deleted_at || '',
+      deleted_by: row.deleted_by || '',
+      expire_at: recycleExpireAt(row.deleted_at),
+      ...extra,
+    });
+  };
+  if (typeFilter === 'all' || typeFilter === 'company') {
+    for (const row of db.prepare("SELECT * FROM companies WHERE COALESCE(deleted_at, '') <> ''").all()) pushRow('company', row, {});
+  }
+  if (typeFilter === 'all' || typeFilter === 'project') {
+    for (const row of db.prepare("SELECT * FROM projects WHERE COALESCE(deleted_at, '') <> ''").all()) {
+      const company = db.prepare('SELECT name FROM companies WHERE id = ?').get(row.company_id);
+      pushRow('project', row, { company_name: company ? company.name : '' });
+    }
+  }
+  if (typeFilter === 'all' || typeFilter === 'kb') {
+    for (const row of db.prepare("SELECT * FROM kb_items WHERE COALESCE(deleted_at, '') <> ''").all()) {
+      const project = db.prepare('SELECT name FROM projects WHERE id = ?').get(row.project_id);
+      pushRow('kb', row, { project_name: project ? project.name : '' });
+    }
+  }
+  if (typeFilter === 'all' || typeFilter === 'snapshot') {
+    for (const row of db.prepare("SELECT * FROM snapshots WHERE COALESCE(deleted_at, '') <> ''").all()) {
+      const project = db.prepare('SELECT name FROM projects WHERE id = ?').get(row.project_id);
+      pushRow('snapshot', row, { project_name: project ? project.name : '' });
+    }
+  }
+  items.sort((a, b) => String(b.deleted_at).localeCompare(String(a.deleted_at)));
+  const total = items.length;
+  const start = (page - 1) * pageSize;
+  return { items: items.slice(start, start + pageSize), total, page, page_size: pageSize, retention_days: recycleRetentionDays() };
+}
+
 route(['GET'], '/api/companies', async (req, res) => {
   const user = currentSessionUser(req);
-  const ids = visibleOwnerIds(user);
-  if (ids === null) {
-    return sendJson(res, 200, { success: true, data: db.prepare('SELECT * FROM companies').all() });
-  }
-  const publicCompanySql = "id IN (SELECT company_id FROM projects WHERE is_public = 1 AND (public_scope = 'global' OR public_scope IS NULL OR public_scope = ''))";
-  // V1.62：把「有项目被只读授权给我」的公司也纳入可见范围
-  const grantedCompanySql = "id IN (SELECT company_id FROM projects WHERE id IN (SELECT project_id FROM project_grants WHERE grantee_user_id = ?))";
-  const rows = ids.length === 0
-    ? db.prepare(`SELECT * FROM companies WHERE ${publicCompanySql} OR ${grantedCompanySql}`).all(user.id)
-    : db.prepare(`SELECT * FROM companies WHERE user_id IN (${ids.map(() => '?').join(', ')}) OR ${publicCompanySql} OR ${grantedCompanySql}`).all(...ids, user.id);
-  sendJson(res, 200, { success: true, data: rows });
+  const companies = db.prepare("SELECT * FROM companies WHERE COALESCE(deleted_at, '') = '' ORDER BY rowid ASC").all();
+  // 可见性统一走 canReadProject（含所有者 / 公共 / 客户级与项目级只读授权）
+  const visibleProjects = db.prepare("SELECT * FROM projects WHERE COALESCE(deleted_at, '') = ''").all().filter((project) => canReadProject(project, user));
+  const visible = companies.filter((company) => canAccessOwner(company.user_id, user) || visibleProjects.some((project) => String(project.company_id || '') === company.id));
+  sendJson(res, 200, { success: true, data: visible });
 });
 
 route(['POST'], '/api/companies/create', async (req, res) => {
@@ -2578,18 +3170,9 @@ route(['POST'], '/api/companies/delete', async (req, res) => {
   const body = req.body || {};
   const user = currentSessionUser(req);
   requireCompanyAccess(body.id, user);
-  const projectIds = db.prepare('SELECT id FROM projects WHERE company_id = ?').all(body.id).map((r) => r.id);
-  // V1.62：SQLite 无外键级联，删除公司前显式清理授权与置顶
-  db.transaction(() => {
-    for (const pid of projectIds) {
-      db.prepare('DELETE FROM project_grants WHERE project_id = ?').run(pid);
-      db.prepare('DELETE FROM project_pins WHERE project_id = ?').run(pid);
-    }
-    db.prepare('DELETE FROM projects WHERE company_id = ?').run(body.id);
-    db.prepare('DELETE FROM companies WHERE id = ?').run(body.id);
-  })();
-  logAction(user.id, 'company_delete', 'company', body.id, `projects=${projectIds.length}`);
-  sendJson(res, 200, { success: true, message: '删除成功' });
+  const result = softDeleteCompany(body.id, user);
+  logAction(user.id, 'company_delete', 'company', body.id, `batch=${result.batch} projects=${result.projects} soft=1`);
+  sendJson(res, 200, { success: true, message: '已移入回收站（30 天内可恢复）', batch: result.batch, projects: result.projects });
 });
 
 /** V1.62：给项目行补充 pinned / can_write（前端只读模式与置顶分区依赖这两个字段） */
@@ -2607,16 +3190,7 @@ function decorateProjectsForUser(rows, user) {
 
 route(['GET'], '/api/projects', async (req, res) => {
   const user = currentSessionUser(req);
-  const ids = visibleOwnerIds(user);
-  if (ids === null) {
-    return sendJson(res, 200, { success: true, data: decorateProjectsForUser(db.prepare('SELECT * FROM projects').all(), user) });
-  }
-  const publicProjectSql = "is_public = 1 AND (public_scope = 'global' OR public_scope IS NULL OR public_scope = '')";
-  // V1.62：只读授权给我的项目也要出现在列表里
-  const grantedProjectSql = "id IN (SELECT project_id FROM project_grants WHERE grantee_user_id = ?)";
-  const rows = ids.length === 0
-    ? db.prepare(`SELECT * FROM projects WHERE (${publicProjectSql}) OR ${grantedProjectSql}`).all(user.id)
-    : db.prepare(`SELECT * FROM projects WHERE user_id IN (${ids.map(() => '?').join(', ')}) OR (${publicProjectSql}) OR ${grantedProjectSql}`).all(...ids, user.id);
+  const rows = db.prepare("SELECT * FROM projects WHERE COALESCE(deleted_at, '') = '' ORDER BY rowid ASC").all().filter((project) => canReadProject(project, user));
   sendJson(res, 200, { success: true, data: decorateProjectsForUser(rows, user) });
 });
 
@@ -2654,14 +3228,60 @@ route(['POST'], '/api/projects/delete', async (req, res) => {
   const body = req.body || {};
   const user = currentSessionUser(req);
   requireProjectWritable(body.id, user);
-  // V1.62：显式清理授权与置顶（SQLite 无外键级联）
-  db.transaction(() => {
-    db.prepare('DELETE FROM project_grants WHERE project_id = ?').run(body.id);
-    db.prepare('DELETE FROM project_pins WHERE project_id = ?').run(body.id);
-    db.prepare('DELETE FROM projects WHERE id = ?').run(body.id);
-  })();
-  logAction(user.id, 'project_delete', 'project', body.id, '');
-  sendJson(res, 200, { success: true, message: '删除成功' });
+  const result = softDeleteProject(body.id, user);
+  logAction(user.id, 'project_delete', 'project', body.id, `batch=${result.batch} kb=${result.kb} snapshots=${result.snapshots} soft=1`);
+  sendJson(res, 200, { success: true, message: '已移入回收站（30 天内可恢复）', batch: result.batch, kb: result.kb, snapshots: result.snapshots });
+});
+
+// ---------- V1.63：回收站（仅管理员） ----------
+function requireRecycleManager(user) {
+  if (!user || !['superadmin', 'teamadmin'].includes(user.role)) throw httpError(403, '需要管理权限');
+  return user;
+}
+function requireRecycleRecord(user, type, id) {
+  const table = RECYCLE_TYPE_TABLE[type];
+  if (!table) throw httpError(400, '未知的回收站类型');
+  const row = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
+  if (!row) throw httpError(404, '记录不存在或已彻底删除');
+  if (user.role !== 'superadmin') {
+    let ownerId = row.user_id;
+    if (!ownerId && row.project_id) {
+      const project = db.prepare('SELECT user_id FROM projects WHERE id = ?').get(row.project_id);
+      ownerId = project ? project.user_id : '';
+    }
+    if (!canAccessOwner(ownerId, user)) throw httpError(403, '无权管理该记录');
+  }
+  return row;
+}
+route(['GET'], '/api/recycle/list', async (req, res) => {
+  const user = requireRecycleManager(currentSessionUser(req));
+  const type = ['all', 'company', 'project', 'kb', 'snapshot'].includes(String(req.query.type || 'all')) ? String(req.query.type || 'all') : 'all';
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size) || 20));
+  const data = listRecycleItems(user, type, page, pageSize);
+  sendJson(res, 200, { success: true, data: data.items, total: data.total, page: data.page, page_size: data.page_size, retention_days: data.retention_days });
+});
+route(['POST'], '/api/recycle/restore', async (req, res) => {
+  const user = requireRecycleManager(currentSessionUser(req));
+  const body = req.body || {};
+  const type = String(body.type || '');
+  const id = String(body.id || '').trim();
+  if (!id) return sendJson(res, 400, { success: false, error: '缺少 id' });
+  requireRecycleRecord(user, type, id);
+  const result = restoreRecycleEntity(type, id, user);
+  logAction(user.id, 'recycle_restore', type, id, 'Warn');
+  sendJson(res, 200, { success: true, message: '已从回收站恢复', ...result });
+});
+route(['POST'], '/api/recycle/purge', async (req, res) => {
+  const user = requireRecycleManager(currentSessionUser(req));
+  const body = req.body || {};
+  const type = String(body.type || '');
+  const id = String(body.id || '').trim();
+  if (!id) return sendJson(res, 400, { success: false, error: '缺少 id' });
+  requireRecycleRecord(user, type, id);
+  purgeRecycleEntity(type, id);
+  logAction(user.id, 'recycle_purge', type, id, 'Danger');
+  sendJson(res, 200, { success: true, message: '已彻底删除（不可恢复）' });
 });
 
 // ---------- V1.62：项目置顶（每用户各自一套） ----------
@@ -2681,33 +3301,113 @@ route(['POST'], '/api/projects/pin', async (req, res) => {
   sendJson(res, 200, { success: true, pinned: pinned ? 1 : 0, message: pinned ? '已置顶' : '已取消置顶' });
 });
 
-// ---------- V1.62：项目只读授权（管理员） ----------
-function listGrantCandidates(admin, project) {
-  let rows;
+// ---------- V1.63：只读授权（客户级 / 项目级 × 用户 / 团队 / 所有团队） ----------
+function listGrantCompanies(admin) {
   if (admin.role === 'superadmin') {
-    rows = db.prepare("SELECT u.id, u.username, u.role, u.team_id, COALESCE(t.name, '') AS team_name FROM users u LEFT JOIN teams t ON t.id = u.team_id WHERE u.role != 'superadmin' ORDER BY u.created_at ASC").all();
-  } else {
-    rows = db.prepare("SELECT u.id, u.username, u.role, u.team_id, COALESCE(t.name, '') AS team_name FROM users u LEFT JOIN teams t ON t.id = u.team_id WHERE u.team_id = ? AND u.role = 'user' ORDER BY u.created_at ASC").all(admin.team_id || '');
+    return db.prepare("SELECT id, name FROM companies WHERE COALESCE(deleted_at, '') = '' ORDER BY rowid ASC").all();
   }
-  return rows.filter((row) => row.id !== project.user_id);
+  const ids = visibleOwnerIds(admin) || [];
+  if (ids.length === 0) return [];
+  return db.prepare(`SELECT id, name FROM companies WHERE COALESCE(deleted_at, '') = '' AND user_id IN (${ids.map(() => '?').join(', ')}) ORDER BY rowid ASC`).all(...ids);
+}
+function listGrantTeams(admin) {
+  if (admin.role === 'superadmin') return db.prepare('SELECT id, name FROM teams ORDER BY rowid ASC').all();
+  const teamId = String(admin.team_id || '').trim();
+  return teamId ? db.prepare('SELECT id, name FROM teams WHERE id = ?').all(teamId) : [];
+}
+function listGrantUsers(admin) {
+  if (admin.role === 'superadmin') {
+    return db.prepare("SELECT u.id, u.username, u.role, u.team_id, COALESCE(t.name, '') AS team_name FROM users u LEFT JOIN teams t ON t.id = u.team_id WHERE u.role != 'superadmin' AND COALESCE(u.status, 'active') = 'active' ORDER BY u.created_at ASC").all();
+  }
+  const teamId = String(admin.team_id || '').trim();
+  if (!teamId) return [];
+  return db.prepare("SELECT u.id, u.username, u.role, u.team_id, COALESCE(t.name, '') AS team_name FROM users u LEFT JOIN teams t ON t.id = u.team_id WHERE u.team_id = ? AND u.role != 'superadmin' AND COALESCE(u.status, 'active') = 'active' ORDER BY u.created_at ASC").all(teamId);
+}
+/** 校验当前管理员是否可管理某公司（超管任意；团管限本团队公司） */
+function requireCompanyGrantPermission(admin, company) {
+  if (!company) throw httpError(404, '客户/行业不存在或无权访问');
+  if (admin.role === 'superadmin') return company;
+  if (!canAccessOwner(company.user_id, admin)) throw httpError(403, '团管只能管理本团队项目的授权');
+  return company;
+}
+/** 统一解析授权对象：兼容旧 user_ids，并做权限与存在性校验 */
+function normalizeGrantTargets(admin, rawTargets) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(rawTargets) ? rawTargets : []) {
+    const type = raw && raw.type === 'team' ? 'team' : raw && raw.type === 'all' ? 'all' : raw && raw.type === 'user' ? 'user' : '';
+    if (!type) continue;
+    if (type === 'all') {
+      if (admin.role !== 'superadmin') throw httpError(403, '仅超级管理员可授权给「所有团队」');
+      if (!seen.has('all')) { seen.add('all'); out.push({ type: 'all', id: '' }); }
+      continue;
+    }
+    const id = String((raw && raw.id) || '').trim();
+    if (!id) continue;
+    if (type === 'user') {
+      const target = db.prepare('SELECT id, role, team_id FROM users WHERE id = ?').get(id);
+      if (!target) throw httpError(400, '被授权用户不存在：' + id);
+      if (target.role === 'superadmin') continue;
+      if (admin.role === 'teamadmin' && (target.team_id || '') !== (admin.team_id || '')) {
+        throw httpError(403, '团管只能授权本团队用户');
+      }
+    } else {
+      const team = db.prepare('SELECT id FROM teams WHERE id = ?').get(id);
+      if (!team) throw httpError(400, '被授权团队不存在：' + id);
+      if (admin.role === 'teamadmin' && id !== (admin.team_id || '')) {
+        throw httpError(403, '团管只能授权本团队');
+      }
+    }
+    const key = type + ':' + id;
+    if (!seen.has(key)) { seen.add(key); out.push({ type, id }); }
+  }
+  return out;
+}
+function replaceReadGrants(admin, scopeType, scopeId, targets, now) {
+  db.prepare('DELETE FROM read_grants WHERE scope_type = ? AND scope_id = ?').run(scopeType, scopeId);
+  const insert = db.prepare('INSERT OR IGNORE INTO read_grants (id, scope_type, scope_id, grantee_type, grantee_id, granted_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  for (const target of targets) {
+    insert.run('rg-' + crypto.randomUUID().split('-')[0], scopeType, scopeId, target.type, target.id, admin.id, now);
+  }
+  // 兼容旧表：项目级用户授权同步一份，便于回滚到 V1.62
+  if (scopeType === 'project') {
+    db.prepare('DELETE FROM project_grants WHERE project_id = ?').run(scopeId);
+    const insertLegacy = db.prepare('INSERT OR IGNORE INTO project_grants (id, project_id, grantee_user_id, granted_by, created_at) VALUES (?, ?, ?, ?, ?)');
+    for (const target of targets) {
+      if (target.type !== 'user') continue;
+      insertLegacy.run('grant-' + crypto.randomUUID().split('-')[0], scopeId, target.id, admin.id, now);
+    }
+  }
 }
 
 route(['GET'], '/api/projects/grants', async (req, res) => {
   const admin = currentSessionUser(req);
   if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
   const projectId = String(req.query.project_id || '').trim();
-  if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
-  const project = requireProjectAccess(projectId, admin);
-  if (admin.role === 'teamadmin' && !canAccessOwner(project.user_id, admin)) {
-    return sendJson(res, 403, { success: false, error: '团管只能管理本团队项目的授权' });
+  let companyId = String(req.query.company_id || '').trim();
+  let project = null;
+  if (projectId) {
+    project = requireProjectAccess(projectId, admin);
+    if (!companyId) companyId = String(project.company_id || '');
   }
-  const granted = db.prepare('SELECT g.grantee_user_id, COALESCE(u.username, g.grantee_user_id) AS username FROM project_grants g LEFT JOIN users u ON u.id = g.grantee_user_id WHERE g.project_id = ?').all(projectId);
+  if (!companyId) return sendJson(res, 400, { success: false, error: '缺少 company_id 或 project_id' });
+  const company = requireCompanyGrantPermission(admin, requireCompanyAccess(companyId, admin));
+  const projectIds = db.prepare("SELECT id FROM projects WHERE company_id = ? AND COALESCE(deleted_at, '') = '' ORDER BY rowid ASC").all(companyId).map((row) => row.id);
+  const placeholders = projectIds.length ? projectIds.map(() => '?').join(', ') : "''";
+  const projectGrants = projectIds.length
+    ? db.prepare(`SELECT scope_id AS project_id, grantee_type, grantee_id FROM read_grants WHERE scope_type = 'project' AND scope_id IN (${placeholders}) ORDER BY rowid ASC`).all(...projectIds)
+    : [];
+  const companyGrants = db.prepare("SELECT grantee_type, grantee_id FROM read_grants WHERE scope_type = 'company' AND scope_id = ? ORDER BY rowid ASC").all(companyId);
   return sendJson(res, 200, {
     success: true,
     data: {
-      project: { id: project.id, name: project.name || '' },
-      granted,
-      candidates: listGrantCandidates(admin, project),
+      companies: listGrantCompanies(admin),
+      company: { id: company.id, name: company.name || '' },
+      projects: projectIds.length ? db.prepare(`SELECT id, name FROM projects WHERE id IN (${placeholders}) ORDER BY rowid ASC`).all(...projectIds) : [],
+      teams: listGrantTeams(admin),
+      users: listGrantUsers(admin),
+      grants: { company: companyGrants, project: projectGrants },
+      project: project ? { id: project.id, name: project.name || '' } : null,
     },
   });
 });
@@ -2716,37 +3416,88 @@ route(['POST'], '/api/projects/grants/save', async (req, res) => {
   const admin = currentSessionUser(req);
   if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
   const body = req.body || {};
-  const projectId = typeof body.project_id === 'string' ? body.project_id.trim() : '';
-  if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
-  const rawIds = Array.isArray(body.user_ids) ? body.user_ids : [];
-  const project = requireProjectAccess(projectId, admin);
-  if (admin.role === 'teamadmin' && !canAccessOwner(project.user_id, admin)) {
-    return sendJson(res, 403, { success: false, error: '团管只能管理本团队项目的授权' });
-  }
-  const cleaned = [];
-  for (const rawId of rawIds) {
-    const uid = String(rawId || '').trim();
-    if (!uid) continue;
-    const target = db.prepare('SELECT id, role, team_id FROM users WHERE id = ?').get(uid);
-    if (!target) return sendJson(res, 400, { success: false, error: '被授权用户不存在：' + uid });
-    if (target.id === project.user_id) continue; // 所有者天然可读，不需要授权
-    if (target.role === 'superadmin') continue; // 超管天然可读
-    if (admin.role === 'teamadmin' && (target.role !== 'user' || (target.team_id || '') !== (admin.team_id || ''))) {
-      return sendJson(res, 403, { success: false, error: '团管只能授权给本团队普通用户' });
+  const companyId = String(body.company_id || '').trim();
+  const company = requireCompanyGrantPermission(admin, requireCompanyAccess(companyId, admin));
+  const rawTargets = Array.isArray(body.targets)
+    ? body.targets
+    : (Array.isArray(body.user_ids) ? body.user_ids.map((id) => ({ type: 'user', id })) : []);
+  const legacyProjectId = String(body.project_id || '').trim();
+  const scopeType = body.scope_type === 'company' ? 'company' : (legacyProjectId && !body.scope_type ? 'project' : (body.scope_type === 'project' ? 'project' : 'company'));
+  let projectIds = [];
+  if (scopeType === 'project') {
+    projectIds = (Array.isArray(body.project_ids) ? body.project_ids : [legacyProjectId]).map((id) => String(id || '').trim()).filter(Boolean);
+    if (projectIds.length === 0) return sendJson(res, 400, { success: false, error: '请选择至少一个项目' });
+    for (const pid of projectIds) {
+      const project = requireProjectAccess(pid, admin);
+      if (String(project.company_id || '') !== companyId) return sendJson(res, 400, { success: false, error: '所选项目不属于该客户/行业' });
     }
-    if (!cleaned.includes(target.id)) cleaned.push(target.id);
   }
+  const targets = normalizeGrantTargets(admin, rawTargets);
   const now = new Date().toISOString();
   db.transaction(() => {
-    db.prepare('DELETE FROM project_grants WHERE project_id = ?').run(projectId);
-    const insert = db.prepare('INSERT INTO project_grants (id, project_id, grantee_user_id, granted_by, created_at) VALUES (?, ?, ?, ?, ?)');
-    for (const uid of cleaned) {
-      insert.run('grant-' + crypto.randomUUID().split('-')[0], projectId, uid, admin.id, now);
+    if (scopeType === 'company') {
+      replaceReadGrants(admin, 'company', company.id, targets, now);
+    } else {
+      for (const pid of projectIds) replaceReadGrants(admin, 'project', pid, targets, now);
     }
   })();
-  logAction(admin.id, 'project_grant_update', 'project', projectId, `grantees=${cleaned.length}`, 'Warn');
-  sendJson(res, 200, { success: true, grantees: cleaned.length, message: cleaned.length ? `已授权 ${cleaned.length} 人只读` : '已清空该项目的只读授权' });
+  logAction(admin.id, 'project_grant_update', scopeType === 'company' ? 'company' : 'project', scopeType === 'company' ? company.id : projectIds.join(','), `scope=${scopeType} targets=${targets.length}`, 'Warn');
+  const scopeText = scopeType === 'company' ? '整个客户/行业' : `${projectIds.length} 个项目`;
+  sendJson(res, 200, { success: true, targets: targets.length, scope_type: scopeType, message: targets.length ? `已对${scopeText}授权 ${targets.length} 个对象只读` : `已清空${scopeText}的只读授权` });
 });
+
+// ---------- V1.63：项目所有权移交（管理员） ----------
+route(['GET'], '/api/projects/transfer/candidates', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  const projectId = String(req.query.project_id || '').trim();
+  if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  const project = requireProjectAccess(projectId, admin);
+  if (admin.role === 'teamadmin' && !canAccessOwner(project.user_id, admin)) {
+    return sendJson(res, 403, { success: false, error: '团管只能移交本团队项目' });
+  }
+  let rows;
+  if (admin.role === 'superadmin') {
+    rows = db.prepare("SELECT u.id, u.username, u.role, u.team_id, COALESCE(t.name, '') AS team_name FROM users u LEFT JOIN teams t ON t.id = u.team_id WHERE u.role != 'superadmin' AND COALESCE(u.status, 'active') = 'active' ORDER BY u.created_at ASC").all();
+  } else {
+    rows = db.prepare("SELECT u.id, u.username, u.role, u.team_id, COALESCE(t.name, '') AS team_name FROM users u LEFT JOIN teams t ON t.id = u.team_id WHERE u.team_id = ? AND u.role != 'superadmin' AND COALESCE(u.status, 'active') = 'active' ORDER BY u.created_at ASC").all(admin.team_id || '');
+  }
+  sendJson(res, 200, { success: true, data: rows.filter((row) => row.id !== project.user_id) });
+});
+
+route(['POST'], '/api/projects/transfer', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  const body = req.body || {};
+  const projectId = String(body.project_id || '').trim();
+  const targetUserId = String(body.target_user_id || '').trim();
+  if (!projectId || !targetUserId) return sendJson(res, 400, { success: false, error: '缺少 project_id 或 target_user_id' });
+  const project = requireProjectWritable(projectId, admin);
+  if (admin.role === 'teamadmin' && !canAccessOwner(project.user_id, admin)) {
+    return sendJson(res, 403, { success: false, error: '团管只能移交本团队项目' });
+  }
+  if (targetUserId === admin.id) return sendJson(res, 400, { success: false, error: '不能移交给操作人自己' });
+  const target = db.prepare('SELECT * FROM users WHERE id = ?').get(targetUserId);
+  if (!target) return sendJson(res, 404, { success: false, error: '目标用户不存在' });
+  if (target.role === 'superadmin') return sendJson(res, 400, { success: false, error: '不能移交给超级管理员' });
+  if (String(target.status || 'active') !== 'active') return sendJson(res, 400, { success: false, error: '目标账号已被禁用' });
+  if (admin.role === 'teamadmin' && (target.team_id || '') !== (admin.team_id || '')) {
+    return sendJson(res, 403, { success: false, error: '团管只能移交给本团队用户' });
+  }
+  const oldOwnerId = project.user_id || '';
+  db.transaction(() => {
+    db.prepare('UPDATE projects SET user_id = ? WHERE id = ?').run(target.id, projectId);
+    db.prepare('UPDATE kb_items SET user_id = ? WHERE project_id = ?').run(target.id, projectId);
+    db.prepare('UPDATE snapshots SET user_id = ? WHERE project_id = ?').run(target.id, projectId);
+    // 新所有者天然可读，清掉其多余的只读授权
+    db.prepare("DELETE FROM read_grants WHERE scope_type = 'project' AND scope_id = ? AND grantee_type = 'user' AND grantee_id = ?").run(projectId, target.id);
+    db.prepare('DELETE FROM project_grants WHERE project_id = ? AND grantee_user_id = ?').run(projectId, target.id);
+  })();
+  const oldOwner = oldOwnerId ? db.prepare('SELECT username FROM users WHERE id = ?').get(oldOwnerId) : null;
+  logAction(admin.id, 'project_transfer', 'project', projectId, `from=${oldOwner ? oldOwner.username : oldOwnerId} to=${target.username}`, 'Warn');
+  sendJson(res, 200, { success: true, message: `已将项目移交给 ${target.username}`, from_user_id: oldOwnerId, to_user_id: target.id });
+});
+
 
 // ------------------------------------------------------------
 // 4.5 发布门禁导出（CQO 生产级：PROJECT_NAME 实时读 DB + no-store + 去首部换行）
@@ -2806,12 +3557,93 @@ route(['POST'], '/api/eval/run', async (req, res) => {
   sendJson(res, 200, { success: true, l1, l2 });
 });
 
+/**
+ * V1.63：评测结果落库（只做历史可追溯，不参与提交/导出拦截）
+ * 服务端重算 L1（不信任前端），L2 采用前端回传的评分结果。
+ */
+route(['POST', 'GET'], '/api/eval/runs', async (req, res) => {
+  // 同一路径必须合并注册（route 内部用 app.all，分开注册会让后一个方法返回 405）
+  if (req.method === 'GET') {
+    const historyProjectId = String(req.query.project_id || '').trim();
+    if (!historyProjectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+    requireProjectAccess(historyProjectId, currentSessionUser(req));
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+    const rows = db.prepare('SELECT id, project_id, prompt_hash, case_total, case_passed, p0_failures, l1_pass_rate, l2_avg_score, status, created_at FROM eval_runs WHERE project_id = ? ORDER BY rowid DESC LIMIT ?').all(historyProjectId, limit);
+    return sendJson(res, 200, { success: true, data: rows });
+  }
+  const user = currentSessionUser(req);
+  const body = req.body || {};
+  const projectId = typeof body.project_id === 'string' ? body.project_id.trim() : '';
+  if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
+  requireProjectAccess(projectId, user);
+  setRequestProjectId(projectId);
+  if (!Array.isArray(body.layers)) return sendJson(res, 400, { success: false, error: 'layers 必须是数组' });
+  const cases = Array.isArray(body.cases) ? body.cases.slice(0, 200) : [];
+  if (cases.length === 0) return sendJson(res, 400, { success: false, error: '没有可保存的评测用例' });
+
+  const prompt = applyContextReplace(assemblePrompt(body.layers), readProjectContext(projectId));
+  const promptHash = sha256Hex(prompt);
+  const details = [];
+  let caseTotal = 0;
+  let casePassed = 0;
+  let l1Passed = 0;
+  let p0Failures = 0;
+  let l2Sum = 0;
+  let l2Count = 0;
+  for (const raw of cases) {
+    const item = raw && typeof raw === 'object' ? raw : {};
+    const botReply = String(item.bot_reply ?? '').slice(0, 8000);
+    const l1 = checkL1(botReply);
+    const l2 = item.l2 && typeof item.l2 === 'object' ? item.l2 : null;
+    const l2Pass = !!(l2 && l2.pass === true);
+    const rawScore = l2 ? Number(l2.score) : NaN;
+    const score = Number.isFinite(rawScore) ? Math.max(1, Math.min(5, rawScore)) : 0;
+    if (score > 0) { l2Sum += score; l2Count += 1; }
+    if (l1.pass) l1Passed += 1;
+    else p0Failures += 1;
+    if (l1.pass && l2Pass) casePassed += 1;
+    caseTotal += 1;
+    details.push({ pass: l1.pass && l2Pass, l1_pass: l1.pass, l2_pass: l2Pass, l2_score: score, l1_errors: l1.errors.slice(0, 5) });
+  }
+  const avgScore = l2Count > 0 ? Math.round((l2Sum / l2Count) * 10) / 10 : 0;
+  const status = casePassed === caseTotal ? 'passed' : 'failed';
+  const id = 'eval-' + crypto.randomUUID().split('-')[0];
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO eval_runs (id, snapshot_id, project_id, user_id, prompt_hash, case_total, case_passed, p0_failures, l1_pass_rate, l2_avg_score, status, details_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, '', projectId, user.id, promptHash, caseTotal, casePassed, p0Failures, caseTotal ? l1Passed / caseTotal : 0, avgScore, status, JSON.stringify(details).slice(0, 200000), now);
+  // 每项目保留最近 300 条（串行删除，严禁 Promise.all）
+  try {
+    const expired = db.prepare('SELECT id FROM eval_runs WHERE project_id = ? ORDER BY rowid DESC LIMIT -1 OFFSET 300').all(projectId);
+    for (const row of expired) db.prepare('DELETE FROM eval_runs WHERE id = ?').run(row.id);
+  } catch (e) { /* ignore */ }
+  logAction(user.id, 'eval_run', 'project', projectId, `total=${caseTotal} passed=${casePassed} status=${status}`);
+  sendJson(res, 200, {
+    success: true,
+    data: {
+      id,
+      project_id: projectId,
+      prompt_hash: promptHash,
+      case_total: caseTotal,
+      case_passed: casePassed,
+      p0_failures: p0Failures,
+      pass_rate: caseTotal ? Math.round((casePassed / caseTotal) * 1000) / 1000 : 0,
+      avg_score: avgScore,
+      status,
+      created_at: now,
+    },
+  });
+});
+
+
 // 阶段四：AI 生成「刁钻」测试题（服务端正则提取 JSON 数组 + 结构校验兜底）
 route(['POST'], '/api/eval/generate_questions', async (req, res) => {
   const body = req.body || {};
   const projectId = typeof body.project_id === 'string' ? body.project_id : '';
   const quizUser = currentSessionUser(req);
-  if (projectId) requireProjectAccess(projectId, quizUser);
+  if (projectId) {
+    requireProjectAccess(projectId, quizUser);
+    setRequestProjectId(projectId);
+  }
   // v1.60 重构：默认至少生成 15 个用例（允许 15-30 个）
   const requestedCount = Number(body.count);
   const count = Number.isInteger(requestedCount) && requestedCount >= 15 && requestedCount <= 30 ? requestedCount : 15;
@@ -2820,12 +3652,12 @@ route(['POST'], '/api/eval/generate_questions', async (req, res) => {
   const EVAL_KB_MAX = 3000;
   let kbText = '';
   if (projectId) {
-    const totalRow = db.prepare('SELECT COUNT(*) AS n FROM kb_items WHERE project_id = ?').get(projectId);
+    const totalRow = db.prepare("SELECT COUNT(*) AS n FROM kb_items WHERE project_id = ? AND COALESCE(deleted_at, '') = ''").get(projectId);
     const total = totalRow ? Number(totalRow.n) || 0 : 0;
     const sampleCount = Math.min(30, total);
     if (sampleCount > 0) {
       // SQLite ORDER BY RANDOM() 实现随机抽样，LIMIT 用实际样本数
-      const rows = db.prepare('SELECT question, answer FROM kb_items WHERE project_id = ? ORDER BY RANDOM() LIMIT ?').all(projectId, sampleCount);
+      const rows = db.prepare("SELECT question, answer FROM kb_items WHERE project_id = ? AND COALESCE(deleted_at, '') = '' ORDER BY RANDOM() LIMIT ?").all(projectId, sampleCount);
       kbText = rows.map((row, index) => `【${index + 1}】Q: ${row.question ?? ''}\nA: ${row.answer ?? ''}`).join('\n\n');
     }
   }
@@ -2852,7 +3684,7 @@ route(['POST'], '/api/eval/generate_questions', async (req, res) => {
     rawReply = await chatCompletion(DEFAULT_LLM_CONFIG, [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `以下是知识库内容${scenarioHint}：\n\n${kbText}` },
-    ]);
+    ], 'eval_questions');
   } catch (err) {
     // 大模型调用失败（如假 Key 导致 401、网络异常）：返回结构化 JSON，前端据此 Toast 且不白屏
     return sendJson(res, 500, { success: false, error: '大模型调用失败：' + (err && err.message ? err.message : '未知错误') });
@@ -2915,7 +3747,7 @@ route(['GET'], '/api/eval/export', async (req, res) => {
   if (!projectId) return sendJson(res, 400, { success: false, error: '缺少 project_id' });
   requireProjectAccess(projectId, currentSessionUser(req));
   const project = db.prepare('SELECT name FROM projects WHERE id = ?').get(projectId);
-  const rows = db.prepare('SELECT question, answer FROM kb_items WHERE project_id = ? ORDER BY rowid ASC').all(projectId);
+  const rows = db.prepare("SELECT question, answer FROM kb_items WHERE project_id = ? AND COALESCE(deleted_at, '') = '' ORDER BY rowid ASC").all(projectId);
   let text;
   const title = `评测用例 - ${project ? project.name : projectId}`;
   if (format === 'md') {
@@ -2937,7 +3769,10 @@ route(['GET'], '/api/eval/export', async (req, res) => {
 route(['POST'], '/api/chat/reply', async (req, res) => {
   const body = req.body || {};
   const { project_id, layers, context_data } = body;
-  if (project_id) requireProjectAccess(project_id, currentSessionUser(req));
+  if (project_id) {
+    requireProjectAccess(project_id, currentSessionUser(req));
+    setRequestProjectId(project_id);
+  }
 
   // 1) messages 校验与清洗（只留 user/assistant、截断 4000、最近 12 条）
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
@@ -2955,7 +3790,7 @@ route(['POST'], '/api/chat/reply', async (req, res) => {
   const systemPrompt = buildChatSystemPrompt(layers, context);
 
   // 4) 调 DeepSeek 生成符合语音业务格式的回复
-  const rawReply = await chatCompletion(CHAT_LLM_CONFIG, [{ role: 'system', content: systemPrompt }, ...messages]);
+  const rawReply = await chatCompletion(CHAT_LLM_CONFIG, [{ role: 'system', content: systemPrompt }, ...messages], 'chat');
   const reply = typeof rawReply === 'string' ? rawReply.trim() : String(rawReply ?? '').trim();
   sendJson(res, 200, { success: true, reply, system_prompt: systemPrompt });
 });
@@ -3009,6 +3844,8 @@ function toPublicModel(row) {
     model_name: row.model_name,
     is_active: row.is_active, // 保持 DB 原始 1/0，前端用 Number(is_active) === 1 判断
     temperature: row.temperature,
+    price_input_per_m: Number(row.price_input_per_m) || 0,
+    price_output_per_m: Number(row.price_output_per_m) || 0,
     has_key: hasKey,
     masked_key: hasKey ? maskKeyForDisplay(row.api_key) : '',
   };
@@ -3054,6 +3891,11 @@ route(['POST'], '/api/models/save', async (req, res) => {
   const displayName = typeof body.display_name === 'string' && body.display_name.trim() ? body.display_name.trim() : provider;
   const temperatureNumber = Number(body.temperature);
   const temperature = Number.isFinite(temperatureNumber) ? temperatureNumber : DEFAULT_LLM_CONFIG.temperature;
+  // V1.63：单价（元 / 百万 token），用于用量看板估算成本；留空按 0 计
+  const priceInputRaw = Number(body.price_input_per_m);
+  const priceOutputRaw = Number(body.price_output_per_m);
+  const priceInput = Number.isFinite(priceInputRaw) && priceInputRaw >= 0 ? priceInputRaw : 0;
+  const priceOutput = Number.isFinite(priceOutputRaw) && priceOutputRaw >= 0 ? priceOutputRaw : 0;
   const incomingId = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : '';
   const apiKeyInput = typeof body.api_key === 'string' ? body.api_key.trim() : '';
   const isActiveSpecified = body.is_active !== undefined;
@@ -3083,15 +3925,15 @@ route(['POST'], '/api/models/save', async (req, res) => {
 
   if (existing) {
     const isActive = isActiveSpecified ? (wantActive ? 1 : 0) : existing.is_active;
-    db.prepare('UPDATE model_configs SET provider = ?, display_name = ?, base_url = ?, api_key = ?, model_name = ?, temperature = ?, is_active = ? WHERE id = ?')
-      .run(provider, displayName, baseUrl, apiKeyStored, modelName, temperature, isActive, id);
+    db.prepare('UPDATE model_configs SET provider = ?, display_name = ?, base_url = ?, api_key = ?, model_name = ?, temperature = ?, is_active = ?, price_input_per_m = ?, price_output_per_m = ? WHERE id = ?')
+      .run(provider, displayName, baseUrl, apiKeyStored, modelName, temperature, isActive, priceInput, priceOutput, id);
     logAction(currentUser.id, 'model_save', 'model', id, `provider=${provider} base=${baseUrl}`);
     return sendJson(res, 200, { success: true, message: '模型配置已更新', id, is_active: isActive });
   }
 
   const maxContextLength = Number.isFinite(Number(body.max_context_length)) ? Number(body.max_context_length) : 32000;
-  db.prepare('INSERT INTO model_configs (id, provider, display_name, base_url, api_key, model_name, temperature, max_context_length, is_active, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, provider, displayName, baseUrl, apiKeyStored, modelName, temperature, maxContextLength, effectiveActive ? 1 : 0, currentUser.id);
+  db.prepare('INSERT INTO model_configs (id, provider, display_name, base_url, api_key, model_name, temperature, max_context_length, is_active, user_id, price_input_per_m, price_output_per_m) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, provider, displayName, baseUrl, apiKeyStored, modelName, temperature, maxContextLength, effectiveActive ? 1 : 0, currentUser.id, priceInput, priceOutput);
   logAction(currentUser.id, 'model_save', 'model', id, `provider=${provider} base=${baseUrl}`);
   sendJson(res, 200, {
     success: true,
@@ -3165,7 +4007,10 @@ const BACKUP_TABLES = [
 const FULL_BACKUP_TABLES = [
   ...BACKUP_TABLES,
   'users', 'teams', 'audit_logs', 'app_settings', 'project_grants', 'project_pins',
+  'read_grants', 'llm_usage',
 ];
+/** V1.63：新增表在旧全量备份中不存在，导入时按可选表处理（缺失则保留当前数据） */
+const OPTIONAL_BACKUP_TABLES = ['read_grants', 'llm_usage'];
 
 /** 导出表为 JSON 快照对象（scope=business 保持 v1 结构；scope=full 为 v2） */
 function buildBackupSnapshot(scope = 'business') {
@@ -3245,12 +4090,13 @@ function validateBackupPayload(payload) {
   const expected = scope === 'full' ? FULL_BACKUP_TABLES : BACKUP_TABLES;
   const unknownTables = Object.keys(tables).filter((name) => !expected.includes(name));
   if (unknownTables.length > 0) throw new Error(`备份包含未知数据表：${unknownTables.join(', ')}`);
-  const missingTables = expected.filter((name) => !Object.prototype.hasOwnProperty.call(tables, name));
+  const missingTables = expected.filter((name) => !OPTIONAL_BACKUP_TABLES.includes(name) && !Object.prototype.hasOwnProperty.call(tables, name));
   if (missingTables.length > 0) throw new Error(`备份缺少数据表：${missingTables.join(', ')}`);
 
   const columnCache = new Map();
   const rowsByTable = {};
   for (const table of expected) {
+    if (!Object.prototype.hasOwnProperty.call(tables, table)) continue; // 可选表缺失：不导入、不清空
     if (!columnCache.has(table)) {
       columnCache.set(table, db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
     }
@@ -3334,7 +4180,7 @@ route(['POST'], '/api/templates/extract', async (req, res) => {
   const rawReply = await chatCompletion(DEFAULT_LLM_CONFIG, [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
-  ]);
+  ], 'template_extract');
   const parsed = safeParseJson(rawReply);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return sendJson(res, 500, { success: false, error: '大模型返回内容无法解析为模板 JSON，请重试' });
@@ -3362,7 +4208,7 @@ route(['POST'], '/api/ai/polish', async (req, res) => {
   const rawReply = await chatCompletion(DEFAULT_LLM_CONFIG, [
     { role: 'system', content: polishPrompt },
     { role: 'user', content },
-  ]);
+  ], 'ai_polish');
   const polished = stripCodeFence(rawReply);
   if (!polished) return sendJson(res, 500, { success: false, error: '大模型返回内容为空，请重试' });
   sendJson(res, 200, { success: true, layer, content: polished, message: '系统提示词润色完成' });
@@ -3388,7 +4234,7 @@ route(['POST'], '/api/backup/import', async (req, res) => {
   }
   const importedScope = validated.scope;
   const rowsByTable = validated.tables;
-  const tablesToReplace = importedScope === 'full' ? FULL_BACKUP_TABLES : BACKUP_TABLES;
+  const tablesToReplace = (importedScope === 'full' ? FULL_BACKUP_TABLES : BACKUP_TABLES).filter((table) => Object.prototype.hasOwnProperty.call(rowsByTable, table));
 
   // 导入前自动落盘当前全量 JSON 备份（失败即中止，绝不冒险破坏数据）
   let safetyBackupPath = '';
@@ -3405,7 +4251,7 @@ route(['POST'], '/api/backup/import', async (req, res) => {
     const runImport = db.transaction(() => {
       for (const table of tablesToReplace) db.prepare(`DELETE FROM ${table}`).run();
       for (const table of tablesToReplace) {
-        const rows = rowsByTable[table];
+        const rows = rowsByTable[table] || [];
         importedCounts[table] = rows.length;
         for (const row of rows) {
           const columns = Object.keys(row);
@@ -3429,6 +4275,8 @@ route(['POST'], '/api/backup/import', async (req, res) => {
     // business 导入后可能出现指向已不存在项目的孤儿授权/置顶，统一清理
     db.prepare('DELETE FROM project_grants WHERE project_id NOT IN (SELECT id FROM projects)').run();
     db.prepare('DELETE FROM project_pins WHERE project_id NOT IN (SELECT id FROM projects)').run();
+    db.prepare("DELETE FROM read_grants WHERE scope_type = 'project' AND scope_id NOT IN (SELECT id FROM projects)").run();
+    db.prepare("DELETE FROM read_grants WHERE scope_type = 'company' AND scope_id NOT IN (SELECT id FROM companies)").run();
     refreshAdminUserId();
     if (ADMIN_USER_ID) {
       db.prepare("UPDATE model_configs SET user_id = ? WHERE user_id IS NULL OR user_id = ''").run(ADMIN_USER_ID);
@@ -3490,12 +4338,12 @@ route(['POST'], '/api/projects/clone', async (req, res) => {
   const copyMode = ['latest', 'all', 'none'].includes(body.copy_mode) ? body.copy_mode : 'latest';
   const newProjectId = 'proj-' + crypto.randomUUID().split('-')[0];
   const cloneOwnerId = cloneUser.id;
-  const kbRows = db.prepare('SELECT * FROM kb_items WHERE project_id = ? ORDER BY rowid ASC').all(sourceId);
+  const kbRows = db.prepare("SELECT * FROM kb_items WHERE project_id = ? AND COALESCE(deleted_at, '') = '' ORDER BY rowid ASC").all(sourceId);
   let snapshotRows = [];
   if (copyMode === 'all') {
-    snapshotRows = db.prepare('SELECT * FROM snapshots WHERE project_id = ? ORDER BY created_at ASC').all(sourceId);
+    snapshotRows = db.prepare("SELECT * FROM snapshots WHERE project_id = ? AND COALESCE(deleted_at, '') = '' ORDER BY created_at ASC").all(sourceId);
   } else if (copyMode === 'latest') {
-    snapshotRows = db.prepare('SELECT * FROM snapshots WHERE project_id = ? ORDER BY created_at DESC LIMIT 1').all(sourceId);
+    snapshotRows = db.prepare("SELECT * FROM snapshots WHERE project_id = ? AND COALESCE(deleted_at, '') = '' ORDER BY created_at DESC LIMIT 1").all(sourceId);
   }
   const now = new Date().toISOString();
   const counts = db.transaction(() => {
@@ -3588,7 +4436,7 @@ app.use((err, req, res, next) => {
     return sendJson(res, 400, { success: false, error: '请求体不是合法 JSON' });
   }
   if (err && (err.type === 'entity.too.large' || err.status === 413)) {
-    return sendJson(res, 413, { success: false, error: '请求体过大（上限 10MB）' });
+    return sendJson(res, 413, { success: false, code: 'PAYLOAD_TOO_LARGE', error: `请求体过大（文件上限 ${KB_MAX_FILE_MB}MB）` });
   }
   console.error('[server] 未捕获异常:', err && err.message ? err.message : err);
   sendJson(res, err && Number.isInteger(err.status) ? err.status : 500, { success: false, error: (err && err.message) || 'Internal Server Error' });
@@ -3717,9 +4565,20 @@ function startAutoBackupScheduler() {
   autoBackupTimer.unref();
 }
 
+/** V1.63：回收站过期清理（启动 90 秒后首次，之后每 24 小时；串行删除） */
+let recycleTimer = null;
+function startRecycleScheduler() {
+  const runOnce = () => {
+    try { purgeExpiredRecycle(); } catch (e) { console.warn('[recycle] 自动清理失败:', e.message); }
+  };
+  setTimeout(runOnce, 90 * 1000).unref();
+  recycleTimer = setInterval(runOnce, 24 * 60 * 60 * 1000);
+  recycleTimer.unref();
+}
+
 (async () => {
   console.log('========================================');
-  console.log(' NewRock AI Workbench v1.62（纯 Node.js + Express）');
+  console.log(' NewRock AI Workbench v1.63（纯 Node.js + Express）');
   console.log('========================================');
   console.log(`[server] 数据目录: ${DATA_DIR}`);
   console.log(`[server] 数据库: ${DB_PATH}`);
@@ -3747,6 +4606,7 @@ function startAutoBackupScheduler() {
   console.log(`[server] [HEALTH] 健康检查: http://127.0.0.1:${PORT}/api/health`);
   try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (e) { /* ignore */ }
   startAutoBackupScheduler();
+  startRecycleScheduler();
   const latestBackup = listBackupFiles(1)[0];
   if (latestBackup) console.log(`[backup] 最近备份: ${latestBackup.kind}/${latestBackup.name} (${latestBackup.mtime})`);
   console.log('[server] 按 Ctrl+C 停止服务');
@@ -3757,6 +4617,7 @@ function shutdown(signal) {
   console.log(`\n[server] 收到 ${signal}，正在关闭服务...`);
   const finish = () => {
     if (autoBackupTimer) { try { clearInterval(autoBackupTimer); } catch (e) { /* ignore */ } }
+    if (recycleTimer) { try { clearInterval(recycleTimer); } catch (e) { /* ignore */ } }
     try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (e) { /* ignore */ }
     try { db.close(); console.log('[server] 数据库连接已关闭'); } catch { /* ignore */ }
     process.exit(0);

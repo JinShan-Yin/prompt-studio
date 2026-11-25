@@ -88,26 +88,17 @@
     .header-title { font-size: 16px; color: #303133; display: flex; gap: 8px; align-items: center; }
     .header-title span { font-weight: bold; color: #1a1a1a; font-size: 18px; }
 
-    /* v1.60 品牌区与纯 CSS 下拉菜单（仅追加） */
-    .brand-nav { display: flex; align-items: center; flex-wrap: nowrap; flex-shrink: 0; gap: 14px; margin-right: 20px; }
     .brand-name { font-size: 16px; font-weight: 600; color: #1a1a1a; white-space: nowrap; }
-    .brand-dropdown { position: relative; flex-shrink: 0; }
-    .brand-dropdown-trigger { background: transparent; color: #1a1a1a; border: none;
-      border-radius: 8px; padding: 4px 6px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-    .brand-dropdown-trigger:hover { background: #f1f5f9; }
-    .brand-dropdown-menu { display: none; position: absolute; top: calc(100% + 6px); left: 0; min-width: 168px;
-      z-index: 9999; background-color: #ffffff !important;
-      border: 1px solid #e5e7eb !important; border-radius: 10px;
-      box-shadow: 0 10px 15px rgba(0,0,0,0.1) !important;
-      padding: 6px; }
-    .brand-dropdown-menu a { display: block; padding: 8px 12px; font-size: 13px; color: var(--text-primary);
-      border-radius: 6px; text-decoration: none; white-space: nowrap; }
-    .brand-dropdown-menu a:hover { background: var(--primary-light); color: var(--primary); }
-    .brand-dropdown-menu a.disabled { color: #9ca3af; cursor: not-allowed; }
-    .brand-dropdown-menu a.disabled:hover { background: transparent; color: #9ca3af; }
-    /* 模块四：改为点击触发——仅当 .brand-dropdown 带 .open 类时展开，移除 hover/focus-within，避免与点击逻辑打架 */
-    .brand-dropdown.open .brand-dropdown-menu { display: block; }
-    .brand-dropdown.open .brand-dropdown-trigger { border-color: var(--primary); }
+    /* V1.63：顶部「系统管理」下拉（仅图标，hover 显示名称） */
+    .sys-menu { position: relative; display: inline-flex; }
+    .sys-menu-panel { display: none; position: absolute; top: calc(100% + 6px); right: 0; min-width: 190px;
+      z-index: 9999; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px;
+      box-shadow: 0 10px 15px rgba(0,0,0,0.1); padding: 6px; }
+    .sys-menu.open .sys-menu-panel { display: block; }
+    .sys-menu-item { display: block; width: 100%; text-align: left; padding: 8px 12px; font-size: 13px;
+      color: var(--text-primary); background: transparent; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+    .sys-menu-item:hover { background: var(--primary-light); color: var(--primary); }
+    .sys-menu-divider { height: 1px; background: #f1f5f9; margin: 6px 4px; }
     
     .content-area { flex: 1; overflow-y: auto; padding: 24px; }
     
@@ -258,6 +249,8 @@
     .kb-search-input { flex: 1 1 240px; max-width: 380px; padding: 8px 10px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px; color: #606266; font-family: inherit; outline: none; transition: border-color 0.2s; }
     .kb-search-input:focus { border-color: #1a1a1a; }
     .kb-count { font-size: 12px; color: #909399; }
+    .kb-pager { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+    .kb-page-info { font-size: 12px; color: #909399; }
     .kb-count b { color: #1a1a1a; }
     .kb-import-status { font-size: 12px; color: #e6a23c; }
     .kb-banner { display: none; margin-bottom: 12px; padding: 10px 30px 10px 12px; background: var(--danger-light); border: 1px solid rgba(192, 57, 43, 0.2); border-radius: 4px; color: var(--danger); font-size: 13px; line-height: 1.6; position: relative; }
@@ -477,6 +470,10 @@
 
     /* 3) AI 生成刁钻测试题 */
     .gen-question-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .eval-history { font-size: 12px; color: #64748b; line-height: 1.7; margin-bottom: 10px; padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+    .eval-history .eval-run { color: #475569; }
+    .eval-history .eval-run.passed { color: #15803d; }
+    .eval-history .eval-run.failed { color: #b91c1c; }
     .gen-question-status { font-size: 12px; color: var(--text-muted); }
     .gen-questions-result { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
     .gen-q-card { border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: var(--radius-md); background: var(--bg-soft); padding: 10px 12px; font-size: 13px; line-height: 1.7; }
@@ -812,17 +809,6 @@
     /* ==================== V4.0：模板库 / 快捷键 / 备份 ==================== */
     .polish-btn { white-space: nowrap; padding: 0; }
     .polish-btn.loading { opacity: 0.6; pointer-events: none; }
-    .tpl-box { width: 860px; max-width: calc(100vw - 32px); max-height: 90vh; display: flex; flex-direction: column; }
-    .tpl-body { overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; }
-    .tpl-search { margin-bottom: 0; }
-    .tpl-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; padding-right: 2px; }
-    .tpl-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-card); transition: var(--transition); }
-    .tpl-item:hover { border-color: var(--primary); background: var(--primary-light); }
-    .tpl-item-main { flex: 1; min-width: 0; }
-    .tpl-item-name { font-size: 13px; font-weight: 600; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .tpl-item-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-    .tpl-empty { color: var(--text-muted); font-size: 13px; text-align: center; padding: 26px 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius-md); }
-    .tpl-hint { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
     .shortcut-list { display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; }
     .shortcut-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 13px; color: var(--text-main); }
     .shortcut-keys { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -1093,28 +1079,24 @@
     <!-- 主内容区 -->
     <div class="main-content">
       <div class="header">
-        <!-- v1.60 品牌区（仅追加，不改动原有 DOM）：品牌名 + 纯 CSS 下拉菜单 -->
-        <div class="brand-nav">
-          <div class="brand-dropdown">
-            <button type="button" class="brand-dropdown-trigger" aria-haspopup="true" aria-expanded="false" onclick="toggleBrandDropdown(event)">功能导航 ▾</button>
-            <div class="brand-dropdown-menu" role="menu">
-              <a role="menuitem" href="#" onclick="switchTab('edit');closeBrandDropdown();return false;">提示词工程</a>
-              <a role="menuitem" class="disabled" aria-disabled="true" href="#" onclick="closeBrandDropdown();return false;">项目管理（开发中）</a>
-            </div>
-          </div>
-        </div>
         <div class="header-title">当前项目： <span id="current-name">请选择左侧项目</span><span id="public-badge" class="public-badge" style="display:none;">公共参考项目 · 只读</span></div>
         <div class="header-right">
-          <button type="button" class="icon-btn" id="system-admin-btn" onclick="openSystemAdmin()" title="系统管理（用户/权限/备份）" aria-label="系统管理" style="display:none;">⚙️</button>
-          <button type="button" class="icon-btn" id="audit-log-btn" onclick="openAuditLogPanel()" title="审计日志（黑匣子）" aria-label="审计日志" style="display:none;">📜</button>
-          <button type="button" class="icon-btn" id="shortcuts-btn" onclick="openShortcutsModal()" title="快捷键面板" aria-label="快捷键面板">⌨️</button>
-          <button type="button" class="icon-btn" id="backup-export-btn" onclick="exportBackup()" title="导出备份 JSON" aria-label="导出备份 JSON" style="display:none;">💾</button>
-          <button type="button" class="icon-btn" id="backup-import-btn" onclick="document.getElementById('backup-import-file').click()" title="导入备份 JSON（覆盖全部数据）" aria-label="导入备份 JSON" style="display:none;">📥</button>
-          <input type="file" id="backup-import-file" accept=".json,application/json" style="display: none;" onchange="handleBackupImport(event.target.files)" />
-          <button type="button" class="icon-btn" id="api-key-btn" onclick="openModelConfigModal()" title="模型配置中心" aria-label="模型配置中心">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          </button>
-          <button type="button" class="icon-btn" id="logout-btn" onclick="logoutSession()" title="退出登录" aria-label="退出登录">⏻</button>
+          <!-- V1.63：用户与权限 / 备份 / 审计 / 快捷键 / 模型配置 / 退出登录 统一收进「系统管理」 -->
+          <div class="sys-menu" id="sys-menu">
+            <button type="button" class="icon-btn" id="sys-menu-btn" onclick="toggleSysMenu(event)" title="系统管理" aria-label="系统管理" aria-haspopup="true" aria-expanded="false">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </button>
+            <div class="sys-menu-panel" id="sys-menu-panel" role="menu">
+              <button type="button" class="sys-menu-item" id="sys-menu-users" role="menuitem" onclick="openSystemAdmin('users');closeSysMenu();">用户与权限</button>
+              <button type="button" class="sys-menu-item" id="sys-menu-backups" role="menuitem" onclick="openSystemAdmin('backups');closeSysMenu();">备份</button>
+              <button type="button" class="sys-menu-item" id="sys-menu-audit" role="menuitem" onclick="openAuditLogPanel();closeSysMenu();">审计日志（黑匣子）</button>
+              <div class="sys-menu-divider" id="sys-menu-divider-1"></div>
+              <button type="button" class="sys-menu-item" id="sys-menu-shortcuts" role="menuitem" onclick="openShortcutsModal();closeSysMenu();">快捷键面板</button>
+              <button type="button" class="sys-menu-item" id="sys-menu-models" role="menuitem" onclick="openModelConfigModal();closeSysMenu();">模型配置中心</button>
+              <div class="sys-menu-divider" id="sys-menu-divider-2"></div>
+              <button type="button" class="sys-menu-item" id="sys-menu-logout" role="menuitem" onclick="logoutSession()">退出登录</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1134,8 +1116,6 @@
           <div class="card-header">
             <span>📝 提示词编辑</span>
             <div class="card-header-actions">
-              <button class="btn-link" id="apply-template-btn" type="button" onclick="openTemplateApplyModal()">📂 应用模板</button>
-              <button class="btn-link" id="restore-template-btn" type="button" onclick="restoreInitialTemplate()" style="display: none;">↩️ 恢复初始模板</button>
               <button class="btn-link polish-btn" id="polish-system" type="button" onclick="polishLayer('SYSTEM')">✨ AI 润色</button>
             </div>
           </div>
@@ -1174,8 +1154,13 @@
           <div class="card-body kb-main-grid">
             <div class="kb-left">
               <div class="kb-toolbar">
-                <input id="kb-search" class="kb-search-input" type="text" placeholder="🔍 搜索知识库（问题或答案关键字）..." oninput="renderKbList()" />
+                <input id="kb-search" class="kb-search-input" type="text" placeholder="🔍 搜索知识库（问题或答案关键字）..." oninput="onKbSearchInput()" />
                 <span class="kb-count" id="kb-count">共 0 条</span>
+                <span class="kb-pager" id="kb-pager">
+                  <button type="button" class="btn-link" id="kb-prev-btn" onclick="goKbPage(-1)">上一页</button>
+                  <span class="kb-page-info" id="kb-page-info"></span>
+                  <button type="button" class="btn-link" id="kb-next-btn" onclick="goKbPage(1)">下一页</button>
+                </span>
                 <span class="kb-import-status" id="kb-import-status"></span>
               </div>
               <div class="kb-batch-bar">
@@ -1231,6 +1216,7 @@
               <button class="btn btn-secondary" id="gen-questions-btn" type="button" onclick="generateAdversarialQuestions()">AI 生成测试用例</button>
               <span class="gen-question-status" id="gen-questions-status"></span>
             </div>
+            <div class="eval-history" id="eval-history-panel" style="display:none;">最近评测：暂无</div>
             <div class="gen-q-actions" id="gen-questions-actions" style="display: none;">
               <button class="btn-plain" id="eval-export-btn" data-dropdown data-portal-anchor type="button" onclick="toggleExportMenu(this, event, 'eval')">⬇️ 导出 ▾</button>
               <button class="btn-plain btn-plain-lg" id="regression-run-btn" type="button" onclick="runRegressionTest()">⚡ 一键执行回归测试</button>
@@ -1363,7 +1349,10 @@
       <div class="modal-body">
         <div id="modal-message" style="display: none; color: #606266; margin-bottom: 10px;"></div>
         <div id="modal-company-select-container" style="display:none;">
-          <select id="modal-company-select" class="form-input"></select>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select id="modal-company-select" class="form-input" style="flex:1;"></select>
+            <button type="button" id="modal-new-company-toggle" class="btn btn-plain" style="white-space:nowrap;">创建客户或行业</button>
+          </div>
         </div>
         <div id="modal-new-company-container" style="display:none; margin-top: 10px;">
           <input type="text" id="modal-new-company-input" class="form-input" placeholder="请输入新客户或行业" />
@@ -1438,6 +1427,16 @@
             <div class="form-group">
               <label class="form-label" for="model-temperature">温度</label>
               <input id="model-temperature" class="form-input" type="number" min="0" max="2" step="0.1" value="0.7" />
+            </div>
+          </div>
+          <div class="model-form-row">
+            <div class="form-group">
+              <label class="form-label" for="model-price-input">输入单价（元/百万 token）</label>
+              <input id="model-price-input" class="form-input" type="number" min="0" step="0.01" placeholder="0 = 不计成本" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="model-price-output">输出单价（元/百万 token）</label>
+              <input id="model-price-output" class="form-input" type="number" min="0" step="0.01" placeholder="0 = 不计成本" />
             </div>
           </div>
           <div class="form-group">
@@ -1521,6 +1520,8 @@
           <button type="button" class="sysadmin-tab" data-satab="features" onclick="switchSystemAdminTab('features')">功能权限</button>
           <button type="button" class="sysadmin-tab" data-satab="grants" onclick="switchSystemAdminTab('grants')">项目只读授权</button>
           <button type="button" class="sysadmin-tab" data-satab="backups" onclick="switchSystemAdminTab('backups')">备份与运维</button>
+          <button type="button" class="sysadmin-tab" data-satab="recycle" onclick="switchSystemAdminTab('recycle')">♻️ 回收站</button>
+          <button type="button" class="sysadmin-tab" data-satab="usage" onclick="switchSystemAdminTab('usage')">📊 用量看板</button>
         </div>
 
         <div class="sysadmin-pane" data-sapane="users">
@@ -1572,13 +1573,27 @@
 
         <div class="sysadmin-pane" data-sapane="grants" style="display:none;">
           <div class="sysadmin-toolbar">
-            <select id="grant-project-select" class="form-input" style="width: 340px;" onchange="loadProjectGrants()"></select>
-            <button type="button" class="btn-link" onclick="loadProjectGrants()">刷新</button>
+            <label class="form-label" style="margin:0;">客户/行业</label>
+            <select id="grant-company-select" class="form-input" style="width: 280px;" onchange="loadGrantPanelData()"></select>
+            <button type="button" class="btn-link" onclick="loadGrantPanelData()">刷新</button>
             <span id="grant-status" class="sysadmin-status"></span>
           </div>
-          <div class="sysadmin-hint" style="margin-bottom:10px;">被授权人可只读访问该项目的提示词、知识库与提交记录；所有写操作会被服务端拒绝。</div>
-          <div id="grant-user-list" class="sysadmin-list"></div>
-          <div style="margin-top:14px;"><button type="button" class="btn-plain" onclick="saveProjectGrants()">保存只读授权</button></div>
+          <div class="sysadmin-hint" style="margin-bottom:8px;">被授权对象可只读访问范围内的项目提示词、知识库与提交记录；所有写操作会被服务端拒绝。客户级授权对该客户下后续新建项目自动生效。</div>
+          <div class="sysadmin-section-title">授权范围</div>
+          <div class="sysadmin-toolbar">
+            <label class="sysadmin-check"><input type="radio" name="grant-scope" value="company" checked onchange="renderGrantScope()" /> 整个客户/行业下的所有项目</label>
+            <label class="sysadmin-check"><input type="radio" name="grant-scope" value="project" onchange="renderGrantScope()" /> 客户下的指定项目</label>
+          </div>
+          <div id="grant-project-picker" class="sysadmin-list" style="display:none; margin-bottom:8px;"></div>
+          <div class="sysadmin-section-title">授权对象（可多选）</div>
+          <div class="sysadmin-list" id="grant-team-list"></div>
+          <div class="sysadmin-list" id="grant-user-list" style="margin-top:8px;"></div>
+          <div style="margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <button type="button" class="btn-plain" onclick="saveProjectGrants()">保存只读授权</button>
+            <span class="sysadmin-hint">「所有团队」仅超级管理员可选；团管只能授权本团队成员。</span>
+          </div>
+          <div class="sysadmin-section-title" style="margin-top:16px;">当前生效授权</div>
+          <div id="grant-current-list" class="sysadmin-hint">加载中…</div>
         </div>
 
         <div class="sysadmin-pane" data-sapane="backups" style="display:none;">
@@ -1589,6 +1604,7 @@
             <button type="button" class="btn btn-plain" onclick="document.getElementById('backup-import-file').click()">导入备份</button>
             <button type="button" class="btn-link" onclick="loadBackupList()">刷新</button>
           </div>
+          <input type="file" id="backup-import-file" accept=".json,application/json" style="display: none;" onchange="handleBackupImport(event.target.files)" />
           <div id="sysadmin-runtime" class="sysadmin-hint" style="margin-bottom:10px;"></div>
           <div class="sysadmin-table-wrap">
             <table class="table sysadmin-table">
@@ -1597,6 +1613,67 @@
             </table>
           </div>
           <div class="sysadmin-hint" style="margin-top:10px;">全量备份包含 bcrypt 密码哈希与加密后的模型 Key，属敏感文件；跨机恢复模型 Key 需同时复制 data/.vault-key。</div>
+        </div>
+
+        <div class="sysadmin-pane" data-sapane="recycle" style="display:none;">
+          <div class="sysadmin-toolbar">
+            <select id="recycle-type-select" class="form-input" style="width: 170px;" onchange="loadRecycleList(1)">
+              <option value="all">全部类型</option>
+              <option value="company">客户/行业</option>
+              <option value="project">项目</option>
+              <option value="kb">知识条目</option>
+              <option value="snapshot">提交记录</option>
+            </select>
+            <button type="button" class="btn-link" onclick="loadRecycleList()">刷新</button>
+            <span id="recycle-status" class="sysadmin-status"></span>
+          </div>
+          <div class="sysadmin-table-wrap">
+            <table class="table sysadmin-table">
+              <thead><tr><th>类型</th><th>名称</th><th>删除时间</th><th>剩余</th><th>操作</th></tr></thead>
+              <tbody id="recycle-tbody"><tr><td colspan="5" style="text-align:center;color:#909399;">加载中...</td></tr></tbody>
+            </table>
+          </div>
+          <div class="sysadmin-toolbar" style="margin-top:10px;">
+            <button type="button" class="btn-link" id="recycle-prev" onclick="goRecyclePage(-1)">上一页</button>
+            <span id="recycle-page-info" class="sysadmin-hint"></span>
+            <button type="button" class="btn-link" id="recycle-next" onclick="goRecyclePage(1)">下一页</button>
+            <span class="sysadmin-hint" id="recycle-retention-hint"></span>
+          </div>
+        </div>
+
+        <div class="sysadmin-pane" data-sapane="usage" style="display:none;">
+          <div class="sysadmin-toolbar">
+            <select id="usage-days-select" class="form-input" style="width: 150px;" onchange="loadUsageSummary()">
+              <option value="7">最近 7 天</option>
+              <option value="30" selected>最近 30 天</option>
+              <option value="90">最近 90 天</option>
+              <option value="365">最近 365 天</option>
+            </select>
+            <button type="button" class="btn-link" onclick="loadUsageSummary()">刷新</button>
+            <span id="usage-status" class="sysadmin-status"></span>
+          </div>
+          <div id="usage-summary-cards" class="sysadmin-list"></div>
+          <div class="sysadmin-section-title" style="margin-top:14px;">按模型</div>
+          <div class="sysadmin-table-wrap">
+            <table class="table sysadmin-table">
+              <thead><tr><th>模型</th><th>请求</th><th>输入 token</th><th>输出 token</th><th>估算成本(元)</th></tr></thead>
+              <tbody id="usage-model-tbody"></tbody>
+            </table>
+          </div>
+          <div class="sysadmin-section-title" style="margin-top:14px;">按用户</div>
+          <div class="sysadmin-table-wrap">
+            <table class="table sysadmin-table">
+              <thead><tr><th>用户</th><th>请求</th><th>Token</th><th>估算成本(元)</th></tr></thead>
+              <tbody id="usage-user-tbody"></tbody>
+            </table>
+          </div>
+          <div class="sysadmin-section-title" style="margin-top:14px;">按天</div>
+          <div class="sysadmin-table-wrap">
+            <table class="table sysadmin-table">
+              <thead><tr><th>日期</th><th>请求</th><th>Token</th><th>估算成本(元)</th></tr></thead>
+              <tbody id="usage-day-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -1647,24 +1724,6 @@
       </div>
       <div class="diff-body" id="diff-body">
         <div class="diff-loading">点击快照行「对比当前」后在此展示行级差异…</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- V4.0 阶段一：应用模板 Modal（搜索 + 列表 + 应用/删除） -->
-  <div id="template-apply-modal" class="modal-mask">
-    <div class="modal-box tpl-box">
-      <div class="modal-header">
-        <span>📂 应用模板</span>
-        <button type="button" class="model-close-btn" onclick="closeTemplateApplyModal()" title="关闭" aria-label="关闭">×</button>
-      </div>
-      <div class="modal-body tpl-body">
-        <input type="text" id="template-search" class="form-input tpl-search" placeholder="🔍 按模板名称搜索..." autocomplete="off" oninput="renderTemplateList()" />
-        <div class="tpl-list" id="template-list"></div>
-        <div class="tpl-hint">点击「应用」会将模板内容填入当前系统提示词；应用后可用「↩️ 恢复初始模板」回退。</div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-link" style="color: #606266;" type="button" onclick="closeTemplateApplyModal()">关闭</button>
       </div>
     </div>
   </div>
@@ -1815,6 +1874,8 @@
         setTimeout(() => { refreshEditorLayoutAfterTabShow(); }, 0);
       } else if (tab === 'kb') {
         loadKbList();
+      } else if (tab === 'eval') {
+        loadEvalHistory();
       } else if (tab === 'snapshot') {
         loadSnapshots();
       }
@@ -1900,14 +1961,16 @@
         applyFeatureGate(d.user.features || null);
         const isManager = ['superadmin', 'teamadmin'].includes(d.user.role);
         const isSuper = d.user.role === 'superadmin';
-        const auditBtn = document.getElementById('audit-log-btn');
-        if (auditBtn) auditBtn.style.display = isSuper ? 'inline-flex' : 'none';
-        const adminBtn = document.getElementById('system-admin-btn');
-        if (adminBtn) adminBtn.style.display = isManager ? 'inline-flex' : 'none';
-        const backupExportBtn = document.getElementById('backup-export-btn');
-        if (backupExportBtn) backupExportBtn.style.display = isSuper ? 'inline-flex' : 'none';
-        const backupImportBtn = document.getElementById('backup-import-btn');
-        if (backupImportBtn) backupImportBtn.style.display = isSuper ? 'inline-flex' : 'none';
+        // V1.63：统一「系统管理」菜单按角色显示条目
+        const setVisible = (id, visible) => {
+          const el = document.getElementById(id);
+          if (el) el.style.display = visible ? 'block' : 'none';
+        };
+        setVisible('sys-menu-users', isManager);
+        setVisible('sys-menu-backups', isManager);
+        setVisible('sys-menu-audit', isSuper);
+        const sysDivider = document.getElementById('sys-menu-divider-1');
+        if (sysDivider) sysDivider.style.display = (isManager || isSuper) ? 'block' : 'none';
       } catch (e) { /* 静默 */ }
     }
     async function logoutSession() {
@@ -1916,28 +1979,29 @@
     }
     window.logoutSession = logoutSession;
 
-    // ---------- 模块四：功能导航下拉（点击展开/收起，点击选项或空白处自动收起） ----------
-    function setBrandDropdownOpen(dd, open) {
-      dd.classList.toggle('open', open);
-      const trigger = dd.querySelector('.brand-dropdown-trigger');
+    // ---------- V1.63：顶部「系统管理」下拉（仅图标，hover 显示名称） ----------
+    function setSysMenuOpen(open) {
+      const menu = document.getElementById('sys-menu');
+      if (!menu) return;
+      menu.classList.toggle('open', open);
+      const trigger = document.getElementById('sys-menu-btn');
       if (trigger) trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
-    function toggleBrandDropdown(ev) {
-      ev.stopPropagation();
-      const dd = ev.currentTarget.closest('.brand-dropdown');
-      setBrandDropdownOpen(dd, !dd.classList.contains('open'));
+    function toggleSysMenu(ev) {
+      if (ev) ev.stopPropagation();
+      const menu = document.getElementById('sys-menu');
+      if (!menu) return;
+      setSysMenuOpen(!menu.classList.contains('open'));
     }
-    function closeBrandDropdown() {
-      document.querySelectorAll('.brand-dropdown.open').forEach((dd) => setBrandDropdownOpen(dd, false));
-    }
-    window.toggleBrandDropdown = toggleBrandDropdown;
-    window.closeBrandDropdown = closeBrandDropdown;
-    // 点击 .brand-dropdown 之外的空白区域即收起；Esc 键同样收起
+    function closeSysMenu() { setSysMenuOpen(false); }
+    window.toggleSysMenu = toggleSysMenu;
+    window.closeSysMenu = closeSysMenu;
+    // 点击菜单外空白 / Esc 自动收起
     document.addEventListener('click', (ev) => {
-      if (!ev.target.closest('.brand-dropdown')) closeBrandDropdown();
+      if (!ev.target.closest('.sys-menu')) closeSysMenu();
     });
     document.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Escape') closeBrandDropdown();
+      if (ev.key === 'Escape') closeSysMenu();
     });
 
     // ---------- V5 终极 QA F3：审计日志（黑匣子）面板 ----------
@@ -2243,8 +2307,9 @@
       document.getElementById('save-kb-btn').style.display = 'none';
       document.getElementById('kb-text').value = '';
 
-      loadKbList();
+      loadKbList(1);
       loadSnapshots();
+      loadEvalHistory();
 
       // 模块一：高亮层 / 高度 / Token 统计刷新（选中项目后主动刷新一次）
       refreshAllEditorMirrors();
@@ -2313,8 +2378,14 @@
     }
     window.escapeHtml = escapeHtml;
 
-    let currentKbData = []; // 知识库缓存（搜索/冲突检测基于此渲染，避免重复请求）
-    let selectedKbIds = []; // V5 阶段二：知识库批量多选
+    let currentKbData = []; // 当前页知识库数据（服务端分页）
+    let selectedKbIds = []; // V5 阶段二：知识库批量多选（跨页保留）
+    let kbPage = 1;
+    let kbTotal = 0;
+    let kbActiveKeyword = '';
+    let kbSearchTimer = null;
+    let kbMaxFileMb = 20;
+    const KB_PAGE_SIZE = 50;
 
     /** 重置知识库多选（切换项目 / 批量删除后调用） */
     function resetKbSelection() {
@@ -2384,51 +2455,101 @@
     window.toggleKbSelection = toggleKbSelection;
     window.toggleSelectAllKb = toggleSelectAllKb;
 
-    async function loadKbList() {
+    async function loadClientConfig() {
+      try {
+        const d = await safeFetchJson('/api/auth/config');
+        if (d && d.success && d.data && d.data.kb_max_file_mb) kbMaxFileMb = Number(d.data.kb_max_file_mb) || 20;
+      } catch (e) { /* 使用默认 20MB */ }
+    }
+    window.loadClientConfig = loadClientConfig;
+
+    async function loadKbList(page) {
       if (!activeProjectId) return;
+      if (typeof page === 'number' && page > 0) kbPage = page;
       const projectIdAtFetch = activeProjectId;
       const container = document.getElementById('kb-list-container');
+      const searchEl = document.getElementById('kb-search');
+      const keyword = (searchEl ? searchEl.value : '').trim();
       container.innerHTML = '<div class="kb-empty">加载中...</div>';
       try {
-        const d = await safeFetchJson(`/api/kb/list?project_id=${encodeURIComponent(projectIdAtFetch)}`);
+        const params = new URLSearchParams({ project_id: projectIdAtFetch, page: String(kbPage), page_size: String(KB_PAGE_SIZE) });
+        if (keyword) params.set('q', keyword);
+        const d = await safeFetchJson('/api/kb/list?' + params.toString());
         // 项目守卫：响应回来前已切换项目则丢弃，避免旧项目 KB 覆盖新项目
         if (activeProjectId !== projectIdAtFetch) return;
         currentKbData = d && d.success && Array.isArray(d.data) ? d.data : [];
+        kbTotal = d && Number.isFinite(Number(d.total)) ? Number(d.total) : currentKbData.length;
+        kbActiveKeyword = keyword;
+        const totalPages = Math.max(1, Math.ceil(kbTotal / KB_PAGE_SIZE));
+        if (kbPage > totalPages) { kbPage = totalPages; return loadKbList(totalPages); }
         renderKbList();
       } catch (e) {
         if (activeProjectId !== projectIdAtFetch) return;
         currentKbData = [];
+        kbTotal = 0;
         container.innerHTML = `<div class="kb-error">${escapeHtml(e.message)}</div>`;
+        updateKbPager();
       }
     }
+    window.loadKbList = loadKbList;
 
-    /** 按关键字过滤并渲染知识库列表（问题+答案，trim 后大小写不敏感），同时更新计数 */
+    /** 服务端搜索：300ms 防抖后回到第一页 */
+    function onKbSearchInput() {
+      if (kbSearchTimer) clearTimeout(kbSearchTimer);
+      kbSearchTimer = setTimeout(() => { kbPage = 1; loadKbList(1); }, 300);
+    }
+    window.onKbSearchInput = onKbSearchInput;
+
+    function goKbPage(delta) {
+      const totalPages = Math.max(1, Math.ceil(kbTotal / KB_PAGE_SIZE));
+      const next = kbPage + delta;
+      if (next < 1 || next > totalPages) return;
+      loadKbList(next);
+    }
+    window.goKbPage = goKbPage;
+
+    function updateKbPager() {
+      const totalPages = Math.max(1, Math.ceil(kbTotal / KB_PAGE_SIZE));
+      const info = document.getElementById('kb-page-info');
+      const prev = document.getElementById('kb-prev-btn');
+      const next = document.getElementById('kb-next-btn');
+      if (info) info.innerText = `第 ${kbPage} / ${totalPages} 页`;
+      if (prev) prev.disabled = kbPage <= 1;
+      if (next) next.disabled = kbPage >= totalPages;
+    }
+
+    /** 一次性拉取全部知识库（冲突检测用，按 200/页循环） */
+    async function fetchAllKbItems(projectId) {
+      const items = [];
+      for (let page = 1; page <= 100; page++) {
+        const d = await safeFetchJson(`/api/kb/list?project_id=${encodeURIComponent(projectId)}&page=${page}&page_size=200`);
+        if (!d || !d.success) break;
+        const rows = Array.isArray(d.data) ? d.data : [];
+        items.push(...rows);
+        const total = Number(d.total) || items.length;
+        if (rows.length === 0 || items.length >= total) break;
+      }
+      return items;
+    }
+
+    /** 渲染当前页知识库列表（搜索与分页均由服务端完成） */
     function renderKbList() {
       const container = document.getElementById('kb-list-container');
       if (!container) return;
-      const searchEl = document.getElementById('kb-search');
-      const keyword = (searchEl ? searchEl.value : '').trim().toLowerCase();
-      const all = Array.isArray(currentKbData) ? currentKbData : [];
-      const matched = keyword
-        ? all.filter((item) => `${item.question || ''}\n${item.answer || ''}`.toLowerCase().includes(keyword))
-        : all;
+      const rows = Array.isArray(currentKbData) ? currentKbData : [];
       const countEl = document.getElementById('kb-count');
       if (countEl) {
-        countEl.innerHTML = keyword
-          ? `共 ${all.length} 条 / 匹配 <b>${matched.length}</b> 条`
-          : `共 <b>${all.length}</b> 条`;
+        countEl.innerHTML = kbActiveKeyword
+          ? `共 ${kbTotal} 条 / 搜索「${escapeHtml(kbActiveKeyword)}」`
+          : `共 <b>${kbTotal}</b> 条`;
       }
-      if (all.length === 0) {
-        container.innerHTML = '<div class="kb-empty">暂无知识条目</div>';
+      if (kbTotal === 0 || rows.length === 0) {
+        container.innerHTML = `<div class="kb-empty">${kbActiveKeyword ? '无匹配条目' : '暂无知识条目'}</div>`;
+        updateKbPager();
         updateKbSelectionUI();
         return;
       }
-      if (matched.length === 0) {
-        container.innerHTML = '<div class="kb-empty">无匹配条目</div>';
-        updateKbSelectionUI();
-        return;
-      }
-      container.innerHTML = matched.map((item) => `
+      container.innerHTML = rows.map((item) => `
         <div class="kb-item">
           <label class="kb-item-check-wrap" onclick="event.stopPropagation()">
             <input type="checkbox" class="kb-item-checkbox" data-id="${escapeHtml(String(item.id))}" style="display: inline-block; appearance: auto; -webkit-appearance: auto;" ${selectedKbIds.indexOf(item.id) >= 0 ? 'checked' : ''} onchange="toggleKbSelection(this.getAttribute('data-id'))" aria-label="选择知识条目" />
@@ -2450,6 +2571,7 @@
         const item = (currentKbData || []).find((row) => String(row.id) === String(id));
         renderMarkdownInto(el, item ? item.answer : '');
       });
+      updateKbPager();
       updateKbSelectionUI();
     }
     window.renderKbList = renderKbList;
@@ -2548,16 +2670,15 @@
     async function detectKbConflicts() {
       if (!activeProjectId) { showToast('请先选择一个项目'); return; }
       const projectIdAtCheck = activeProjectId;
-      if (!Array.isArray(currentKbData) || currentKbData.length === 0) {
-        await loadKbList(); // 当前项目无数据时先加载
-        if (activeProjectId !== projectIdAtCheck) return; // 加载期间已切项目：丢弃
-      }
-      if (!Array.isArray(currentKbData) || currentKbData.length === 0) {
+      // 冲突检测需要全量数据（当前页只有 50 条），按页循环拉取
+      const allItems = await fetchAllKbItems(projectIdAtCheck);
+      if (activeProjectId !== projectIdAtCheck) return;
+      if (!Array.isArray(allItems) || allItems.length === 0) {
         hideKbConflictBanner();
         showToast('暂无知识条目，无法检测冲突');
         return;
       }
-      const conflicts = findKbConflicts(currentKbData);
+      const conflicts = findKbConflicts(allItems);
       if (conflicts.length === 0) {
         hideKbConflictBanner();
         showToast('未发现冲突');
@@ -2634,6 +2755,11 @@
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
           setKbImportStatus(`正在解析 ${i + 1}/${files.length}：${file.name}`);
+          if (file.size > kbMaxFileMb * 1024 * 1024) {
+            failedFiles += 1;
+            errors.push(`${file.name}：文件 ${(file.size / 1024 / 1024).toFixed(1)}MB，超过 ${kbMaxFileMb}MB 上限`);
+            continue;
+          }
           try {
             // v1.61：.md/.txt 直接读纯文本；doc/docx/xls/xlsx/pdf 先调后端 extract-text 提取纯文本
             const ext = (file.name || '').toLowerCase().split('.').pop();
@@ -2689,7 +2815,7 @@
       if (errors.length > 0) {
         alert("导入失败：" + errors.join("；"));
       }
-      loadKbList();
+      loadKbList(9999);
     }
     window.handleKbImport = handleKbImport;
 
@@ -2879,7 +3005,7 @@
           document.getElementById('kb-text').value = '';
           currentKbPairs = [];
           btn.style.display = 'none';
-          loadKbList();
+          loadKbList(9999);
         } else { showToast('入库失败: ' + d.error); }
       } catch (e) { showToast(e.message); }
       btn.innerText = '确认入库'; btn.disabled = false;
@@ -3277,6 +3403,7 @@
     async function startRegression() {
       // ⚠️ 模块二：开始前必须先重置中止标志，保证中止后能重新跑
       isAborted = false;
+      const projectIdAtRun = activeProjectId;
       isRunningRegression = true;
       const runBtn = document.getElementById('regression-run-btn');
       const progress = document.getElementById('test-progress-text');
@@ -3326,9 +3453,67 @@
         setEvalActionButtonsDisabled(false);
         if (progress) progress.innerText = '';
       }
+      // V1.63：评测结果落库（只做历史可追溯，不影响提交/导出）
+      if (results.length > 0 && activeProjectId === projectIdAtRun) {
+        await saveEvalRun(results, projectIdAtRun);
+      }
       // 非中止且有结果才弹汇总报告
       if (!isAborted && results.length > 0) showRegressionReport(results);
     }
+
+    /** V1.63：把回归结果保存到评测历史（服务端重算 L1） */
+    async function saveEvalRun(results, projectId) {
+      if (!projectId || !Array.isArray(results) || results.length === 0) return;
+      try {
+        const d = await safeFetchJson('/api/eval/runs', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_id: projectId,
+            layers: getCurrentLayers(),
+            duration_ms: 0,
+            cases: results.map((r) => ({
+              user_query: r.user_query || '',
+              standard_answer: r.standard_answer || '',
+              bot_reply: r.bot_reply || '',
+              l2: r.l2 || null,
+            })),
+          }),
+        });
+        if (d && d.success && d.data) {
+          showToast(`评测结果已保存：通过 ${d.data.case_passed}/${d.data.case_total}`);
+          loadEvalHistory();
+        } else {
+          showToast('评测结果保存失败：' + ((d && (d.error || d.message)) || '未知错误'));
+        }
+      } catch (e) {
+        showToast('评测结果保存失败：' + ((e && e.message) || '网络异常'));
+      }
+    }
+    window.saveEvalRun = saveEvalRun;
+
+    /** V1.63：显示当前项目最近 5 次评测（仅展示，不参与发布判断） */
+    async function loadEvalHistory() {
+      const el = document.getElementById('eval-history-panel');
+      if (!el) return;
+      if (!activeProjectId) { el.style.display = 'none'; return; }
+      try {
+        const d = await safeFetchJson(`/api/eval/runs?project_id=${encodeURIComponent(activeProjectId)}&limit=5`);
+        const rows = d && d.success && Array.isArray(d.data) ? d.data : [];
+        el.style.display = 'block';
+        if (rows.length === 0) {
+          el.innerHTML = '最近评测：暂无（完成一次「一键回归」后自动保存）';
+          return;
+        }
+        el.innerHTML = '最近评测：' + rows.map((run) => {
+          const time = run.created_at ? new Date(run.created_at).toLocaleString('zh-CN') : '';
+          const statusText = run.status === 'passed' ? `通过 ${run.case_passed}/${run.case_total}` : `未通过 ${run.case_passed}/${run.case_total}`;
+          return `<span class="eval-run ${run.status === 'passed' ? 'passed' : 'failed'}">${statusText} · ${escapeHtml(time)}</span>`;
+        }).join(' ｜ ');
+      } catch (e) {
+        el.style.display = 'none';
+      }
+    }
+    window.loadEvalHistory = loadEvalHistory;
 
     // ==================== 模块三：清除测试用例（彻底清理，保留输入框/发送按钮） ====================
     function clearTestCases() {
@@ -4061,6 +4246,7 @@
           <div class="dropdown-item" onclick="openCreateModal('project', '${id}')">➕ 新项目</div>
           <div class="dropdown-item" onclick="enterMultiSelectMode()">☑️ 多选</div>
           <div class="dropdown-item" onclick="openEditModal('company', '${id}', '${targetItem.name}')">✏️ 重命名</div>
+          ${isManager ? `<div class="dropdown-item" onclick="openCompanyGrants('${id}')">🔗 共享只读…</div>` : ''}
           <div class="dropdown-divider"></div>
           <div class="dropdown-item danger" onclick="deleteItem('${id}', 'companies', '${targetItem.name}')">🗑️ 删除</div>
         `;
@@ -4069,6 +4255,7 @@
           <div class="dropdown-item" onclick="togglePin('${id}', ${isPinned ? 'false' : 'true'})">📌 ${isPinned ? '取消置顶' : '置顶'}</div>
           <div class="dropdown-item" onclick="cloneProject('${id}')">📄 克隆项目</div>
           ${isManager ? `<div class="dropdown-item" onclick="openProjectGrants('${id}')">🔗 共享只读…</div>` : ''}
+          ${isManager ? `<div class="dropdown-item" onclick="openProjectTransfer('${id}')">👤 移交所有权…</div>` : ''}
           <div class="dropdown-item" onclick="enterMultiSelectMode()">☑️ 多选</div>
           <div class="dropdown-item" onclick="openEditModal('project', '${id}', '${targetItem.name}')">✏️ 重命名</div>
           <div class="dropdown-divider"></div>
@@ -4094,7 +4281,7 @@
 
     let modalCallback = null;
     let createSubmitting = false;
-    const NEW_COMPANY_OPTION = '__new_company__';
+    let modalNewParentMode = false; // V1.63：新建项目弹窗中的「创建客户或行业」模式
 
     /**
      * 新建弹窗：
@@ -4122,26 +4309,44 @@
       const companySelect = document.getElementById('modal-company-select');
       const newCompanyContainer = document.getElementById('modal-new-company-container');
       const newCompanyInput = document.getElementById('modal-new-company-input');
+      const newCompanyToggleBtn = document.getElementById('modal-new-company-toggle');
+      // 与「新增项目」按钮完全一致的 14×14 圆+ SVG（第 5 点要求）
+      const NEW_COMPANY_PLUS_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: 0 0 auto;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>';
       if (newCompanyContainer) newCompanyContainer.style.display = 'none';
       if (newCompanyInput) newCompanyInput.value = '';
+      modalNewParentMode = false;
 
-      /** 切换父级选择时：显示/隐藏新父级输入框，并同步子级项目名 placeholder */
+      /** 切换「新建客户/行业」模式：显示输入框、禁用下拉、同步按钮与 placeholder */
       const syncParentMode = () => {
-        const isNewParent = !!companySelect && companySelect.value === NEW_COMPANY_OPTION;
+        const isNewParent = !!modalNewParentMode;
         if (newCompanyContainer) newCompanyContainer.style.display = isNewParent ? 'block' : 'none';
+        if (companySelect) companySelect.disabled = isNewParent || companies.length === 0;
+        if (newCompanyToggleBtn) {
+          newCompanyToggleBtn.innerHTML = isNewParent
+            ? '<span>取消新建</span>'
+            : NEW_COMPANY_PLUS_SVG + '<span>创建客户或行业</span>';
+        }
         if (createInputEl) {
-          createInputEl.placeholder = isNewParent
-            ? '请输入子级项目名称（留空 = 仅创建父级公司）'
-            : '请输入项目名称(留空 = 仅创建客户或行业)';
+          createInputEl.placeholder = '请输入项目名称（留空 = 仅创建公司或行业）';
         }
         if (isNewParent && newCompanyInput) newCompanyInput.focus();
       };
+      const setNewParentMode = (next) => {
+        modalNewParentMode = !!next;
+        syncParentMode();
+      };
+      if (newCompanyToggleBtn) newCompanyToggleBtn.onclick = () => setNewParentMode(!modalNewParentMode);
 
       if (type === 'project') {
         companyContainer.style.display = 'block';
         const existingOptions = companies.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
-        companySelect.innerHTML = `${existingOptions}<option value="${NEW_COMPANY_OPTION}">➕ 创建客户或行业…</option>`;
-        companySelect.value = companyId || (companies.length ? companies[0].id : NEW_COMPANY_OPTION);
+        companySelect.innerHTML = existingOptions || '<option value="">（暂无公司/行业）</option>';
+        if (companies.length === 0) {
+          setNewParentMode(true);
+        } else {
+          companySelect.value = companyId || companies[0].id;
+          setNewParentMode(false);
+        }
         companySelect.onchange = syncParentMode;
         syncParentMode();
       } else {
@@ -4171,9 +4376,10 @@
             else { showToast((d && (d.error || d.message)) || '创建失败'); }
             return;
           }
-          const parentChoice = companySelect.value;
-          const isNewParent = parentChoice === NEW_COMPANY_OPTION;
+          const isNewParent = !!modalNewParentMode;
+          const parentChoice = isNewParent ? '' : companySelect.value;
           const newParentName = newCompanyInput ? newCompanyInput.value.trim() : '';
+          if (!isNewParent && !parentChoice) { showToast('请选择公司/行业，或点击「创建客户或行业」新建'); return; }
           if (isNewParent && !newParentName) {
             showToast('请输入新客户或行业');
             if (newCompanyInput) newCompanyInput.focus();
@@ -4264,7 +4470,7 @@
       document.getElementById('modal-title').innerText = '删除确认';
       document.getElementById('modal-title').style.color = '#303133';
       const deleteMsgEl = document.getElementById('modal-message');
-      deleteMsgEl.innerText = `确定要永久删除【${name}】吗？`;
+      deleteMsgEl.innerText = `确定要删除【${name}】吗？删除后进入回收站，30 天内可恢复。`;
       deleteMsgEl.style.display = 'block';
       deleteMsgEl.style.maxHeight = '';
       deleteMsgEl.style.overflowY = '';
@@ -4283,7 +4489,7 @@
         try {
           const d = await safeFetchJson(`/api/${apiPath}/delete`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id}) });
           if (d.success) { 
-            showToast('删除成功'); closeModal();
+            showToast(d.message || '已移入回收站'); closeModal();
             if (activeProjectId === id) {
               activeProjectId = ''; 
               document.getElementById('current-name').innerText = '请选择左侧项目';
@@ -4486,6 +4692,10 @@
       const keyEl = document.getElementById('model-api-key');
       const tempEl = document.getElementById('model-temperature');
       const activeEl = document.getElementById('model-is-active');
+      const priceInEl = document.getElementById('model-price-input');
+      const priceOutEl = document.getElementById('model-price-output');
+      if (priceInEl) priceInEl.value = '';
+      if (priceOutEl) priceOutEl.value = '';
       if (providerEl) providerEl.value = 'deepseek';
       if (baseEl) baseEl.value = preset.base_url;
       if (nameEl) nameEl.value = preset.model_name;
@@ -4623,6 +4833,10 @@
       const tempEl = document.getElementById('model-temperature');
       const keyEl = document.getElementById('model-api-key');
       const activeEl = document.getElementById('model-is-active');
+      const priceInEl = document.getElementById('model-price-input');
+      const priceOutEl = document.getElementById('model-price-output');
+      if (priceInEl) priceInEl.value = model.price_input_per_m == null ? '' : String(model.price_input_per_m);
+      if (priceOutEl) priceOutEl.value = model.price_output_per_m == null ? '' : String(model.price_output_per_m);
       if (baseEl) baseEl.value = model.base_url || '';
       if (nameEl) nameEl.value = model.model_name || '';
       if (displayEl) displayEl.value = model.display_name || '';
@@ -4667,6 +4881,10 @@
       if (displayEl && displayEl.value.trim()) payload.display_name = displayEl.value.trim();
       if (keyEl && keyEl.value.trim()) payload.api_key = keyEl.value.trim(); // 空则不带，后端回落 .env
       if (tempEl && tempEl.value !== '') payload.temperature = Number(tempEl.value);
+      const priceInEl = document.getElementById('model-price-input');
+      const priceOutEl = document.getElementById('model-price-output');
+      if (priceInEl && priceInEl.value !== '') payload.price_input_per_m = Number(priceInEl.value);
+      if (priceOutEl && priceOutEl.value !== '') payload.price_output_per_m = Number(priceOutEl.value);
       if (activeEl) payload.is_active = !!activeEl.checked;
       if (editingModelId != null) payload.id = editingModelId;
       return payload;
@@ -4837,6 +5055,8 @@
             model_name: model.model_name,
             display_name: model.display_name,
             temperature: model.temperature,
+            price_input_per_m: model.price_input_per_m,
+            price_output_per_m: model.price_output_per_m,
             is_active: true,
           }),
         });
@@ -4913,7 +5133,6 @@
         const isVisible = (el) => !!el && getComputedStyle(el).display !== 'none';
         const layers = [
           () => { if (isVisible(document.getElementById('diff-modal'))) { closeDiffModal(); return true; } return false; },
-          () => { if (isVisible(document.getElementById('template-apply-modal'))) { closeTemplateApplyModal(); return true; } return false; },
           () => { if (isVisible(document.getElementById('shortcuts-modal'))) { closeShortcutsModal(); return true; } return false; },
           () => { if (isVisible(document.getElementById('kb-edit-modal'))) { closeKbEditModal(); return true; } return false; },
           () => { if (isVisible(document.getElementById('clone-project-modal'))) { closeCloneModal(); return true; } return false; },
@@ -5175,10 +5394,6 @@
     }
     window.openConfirmModal = openConfirmModal;
 
-    // ==================== V4.0 阶段一：提示词模板库 ====================
-    let templateCache = [];
-    let templateRestoreState = null; // 应用模板前的三层原文（用于「↩️ 恢复初始模板」）
-
     function getEditorLayerValues() {
       return {
         SYSTEM: document.getElementById('val-system') ? document.getElementById('val-system').value : '',
@@ -5202,142 +5417,6 @@
     }
     window.setEditorLayerValues = setEditorLayerValues;
 
-
-    /** 📂 打开应用模板弹窗（搜索 + 列表） */
-    async function openTemplateApplyModal() {
-      const modal = document.getElementById('template-apply-modal');
-      if (!modal) return;
-      const searchEl = document.getElementById('template-search');
-      if (searchEl) searchEl.value = '';
-      modal.style.display = 'flex';
-      await loadTemplates();
-    }
-    window.openTemplateApplyModal = openTemplateApplyModal;
-
-    function closeTemplateApplyModal() {
-      const modal = document.getElementById('template-apply-modal');
-      if (modal) modal.style.display = 'none';
-    }
-    window.closeTemplateApplyModal = closeTemplateApplyModal;
-
-    async function loadTemplates() {
-      const listEl = document.getElementById('template-list');
-      if (listEl) listEl.innerHTML = '<div class="tpl-empty">加载中...</div>';
-      try {
-        const d = await safeFetchJson('/api/templates');
-        if (d && d.success && Array.isArray(d.data)) {
-          templateCache = d.data;
-        } else {
-          templateCache = [];
-        }
-      } catch (e) {
-        templateCache = [];
-      }
-      renderTemplateList();
-    }
-    window.loadTemplates = loadTemplates;
-
-    /** 渲染模板列表（按名称实时过滤 DOM；应用/删除按钮事件绑定） */
-    function renderTemplateList() {
-      const listEl = document.getElementById('template-list');
-      if (!listEl) return;
-      const searchEl = document.getElementById('template-search');
-      const keyword = (searchEl ? searchEl.value : '').trim().toLowerCase();
-      const filtered = templateCache.filter((tpl) => !keyword || String(tpl.name || '').toLowerCase().includes(keyword));
-      listEl.innerHTML = '';
-      if (templateCache.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'tpl-empty';
-        empty.innerText = '暂无模板。';
-        listEl.appendChild(empty);
-        return;
-      }
-      if (filtered.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'tpl-empty';
-        empty.innerText = '无匹配模板';
-        listEl.appendChild(empty);
-        return;
-      }
-      filtered.forEach((tpl) => {
-        const item = document.createElement('div');
-        item.className = 'tpl-item';
-        const main = document.createElement('div');
-        main.className = 'tpl-item-main';
-        const nameEl = document.createElement('div');
-        nameEl.className = 'tpl-item-name';
-        nameEl.textContent = tpl.name || '(未命名模板)';
-        const meta = document.createElement('div');
-        meta.className = 'tpl-item-meta';
-        meta.textContent = `系统提示词 ${(tpl.system_prompt || '').length} 字`;
-        main.appendChild(nameEl);
-        main.appendChild(meta);
-        const applyBtn = document.createElement('button');
-        applyBtn.className = 'btn-plain';
-        applyBtn.type = 'button';
-        applyBtn.style.padding = '4px 12px';
-        applyBtn.innerText = '应用';
-        applyBtn.addEventListener('click', () => requestApplyTemplate(tpl.id));
-        const delBtn = document.createElement('button');
-        delBtn.className = 'btn btn-link';
-        delBtn.type = 'button';
-        delBtn.style.color = 'var(--danger)';
-        delBtn.innerText = '删除';
-        delBtn.addEventListener('click', () => requestDeleteTemplate(tpl.id));
-        item.appendChild(main);
-        item.appendChild(applyBtn);
-        item.appendChild(delBtn);
-        listEl.appendChild(item);
-      });
-    }
-    window.renderTemplateList = renderTemplateList;
-
-    /** 应用模板：手写确认框 → 写入系统提示词 + 记录可回退状态 + 显示恢复按钮 */
-    function requestApplyTemplate(id) {
-      if (guardPublicProject()) return;
-      const tpl = templateCache.find((t) => String(t.id) === String(id));
-      if (!tpl) { showToast('模板不存在，请刷新列表'); return; }
-      openConfirmModal('应用模板', `将用模板「${tpl.name}」覆盖当前系统提示词，是否继续？`, async () => {
-        // 「恢复初始模板」语义 = 恢复到刚应用的模板原文（撤销应用后的人工改动）
-        templateRestoreState = { SYSTEM: tpl.system_prompt || '' };
-        setEditorLayerValues(templateRestoreState);
-        const restoreBtn = document.getElementById('restore-template-btn');
-        if (restoreBtn) restoreBtn.style.display = 'inline-block';
-        closeModal();
-        closeTemplateApplyModal();
-        showToast(`已应用模板「${tpl.name}」`);
-      });
-    }
-    window.requestApplyTemplate = requestApplyTemplate;
-
-    /** ↩️ 恢复初始模板：恢复到刚应用时的模板原文（撤销应用后的人工修改） */
-    function restoreInitialTemplate() {
-      if (!templateRestoreState) { showToast('没有可恢复的初始内容'); return; }
-      setEditorLayerValues(templateRestoreState);
-      templateRestoreState = null;
-      const restoreBtn = document.getElementById('restore-template-btn');
-      if (restoreBtn) restoreBtn.style.display = 'none';
-      showToast('已恢复初始模板内容');
-    }
-    window.restoreInitialTemplate = restoreInitialTemplate;
-
-    function requestDeleteTemplate(id) {
-      const tpl = templateCache.find((t) => String(t.id) === String(id));
-      if (!tpl) { showToast('模板不存在，请刷新列表'); return; }
-      openConfirmModal('删除模板', `确定删除模板「${tpl.name}」？删除后不可恢复。`, async () => {
-        const d = await safeFetchJson('/api/templates/delete', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
-        });
-        if (d && d.success) {
-          showToast(d.message || '模板已删除');
-          closeModal();
-          await loadTemplates();
-        } else {
-          showToast((d && (d.error || d.message)) || '删除失败');
-        }
-      });
-    }
-    window.requestDeleteTemplate = requestDeleteTemplate;
 
     // ==================== v1.60：AI 润色（系统提示词） ====================
     let polishingLayer = null;
@@ -5532,9 +5611,13 @@
     let systemAdminTeams = [];
     let systemAdminMatrix = null;
     let systemAdminProjects = [];
-    let grantGranted = [];
-    let grantCandidates = [];
+    let systemAdminCompanies = [];
     let grantPreselectProjectId = '';
+    let grantPreselectCompanyId = '';
+    let grantPanel = { company: null, projects: [], teams: [], users: [], grants: { company: [], project: [] } };
+    let grantSelectedProjects = [];
+    let recycleState = { page: 1, pageSize: 20, total: 0, retention: 30 };
+    let usageState = { days: 30 };
 
     function isManagerRole() {
       return !!(currentUserInfo && ['superadmin', 'teamadmin'].includes(currentUserInfo.role));
@@ -5580,6 +5663,8 @@
       else if (tab === 'features') loadFeaturePanel();
       else if (tab === 'grants') loadGrantPanel();
       else if (tab === 'backups') loadBackupList();
+      else if (tab === 'recycle') loadRecycleList();
+      else if (tab === 'usage') loadUsageSummary();
     }
     window.switchSystemAdminTab = switchSystemAdminTab;
 
@@ -5623,6 +5708,7 @@
             : '<button type="button" class="btn-link" style="color:#d9534f;" onclick="setUserStatus(\'' + u.id + '\', \'disabled\')">禁用</button>');
           buttons.push('<button type="button" class="btn-link" onclick="kickUser(\'' + u.id + '\')">强制下线</button>');
           if (currentUserInfo && currentUserInfo.role === 'superadmin') {
+            buttons.push('<button type="button" class="btn-link" onclick="editUserRole(\'' + u.id + '\')">编辑角色</button>');
             buttons.push('<button type="button" class="btn-link" style="color:#d9534f;" onclick="deleteUserAccount(\'' + u.id + '\')">删除</button>');
           }
         }
@@ -5764,7 +5850,7 @@
 
     function deleteUserAccount(id) {
       const user = systemAdminUsers.find(function (u) { return u.id === id; });
-      openConfirmModal('删除账号', '确认删除「' + (user ? user.username : id) + '」？仅当该账号没有任何业务数据时才允许删除，删除不可恢复。', async function () {
+      openConfirmModal('删除账号', '确认删除「' + (user ? user.username : id) + '」？若无业务数据将直接删除；若有数据，下一步可选择「移交数据」或「连同数据进回收站」。', async function () {
         try {
           const d = await safeFetchJson('/api/admin/users/delete', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: id }),
@@ -5774,8 +5860,7 @@
             showToast(d.message || '账号已删除');
             await loadSystemAdminUsers();
           } else if (d && d.code === 'USER_HAS_DATA' && d.counts) {
-            const detail = Object.keys(d.counts).map(function (k) { return k + ' ' + d.counts[k]; }).join('，');
-            showToast('该账号仍有业务数据（' + detail + '），请改用「禁用」');
+            promptForceDeleteUser(id, d.counts);
           } else {
             showToast((d && (d.error || d.message)) || '删除失败');
           }
@@ -5915,79 +6000,191 @@
     }
     window.saveUserFeatures = saveUserFeatures;
 
-    // ---------- 项目只读授权 ----------
+    // ---------- V1.63：只读授权（客户级 / 项目级 × 用户 / 团队 / 所有团队） ----------
+    function grantScopeValue() {
+      const el = document.querySelector('input[name="grant-scope"]:checked');
+      return el ? el.value : 'company';
+    }
+    function grantTargetLabel(type, id) {
+      if (type === 'all') return '所有团队（全部人员）';
+      if (type === 'team') {
+        const t = (grantPanel.teams || []).find(function (x) { return x.id === id; });
+        return '团队：' + (t ? t.name : id);
+      }
+      const u = (grantPanel.users || []).find(function (x) { return x.id === id; });
+      return '用户：' + (u ? u.username : id);
+    }
     async function loadGrantPanel() {
       try {
-        const d = await safeFetchJson('/api/projects');
-        systemAdminProjects = d && d.success && Array.isArray(d.data) ? d.data : [];
-        const sel = document.getElementById('grant-project-select');
+        const results = await Promise.all([safeFetchJson('/api/companies'), safeFetchJson('/api/projects')]);
+        systemAdminCompanies = results[0] && results[0].success && Array.isArray(results[0].data) ? results[0].data : [];
+        systemAdminProjects = results[1] && results[1].success && Array.isArray(results[1].data) ? results[1].data : [];
+        const sel = document.getElementById('grant-company-select');
         if (!sel) return;
-        sel.innerHTML = systemAdminProjects.length ? systemAdminProjects.map(function (p) {
-          return '<option value="' + p.id + '">' + escapeHtml(p.name || p.id) + '</option>';
-        }).join('') : '<option value="">（暂无项目）</option>';
-        if (grantPreselectProjectId && systemAdminProjects.some(function (p) { return p.id === grantPreselectProjectId; })) {
-          sel.value = grantPreselectProjectId;
+        if (grantPreselectProjectId) {
+          const project = systemAdminProjects.find(function (p) { return p.id === grantPreselectProjectId; });
+          if (project && project.company_id) grantPreselectCompanyId = project.company_id;
         }
-        await loadProjectGrants();
-      } catch (e) { showToast((e && e.message) || '加载项目失败'); }
+        const current = grantPreselectCompanyId || (systemAdminCompanies[0] ? systemAdminCompanies[0].id : '');
+        sel.innerHTML = systemAdminCompanies.length
+          ? systemAdminCompanies.map(function (c) { return '<option value="' + c.id + '">' + escapeHtml(c.name || c.id) + '</option>'; }).join('')
+          : '<option value="">（暂无客户/行业）</option>';
+        if (current && systemAdminCompanies.some(function (c) { return c.id === current; })) sel.value = current;
+        await loadGrantPanelData();
+      } catch (e) { showToast((e && e.message) || '加载授权面板失败'); }
     }
     window.loadGrantPanel = loadGrantPanel;
 
-    async function loadProjectGrants() {
-      const sel = document.getElementById('grant-project-select');
+    async function loadGrantPanelData() {
+      const sel = document.getElementById('grant-company-select');
       const statusEl = document.getElementById('grant-status');
-      const projectId = sel ? sel.value : '';
-      if (!projectId) {
-        const listEl = document.getElementById('grant-user-list');
-        if (listEl) listEl.innerHTML = '<div class="sysadmin-hint">暂无可授权项目</div>';
+      const companyId = sel ? sel.value : '';
+      const projectsBox = document.getElementById('grant-project-picker');
+      if (!companyId) {
+        grantPanel = { company: null, projects: [], teams: [], users: [], grants: { company: [], project: [] } };
+        if (projectsBox) projectsBox.innerHTML = '';
+        ['grant-team-list', 'grant-user-list', 'grant-current-list'].forEach(function (id) {
+          const el = document.getElementById(id);
+          if (el) el.innerHTML = '<div class="sysadmin-hint">请先选择客户/行业</div>';
+        });
+        if (statusEl) statusEl.innerText = '暂无客户/行业';
         return;
       }
       if (statusEl) statusEl.innerText = '加载中…';
       try {
-        const d = await safeFetchJson('/api/projects/grants?project_id=' + encodeURIComponent(projectId));
+        const d = await safeFetchJson('/api/projects/grants?company_id=' + encodeURIComponent(companyId));
         if (!d || !d.success) {
           if (statusEl) statusEl.innerText = '';
           showToast((d && (d.error || d.message)) || '加载授权失败');
           return;
         }
-        grantGranted = (d.data.granted || []).map(function (g) { return g.grantee_user_id; });
-        grantCandidates = d.data.candidates || [];
-        renderGrantUserList();
-        if (statusEl) statusEl.innerText = '已授权 ' + grantGranted.length + ' 人';
+        grantPanel = d.data || grantPanel;
+        if (Array.isArray(grantPanel.companies) && grantPanel.companies.length) {
+          systemAdminCompanies = grantPanel.companies;
+          const selectedCompany = grantPanel.company ? grantPanel.company.id : companyId;
+          sel.innerHTML = systemAdminCompanies.map(function (c) {
+            return '<option value="' + c.id + '"' + (c.id === selectedCompany ? ' selected' : '') + '>' + escapeHtml(c.name || c.id) + '</option>';
+          }).join('');
+        }
+        if (grantPreselectProjectId && (grantPanel.projects || []).some(function (p) { return p.id === grantPreselectProjectId; })) {
+          grantSelectedProjects = [grantPreselectProjectId];
+          const radio = document.querySelector('input[name="grant-scope"][value="project"]');
+          if (radio) radio.checked = true;
+          grantPreselectProjectId = '';
+        } else {
+          grantSelectedProjects = grantSelectedProjects.filter(function (id) {
+            return (grantPanel.projects || []).some(function (p) { return p.id === id; });
+          });
+        }
+        renderGrantScope();
+        renderGrantTargets();
+        renderGrantCurrent();
+        if (statusEl) statusEl.innerText = '客户：' + ((grantPanel.company && grantPanel.company.name) || companyId);
       } catch (e) {
         if (statusEl) statusEl.innerText = '';
         showToast((e && e.message) || '加载授权失败');
       }
     }
-    window.loadProjectGrants = loadProjectGrants;
+    window.loadGrantPanelData = loadGrantPanelData;
 
-    function renderGrantUserList() {
-      const box = document.getElementById('grant-user-list');
-      if (!box) return;
-      if (!grantCandidates.length) {
-        box.innerHTML = '<div class="sysadmin-hint">暂无可授权用户（超级管理员与项目所有者天然可读，无需授权）</div>';
-        return;
+    function renderGrantScope() {
+      const picker = document.getElementById('grant-project-picker');
+      if (!picker) return;
+      if (grantScopeValue() !== 'project') { picker.style.display = 'none'; return; }
+      picker.style.display = 'flex';
+      const projects = grantPanel.projects || [];
+      picker.innerHTML = projects.length ? projects.map(function (p) {
+        const checked = grantSelectedProjects.indexOf(p.id) >= 0 ? ' checked' : '';
+        return '<label class="sysadmin-check"><input type="checkbox" value="' + p.id + '"' + checked + ' onchange="toggleGrantProject(this)" /> ' + escapeHtml(p.name || p.id) + '</label>';
+      }).join('') : '<div class="sysadmin-hint">该客户下暂无项目</div>';
+    }
+    window.renderGrantScope = renderGrantScope;
+
+    function toggleGrantProject(cb) {
+      const id = cb.value;
+      if (cb.checked) {
+        if (grantSelectedProjects.indexOf(id) < 0) grantSelectedProjects.push(id);
+      } else {
+        grantSelectedProjects = grantSelectedProjects.filter(function (x) { return x !== id; });
       }
-      box.innerHTML = grantCandidates.map(function (u) {
-        const checked = grantGranted.indexOf(u.id) >= 0 ? ' checked' : '';
-        return '<label class="sysadmin-check"><input type="checkbox" value="' + u.id + '"' + checked + ' /> '
-          + escapeHtml(u.username) + (u.team_name ? ' · ' + escapeHtml(u.team_name) : '') + '</label>';
-      }).join('');
+      renderGrantTargets();
+    }
+    window.toggleGrantProject = toggleGrantProject;
+
+    function currentGrantTargets() {
+      const scope = grantScopeValue();
+      if (scope === 'company') return grantPanel.grants.company || [];
+      const ids = grantSelectedProjects.length ? grantSelectedProjects : (grantPanel.projects || []).map(function (p) { return p.id; });
+      return (grantPanel.grants.project || []).filter(function (g) { return ids.indexOf(g.project_id) >= 0; });
+    }
+
+    function renderGrantTargets() {
+      const teamBox = document.getElementById('grant-team-list');
+      const userBox = document.getElementById('grant-user-list');
+      if (!teamBox || !userBox) return;
+      const existing = currentGrantTargets();
+      const hasUser = function (id) { return existing.some(function (g) { return g.grantee_type === 'user' && g.grantee_id === id; }); };
+      const hasTeam = function (id) { return existing.some(function (g) { return g.grantee_type === 'team' && g.grantee_id === id; }); };
+      const hasAll = existing.some(function (g) { return g.grantee_type === 'all'; });
+      const isSuper = !!(currentUserInfo && currentUserInfo.role === 'superadmin');
+      const teams = grantPanel.teams || [];
+      let teamHtml = '';
+      if (isSuper) {
+        teamHtml += '<label class="sysadmin-check"><input type="checkbox" id="grant-target-all" data-type="all"' + (hasAll ? ' checked' : '') + ' /> 所有团队（全部人员）</label>';
+      }
+      teamHtml += teams.length ? teams.map(function (t) {
+        return '<label class="sysadmin-check"><input type="checkbox" data-type="team" value="' + t.id + '"' + (hasTeam(t.id) ? ' checked' : '') + ' /> 团队：' + escapeHtml(t.name || t.id) + '</label>';
+      }).join('') : '<div class="sysadmin-hint">暂无可授权团队</div>';
+      teamBox.innerHTML = teamHtml;
+      const users = grantPanel.users || [];
+      userBox.innerHTML = users.length ? users.map(function (u) {
+        return '<label class="sysadmin-check"><input type="checkbox" data-type="user" value="' + u.id + '"' + (hasUser(u.id) ? ' checked' : '') + ' /> ' + escapeHtml(u.username) + (u.team_name ? ' · ' + escapeHtml(u.team_name) : '') + '</label>';
+      }).join('') : '<div class="sysadmin-hint">暂无可授权用户</div>';
+    }
+
+    function renderGrantCurrent() {
+      const el = document.getElementById('grant-current-list');
+      if (!el) return;
+      const lines = [];
+      const companyGrants = grantPanel.grants.company || [];
+      if (companyGrants.length) {
+        lines.push('客户级（整个客户/行业）：' + companyGrants.map(function (g) { return grantTargetLabel(g.grantee_type, g.grantee_id); }).join('、'));
+      }
+      const projectGrants = grantPanel.grants.project || [];
+      if (projectGrants.length) {
+        const byProject = new Map();
+        projectGrants.forEach(function (g) {
+          if (!byProject.has(g.project_id)) byProject.set(g.project_id, []);
+          byProject.get(g.project_id).push(grantTargetLabel(g.grantee_type, g.grantee_id));
+        });
+        byProject.forEach(function (labels, pid) {
+          const project = (grantPanel.projects || []).find(function (p) { return p.id === pid; });
+          lines.push('项目「' + (project ? project.name : pid) + '」：' + labels.join('、'));
+        });
+      }
+      el.innerHTML = lines.length ? lines.map(function (line) { return escapeHtml(line); }).join('<br>') : '暂无只读授权';
     }
 
     async function saveProjectGrants() {
-      const sel = document.getElementById('grant-project-select');
-      const projectId = sel ? sel.value : '';
-      if (!projectId) { showToast('请选择项目'); return; }
-      const userIds = Array.from(document.querySelectorAll('#grant-user-list input[type="checkbox"]:checked')).map(function (el) { return el.value; });
+      const sel = document.getElementById('grant-company-select');
+      const companyId = sel ? sel.value : '';
+      if (!companyId) { showToast('请选择客户/行业'); return; }
+      const scope = grantScopeValue();
+      const targets = [];
+      const allBox = document.getElementById('grant-target-all');
+      if (allBox && allBox.checked) targets.push({ type: 'all', id: '' });
+      document.querySelectorAll('#grant-team-list input[data-type="team"]:checked').forEach(function (el) { targets.push({ type: 'team', id: el.value }); });
+      document.querySelectorAll('#grant-user-list input[data-type="user"]:checked').forEach(function (el) { targets.push({ type: 'user', id: el.value }); });
+      if (scope === 'project' && grantSelectedProjects.length === 0) { showToast('请至少勾选一个项目'); return; }
       try {
         const d = await safeFetchJson('/api/projects/grants/save', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project_id: projectId, user_ids: userIds }),
+          body: JSON.stringify({ scope_type: scope, company_id: companyId, project_ids: grantSelectedProjects, targets: targets }),
         });
         if (d && d.success) {
           showToast(d.message || '只读授权已保存');
-          await loadProjectGrants();
+          grantPreselectProjectId = '';
+          await loadGrantPanelData();
         } else {
           showToast((d && (d.error || d.message)) || '保存失败');
         }
@@ -5997,9 +6194,303 @@
 
     function openProjectGrants(projectId) {
       grantPreselectProjectId = projectId || '';
+      grantPreselectCompanyId = '';
       openSystemAdmin('grants');
     }
     window.openProjectGrants = openProjectGrants;
+
+    function openCompanyGrants(companyId) {
+      grantPreselectCompanyId = companyId || '';
+      grantPreselectProjectId = '';
+      openSystemAdmin('grants');
+    }
+    window.openCompanyGrants = openCompanyGrants;
+
+    // ---------- V1.63：回收站 ----------
+    async function loadRecycleList(page) {
+      if (typeof page === 'number' && page > 0) recycleState.page = page;
+      const tbody = document.getElementById('recycle-tbody');
+      if (!tbody) return;
+      const typeEl = document.getElementById('recycle-type-select');
+      const statusEl = document.getElementById('recycle-status');
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#909399;">加载中...</td></tr>';
+      try {
+        const d = await safeFetchJson('/api/recycle/list?type=' + encodeURIComponent(typeEl ? typeEl.value : 'all') + '&page=' + recycleState.page + '&page_size=' + recycleState.pageSize);
+        if (!d || !d.success) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--danger);">' + escapeHtml((d && (d.error || d.message)) || '加载失败') + '</td></tr>';
+          return;
+        }
+        recycleState.total = Number(d.total) || 0;
+        recycleState.retention = Number(d.retention_days) || 30;
+        const rows = Array.isArray(d.data) ? d.data : [];
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#909399;">回收站为空</td></tr>';
+        } else {
+          tbody.innerHTML = rows.map(function (item) {
+            const typeText = { company: '客户/行业', project: '项目', kb: '知识条目', snapshot: '提交记录' }[item.type] || item.type;
+            const remain = item.expire_at ? Math.max(0, Math.ceil((Date.parse(item.expire_at) - Date.now()) / 86400000)) : '—';
+            const sub = item.company_name || item.project_name || '';
+            return '<tr><td>' + typeText + '</td>'
+              + '<td>' + escapeHtml(item.name || item.id) + (sub ? '<div class="sysadmin-hint">' + escapeHtml(sub) + '</div>' : '') + '</td>'
+              + '<td>' + escapeHtml(formatDateTime(item.deleted_at)) + '</td>'
+              + '<td>' + remain + ' 天</td>'
+              + '<td><button type="button" class="btn-link" onclick="restoreRecycleItem(\'' + item.type + '\',\'' + item.id + '\')">恢复</button>'
+              + '<button type="button" class="btn-link" style="color:#d9534f;" onclick="purgeRecycleItem(\'' + item.type + '\',\'' + item.id + '\')">彻底删除</button></td></tr>';
+          }).join('');
+        }
+        const totalPages = Math.max(1, Math.ceil(recycleState.total / recycleState.pageSize));
+        const info = document.getElementById('recycle-page-info');
+        const prev = document.getElementById('recycle-prev');
+        const next = document.getElementById('recycle-next');
+        const hint = document.getElementById('recycle-retention-hint');
+        if (info) info.innerText = '第 ' + recycleState.page + '/' + totalPages + ' 页（共 ' + recycleState.total + ' 条）';
+        if (prev) prev.disabled = recycleState.page <= 1;
+        if (next) next.disabled = recycleState.page >= totalPages;
+        if (hint) hint.innerText = '保留期 ' + recycleState.retention + ' 天，到期自动彻底删除';
+        if (statusEl) statusEl.innerText = '';
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--danger);">' + escapeHtml((e && e.message) || '加载失败') + '</td></tr>';
+      }
+    }
+    window.loadRecycleList = loadRecycleList;
+
+    function goRecyclePage(delta) {
+      const totalPages = Math.max(1, Math.ceil(recycleState.total / recycleState.pageSize));
+      const next = recycleState.page + delta;
+      if (next < 1 || next > totalPages) return;
+      loadRecycleList(next);
+    }
+    window.goRecyclePage = goRecyclePage;
+
+    async function restoreRecycleItem(type, id) {
+      if (!confirm('确认从回收站恢复该记录？')) return;
+      try {
+        const d = await safeFetchJson('/api/recycle/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: type, id: id }) });
+        showToast((d && (d.success ? (d.message || '已恢复') : (d.error || d.message))) || '恢复失败');
+        if (d && d.success) { await loadRecycleList(); if (type === 'company' || type === 'project') await fetchData(); }
+      } catch (e) { showToast((e && e.message) || '恢复失败'); }
+    }
+    window.restoreRecycleItem = restoreRecycleItem;
+
+    async function purgeRecycleItem(type, id) {
+      if (!confirm('彻底删除后不可恢复，确认继续？')) return;
+      try {
+        const d = await safeFetchJson('/api/recycle/purge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: type, id: id }) });
+        showToast((d && (d.success ? (d.message || '已彻底删除') : (d.error || d.message))) || '删除失败');
+        if (d && d.success) await loadRecycleList();
+      } catch (e) { showToast((e && e.message) || '删除失败'); }
+    }
+    window.purgeRecycleItem = purgeRecycleItem;
+
+    // ---------- V1.63：LLM 用量看板 ----------
+    function usageNumber(value) {
+      const num = Number(value) || 0;
+      return num >= 1000000 ? (num / 1000000).toFixed(2) + 'M' : (num >= 1000 ? (num / 1000).toFixed(1) + 'K' : String(num));
+    }
+    async function loadUsageSummary() {
+      const daysEl = document.getElementById('usage-days-select');
+      usageState.days = Number(daysEl ? daysEl.value : 30) || 30;
+      const statusEl = document.getElementById('usage-status');
+      if (statusEl) statusEl.innerText = '加载中…';
+      try {
+        const d = await safeFetchJson('/api/admin/usage/summary?days=' + usageState.days);
+        if (!d || !d.success) {
+          if (statusEl) statusEl.innerText = '';
+          showToast((d && (d.error || d.message)) || '加载用量失败');
+          return;
+        }
+        const data = d.data || {};
+        const totals = data.totals || {};
+        const cards = document.getElementById('usage-summary-cards');
+        if (cards) {
+          cards.innerHTML = [
+            ['请求数', usageNumber(totals.requests)],
+            ['输入 token', usageNumber(totals.prompt_tokens)],
+            ['输出 token', usageNumber(totals.completion_tokens)],
+            ['总 token', usageNumber(totals.total_tokens)],
+            ['估算成本(元)', Number(totals.est_cost || 0).toFixed(4)],
+            ['失败请求', usageNumber(totals.error_requests)]
+          ].map(function (pair) {
+            return '<div class="sysadmin-check" style="min-width:150px;">' + pair[0] + '：<b>' + pair[1] + '</b></div>';
+          }).join('');
+        }
+        const modelBody = document.getElementById('usage-model-tbody');
+        if (modelBody) {
+          const rows = data.by_model || [];
+          modelBody.innerHTML = rows.length ? rows.map(function (row) {
+            return '<tr><td>' + escapeHtml(row.model_name || '—') + (row.provider ? ' <span class="sysadmin-hint">' + escapeHtml(row.provider) + '</span>' : '') + '</td>'
+              + '<td>' + usageNumber(row.requests) + '</td><td>' + usageNumber(row.prompt_tokens) + '</td><td>' + usageNumber(row.completion_tokens) + '</td>'
+              + '<td>' + Number(row.est_cost || 0).toFixed(4) + '</td></tr>';
+          }).join('') : '<tr><td colspan="5" style="text-align:center;color:#909399;">暂无数据</td></tr>';
+        }
+        const userBody = document.getElementById('usage-user-tbody');
+        if (userBody) {
+          const rows = data.by_user || [];
+          userBody.innerHTML = rows.length ? rows.map(function (row) {
+            return '<tr><td>' + escapeHtml(row.username || row.user_id || '—') + '</td><td>' + usageNumber(row.requests) + '</td><td>' + usageNumber(row.total_tokens) + '</td><td>' + Number(row.est_cost || 0).toFixed(4) + '</td></tr>';
+          }).join('') : '<tr><td colspan="4" style="text-align:center;color:#909399;">暂无数据</td></tr>';
+        }
+        const dayBody = document.getElementById('usage-day-tbody');
+        if (dayBody) {
+          const rows = data.by_day || [];
+          dayBody.innerHTML = rows.length ? rows.map(function (row) {
+            return '<tr><td>' + escapeHtml(row.date || '—') + '</td><td>' + usageNumber(row.requests) + '</td><td>' + usageNumber(row.total_tokens) + '</td><td>' + Number(row.est_cost || 0).toFixed(4) + '</td></tr>';
+          }).join('') : '<tr><td colspan="4" style="text-align:center;color:#909399;">暂无数据</td></tr>';
+        }
+        if (statusEl) statusEl.innerText = '统计范围：最近 ' + usageState.days + ' 天';
+      } catch (e) {
+        if (statusEl) statusEl.innerText = '';
+        showToast((e && e.message) || '加载用量失败');
+      }
+    }
+    window.loadUsageSummary = loadUsageSummary;
+
+    // ---------- V1.63：项目所有权移交 ----------
+    async function openProjectTransfer(projectId) {
+      closeMenu();
+      if (!projectId) { showToast('项目 ID 无效'); return; }
+      try {
+        const d = await safeFetchJson('/api/projects/transfer/candidates?project_id=' + encodeURIComponent(projectId));
+        if (!d || !d.success) { showToast((d && (d.error || d.message)) || '加载可移交用户失败'); return; }
+        const users = Array.isArray(d.data) ? d.data : [];
+        if (users.length === 0) { showToast('暂无可移交的用户（同团队无其他账号）'); return; }
+        const project = findProjectById(projectId);
+        const mask = document.createElement('div');
+        mask.className = 'modal-mask';
+        mask.style.display = 'flex';
+        mask.onclick = function (ev) { if (ev.target === mask) mask.remove(); };
+        const box = document.createElement('div');
+        box.className = 'modal-box';
+        box.style.width = '460px';
+        box.innerHTML = '<div class="modal-header">👤 移交项目所有权</div>'
+          + '<div class="modal-body">'
+          + '<div class="sysadmin-hint" style="margin-bottom:8px;">项目：' + escapeHtml(project ? (project.name || projectId) : projectId) + '。移交后，原所有者将不再看到该项目，知识库与提交记录归属一并变更。</div>'
+          + '<div class="sysadmin-list">' + users.map(function (u, index) {
+            return '<label class="sysadmin-check"><input type="radio" name="transfer-target" value="' + u.id + '"' + (index === 0 ? ' checked' : '') + ' /> ' + escapeHtml(u.username) + (u.team_name ? ' · ' + escapeHtml(u.team_name) : '') + '</label>';
+          }).join('') + '</div>'
+          + '</div>'
+          + '<div class="modal-footer"><button type="button" class="btn btn-link" data-act="cancel">取消</button><button type="button" class="btn-plain" data-act="ok">确认移交</button></div>';
+        mask.appendChild(box);
+        document.body.appendChild(mask);
+        box.querySelector('[data-act="cancel"]').onclick = function () { mask.remove(); };
+        box.querySelector('[data-act="ok"]').onclick = async function () {
+          const checked = box.querySelector('input[name="transfer-target"]:checked');
+          if (!checked) { showToast('请选择接收人'); return; }
+          try {
+            const res = await safeFetchJson('/api/projects/transfer', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ project_id: projectId, target_user_id: checked.value }),
+            });
+            if (res && res.success) {
+              mask.remove();
+              showToast(res.message || '移交成功');
+              if (activeProjectId === projectId) {
+                activeProjectId = '';
+                document.getElementById('main-content').style.display = 'none';
+                document.getElementById('empty-state').style.display = 'flex';
+                document.getElementById('current-name').innerText = '请选择左侧项目';
+              }
+              await fetchData();
+            } else {
+              showToast((res && (res.error || res.message)) || '移交失败');
+            }
+          } catch (e) { showToast((e && e.message) || '移交失败'); }
+        };
+      } catch (e) { showToast((e && e.message) || '加载可移交用户失败'); }
+    }
+    window.openProjectTransfer = openProjectTransfer;
+
+    // ---------- V1.63：用户角色 / 强制删除 ----------
+    function editUserRole(id) {
+      const user = systemAdminUsers.find(function (u) { return u.id === id; });
+      if (!user) { showToast('用户不存在，请刷新'); return; }
+      const teams = systemAdminTeams || [];
+      const mask = document.createElement('div');
+      mask.className = 'modal-mask';
+      mask.style.display = 'flex';
+      mask.onclick = function (ev) { if (ev.target === mask) mask.remove(); };
+      const box = document.createElement('div');
+      box.className = 'modal-box';
+      box.style.width = '420px';
+      box.innerHTML = '<div class="modal-header">编辑角色 / 团队</div>'
+        + '<div class="modal-body">'
+        + '<div class="form-group"><label class="form-label">账号</label><div>' + escapeHtml(user.username) + '</div></div>'
+        + '<div class="form-group"><label class="form-label">角色</label><select id="edit-user-role" class="form-input"><option value="user">普通用户</option><option value="teamadmin">团队管理员</option></select></div>'
+        + '<div class="form-group"><label class="form-label">团队</label><select id="edit-user-team" class="form-input"><option value="">（无）</option>'
+        + teams.map(function (t) { return '<option value="' + t.id + '">' + escapeHtml(t.name || t.id) + '</option>'; }).join('')
+        + '</select></div>'
+        + '<div class="sysadmin-hint">团队管理员必须选择团队；保存后该账号需要重新登录，权限立即生效。</div>'
+        + '</div>'
+        + '<div class="modal-footer"><button type="button" class="btn btn-link" data-act="cancel">取消</button><button type="button" class="btn-plain" data-act="ok">保存</button></div>';
+      mask.appendChild(box);
+      document.body.appendChild(mask);
+      const roleSel = box.querySelector('#edit-user-role');
+      const teamSel = box.querySelector('#edit-user-team');
+      roleSel.value = user.role === 'teamadmin' ? 'teamadmin' : 'user';
+      teamSel.value = user.team_id || '';
+      box.querySelector('[data-act="cancel"]').onclick = function () { mask.remove(); };
+      box.querySelector('[data-act="ok"]').onclick = async function () {
+        const role = roleSel.value;
+        const teamId = teamSel.value;
+        if (role === 'teamadmin' && !teamId) { showToast('团队管理员必须选择团队'); return; }
+        try {
+          const d = await safeFetchJson('/api/admin/users/role', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: id, role: role, team_id: teamId }),
+          });
+          if (d && d.success) {
+            mask.remove();
+            showToast(d.message || '角色已更新');
+            await loadSystemAdminUsers();
+          } else {
+            showToast((d && (d.error || d.message)) || '保存失败');
+          }
+        } catch (e) { showToast((e && e.message) || '保存失败'); }
+      };
+    }
+    window.editUserRole = editUserRole;
+
+    function promptForceDeleteUser(id, counts) {
+      const user = systemAdminUsers.find(function (u) { return u.id === id; });
+      const detail = counts ? Object.keys(counts).map(function (k) { return k + ' ' + counts[k]; }).join('，') : '';
+      const mask = document.createElement('div');
+      mask.className = 'modal-mask';
+      mask.style.display = 'flex';
+      mask.onclick = function (ev) { if (ev.target === mask) mask.remove(); };
+      const box = document.createElement('div');
+      box.className = 'modal-box';
+      box.style.width = '480px';
+      box.innerHTML = '<div class="modal-header">⚠️ 强制删除账号</div>'
+        + '<div class="modal-body">'
+        + '<div class="sysadmin-hint" style="margin-bottom:8px;">账号「' + escapeHtml(user ? user.username : id) + '」仍有业务数据：' + escapeHtml(detail) + '。请选择数据处理方式：</div>'
+        + '<label class="sysadmin-check" style="display:flex; margin-bottom:8px;"><input type="radio" name="force-delete-mode" value="transfer" checked /> 把业务数据移交给我（推荐，数据保留）</label>'
+        + '<label class="sysadmin-check" style="display:flex;"><input type="radio" name="force-delete-mode" value="delete" /> 连同业务数据一起删除（进入回收站，30 天内可恢复）</label>'
+        + '</div>'
+        + '<div class="modal-footer"><button type="button" class="btn btn-link" data-act="cancel">取消</button><button type="button" class="btn-plain" style="color:#d9534f;" data-act="ok">确认强制删除</button></div>';
+      mask.appendChild(box);
+      document.body.appendChild(mask);
+      box.querySelector('[data-act="cancel"]').onclick = function () { mask.remove(); };
+      box.querySelector('[data-act="ok"]').onclick = async function () {
+        const modeEl = box.querySelector('input[name="force-delete-mode"]:checked');
+        const mode = modeEl ? modeEl.value : 'transfer';
+        try {
+          const d = await safeFetchJson('/api/admin/users/delete', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: id, force: true, data_mode: mode }),
+          });
+          if (d && d.success) {
+            mask.remove();
+            showToast(d.message || '账号已删除');
+            await loadSystemAdminUsers();
+            await fetchData();
+          } else {
+            showToast((d && (d.error || d.message)) || '删除失败');
+          }
+        } catch (e) { showToast((e && e.message) || '删除失败'); }
+      };
+    }
+    window.promptForceDeleteUser = promptForceDeleteUser;
+
 
     // ---------- 备份与运维 ----------
     async function loadBackupList() {
