@@ -1,15 +1,16 @@
-# NewRock AI Workbench v1.62
+# NewRock AI Workbench v1.63
 
 企业级、多租户的**提示词协作与 AI 资产管理平台**。纯 Node.js（Express 5）+ 原生前端构建，用于集中管理 AI 智能体的提示词、知识库、多模型路由、提交记录与自动化评测。数据通过 SQLite 本地存储；默认仅监听本机 `127.0.0.1:3100`，开启 `LAN_ACCESS` 后可让局域网内设备访问。
 
-> **版本说明**：当前代码为 **v1.60 底座 + v1.61 知识库结构化升级 + v1.62（局域网 / 权限框架 / 置顶 / 跨公司克隆 / 个人 Key / 账号治理 / 备份与运维）**。
-> `package.json`、启动日志与 `/api/health` 统一为 `1.62.0`。
+> **版本说明**：当前代码为 **v1.60 底座 + v1.61 知识库结构化升级 + v1.62（局域网 / 权限框架 / 置顶 / 跨公司克隆 / 个人 Key / 账号治理 / 备份与运维）+ v1.63（评测历史 / 客户级授权 / 回收站 / 知识库分页 / 用量看板 / 所有权移交 / 用户治理 + 顶部精简）**。
+> `package.json`、启动日志与 `/api/health` 统一为 `1.63.0`。
 
 ---
 
 ## 目录
 
 - [功能特性](#功能特性)
+- [v1.63 更新要点](#v163-更新要点)
 - [v1.62 更新要点](#v162-更新要点)
 - [v1.61 更新要点](#v161-更新要点)
 - [技术栈](#技术栈)
@@ -104,6 +105,25 @@
 - 启动自带端口占用检测与自动释放；`SIGINT` / `SIGTERM` 优雅关闭并关闭数据库。
 - 静态资源托管、SPA 回退、`/favicon.ico` 映射品牌 logo。
 - 三套开机自启：systemd、supervisord、Windows 任务计划 + VBS 静默启动（详见 `autostart/`）。
+
+---
+
+## v1.63 更新要点
+
+| 类别 | 内容 |
+|---|---|
+| 评测历史（不拦截） | `POST/GET /api/eval/runs` 落库评测结果（用例/通过/L1 失败/平均分/提示词哈希），评测页显示最近 5 次；提交关联同版评测 `eval_run_id`，但 `eval_pass=1 / eval_score=5.0` 与导出门禁行为保持不变 |
+| 只读授权升级 | 新表 `read_grants`：客户级（覆盖该客户后续新项目）或项目级 × 用户 / 团队 / 所有团队；旧 `project_grants` 自动迁入；公司/项目菜单均有「共享只读…」入口 |
+| 回收站 | 项目 / 公司 / 知识条目 / 提交记录软删除，按批次恢复；保留 30 天自动清理；修复删除项目/公司遗留孤儿知识库与提交记录的问题 |
+| 知识库分页 | `/api/kb/list` 支持 `page/page_size/q`；前端 50 条/页 + 服务端搜索；单文件上限 `KB_MAX_FILE_MB`（默认 20MB），超限返回 413 JSON |
+| 用量/成本看板 | 新增 `llm_usage` 记录每次 LLM 调用的 token/耗时/用途/模型；系统管理「📊 用量看板」按模型/用户/天聚合；模型配置新增输入/输出单价（元/百万 token） |
+| 所有权移交 | 项目菜单「👤 移交所有权…」，同步项目/知识库/提交记录归属；超管任意、团管限本团队 |
+| 用户治理 | 超管可编辑用户角色与团队（团队管理员必须选团队，保存后强制重登）；有数据账号支持强制删除：数据移交超管或连同数据进回收站 |
+| 顶部精简 | 顶部 6 个入口合并为 1 个「系统管理」齿轮菜单（用户与权限/备份/审计/快捷键/模型配置/退出）；删除功能导航与备份 JSON 快捷图标 |
+| 编辑页精简 | 删除「应用模板」「恢复初始模板」入口与模板弹窗；新建项目弹窗「创建客户或行业」改为与「新增项目」一致的圆+图标按钮，文案统一 |
+| 缺陷修复 | AI 润色缺少 `stripCodeFence` 导致 500；团管空团队越权；assign-team 隐式降级；上传 413；L1 中文数字误判；成本舍入；同路径 GET/POST 路由 405 |
+
+> 升级提醒：首次以 v1.63 启动前先把 `data/newrock.db`（含 `-wal/-shm`）复制到 `data/backup-v1.63/`。迁移只新增表/列，不重建、不删除旧数据；启动前仍会自动做文件级快照。
 
 ---
 
@@ -331,17 +351,18 @@ bash autostart/start-newrock.sh stop
 
 ## API 概览
 
-服务启动时注册 **68 条** `/api` 路由（启动日志会逐条打印）。主要分组：
+服务启动时注册 **77 条** `/api` 路由（启动日志会逐条打印）。主要分组：
 
 | 分组 | 代表端点 |
 |---|---|
 | 鉴权 / 探活 | `POST /api/auth/login`、`/logout`、`/register`、`/change-password`；`GET /api/auth/me`、`/api/auth/config`、`/api/health` |
-| 团队 / 用户 / 审计 | `GET /api/teams`、`POST /api/teams/create`、`GET /api/admin/users`、`POST /api/admin/users/create`、`/features`、`/status`、`/kick`、`/delete`、`/reset-password`、`/assign-team`、`GET /api/admin/features`、`POST /api/admin/features/matrix`、`GET /api/admin/backups`、`POST /api/admin/backups/run`、`GET /api/admin/audit-logs` |
+| 团队 / 用户 / 审计 | `GET /api/teams`、`POST /api/teams/create`、`GET /api/admin/users`、`POST /api/admin/users/create`、`/role`、`/features`、`/status`、`/kick`、`/delete`（支持 `force + data_mode`）、`/reset-password`、`/assign-team`、`GET /api/admin/features`、`POST /api/admin/features/matrix`、`GET /api/admin/backups`、`POST /api/admin/backups/run`、`GET /api/admin/audit-logs`、`GET /api/admin/usage/summary` |
 | 语境（遗留） | `GET /api/context/get`、`POST /api/context/save`、`POST /api/context/extract` |
 | 知识库 | `POST /api/kb/parse`、`/parse-markdown`、`/extract-text`、`/save`、`/update`、`/delete`；`GET /api/kb/list`、`/export` |
 | 提示词 / 快照 | `POST /api/prompt/assemble`、`/api/snapshots/create`、`/delete`；`GET /api/snapshots/list`、`/detail`、`/api/gate/export` |
-| 客户 / 项目 | `GET/POST /api/companies*`、`/api/projects*`、`POST /api/projects/clone`（支持 `target_company_id` / `copy_mode`）、`/api/projects/pin`、`GET /api/projects/grants`、`POST /api/projects/grants/save`、`GET /api/projects/export_zip` |
-| 评测 / 对话 | `POST /api/eval/run`、`/generate_questions`、`GET /api/eval/export`、`POST /api/chat/reply` |
+| 客户 / 项目 | `GET/POST /api/companies*`、`/api/projects*`、`POST /api/projects/clone`（支持 `target_company_id` / `copy_mode`）、`/api/projects/pin`、`GET /api/projects/grants`（客户级/项目级）、`POST /api/projects/grants/save`、`GET /api/projects/transfer/candidates`、`POST /api/projects/transfer`、`GET /api/projects/export_zip` |
+| 评测 / 对话 | `POST /api/eval/run`、`/generate_questions`、`POST/GET /api/eval/runs`（评测历史）、`GET /api/eval/export`、`POST /api/chat/reply` |
+| 回收站 | `GET /api/recycle/list`、`POST /api/recycle/restore`、`POST /api/recycle/purge` |
 | 模型 / 设置 | `GET/POST /api/settings/api-key`、`GET /api/models`、`POST /api/models/save`、`/delete`、`/test` |
 | 模板 / 润色 | `GET /api/templates`、`POST /api/templates/save`、`/delete`、`/extract`、`POST /api/ai/polish` |
 | 备份 | `GET /api/backup/export`、`POST /api/backup/import` |
@@ -377,12 +398,15 @@ bash autostart/start-newrock.sh stop
 
 ## 已知限制
 
-1. **发布门禁仍为占位实现**：`/api/snapshots/create` 直接写入 `eval_pass=1`、`eval_score=5.0`，因此 `/api/gate/export` 目前不会真正拦截；回归测试结果也不落库、不关联快照（计划在 V1.63 落地）。
-2. **变量/语境配置 UI 已移除**（2026-11-25）：前端不再有「插入变量」、语境卡片、变量高亮与 tooltip；后端 `/api/context/*` 与 `applyContextReplace` 仅保留兼容，前端不再发送 `context_data`。
+1. **发布门禁按产品决定保持不拦截**：`/api/snapshots/create` 仍写入 `eval_pass=1`、`eval_score=5.0`，`/api/gate/export` 继续放行；V1.63 的评测结果已落库并关联提交（`eval_run_id`），仅用于历史追溯，不参与提交/导出判断。
+2. **变量/语境配置与模板库 UI 已移除**（2026-11-25）：前端不再有「插入变量」、语境卡片、变量高亮、模板应用入口；后端 `/api/context/*`、`/api/templates*` 与 `applyContextReplace` 仅保留兼容。
 3. **全量备份中的模型 Key 依赖本机主密钥**：`model_configs.api_key` 由 `data/.vault-key` 加密；跨机恢复时需同时复制该文件，否则导入后这些 Key 无法解密（界面会提示，需重新填写）。
 4. **会话为内存存储**：重启服务后需重新登录；禁用 / 踢下线 / 重置密码通过 `session_version` 立即失效。
-5. **删除账号有限制**：仅允许删除「无任何业务数据」的账号；有项目 / 知识库 / 快照 / 模型 / 模板的账号请使用「禁用」。
-6. **V1.63 待办**：真实发布门禁（评测结果落库 + 导出拦截）、软删除与回收站、知识库大文件上限与分页、用量/成本看板、可选 HTTPS、项目所有权移交。
+5. **删除账号分两种**：无业务数据可直接删除；有数据时超管可选择强制删除（业务数据移交给当前超管 / 连同数据进回收站，30 天内可恢复）。
+6. **回收站保留 30 天**：到期自动串行清理；彻底删除不可恢复。
+7. **未做 HTTPS**：局域网仍为 HTTP 明文，仅用于可信内网。
+8. **真实浏览器自动化受本机限制**：本机系统策略拒绝 Edge 的命名管道/IPC，改用 jsdom DOM 级回归（见 `QA_REPORT_v1.63.md`）；像素级 UI 仍需人工抽查。
+9. **V1.64 候选**：真实发布门禁、可选 HTTPS、知识库自动分块、用量导出/告警、回收站保留期配置。
 
 ---
 
