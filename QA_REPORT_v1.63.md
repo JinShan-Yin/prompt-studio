@@ -1,18 +1,25 @@
-# V1.63 QA 报告
+# V1.63.1 QA 报告
 
-日期：2026-11-25 ｜ 环境：本机 Windows / Node v24 ｜ 生产 3100 未触碰
+日期：2026-11-26 ｜ 环境：本机 Windows / Node v24 ｜ 生产 3100 未触碰
 
 ## 一、结论
 
 | 测试 | 结果 | 说明 |
 |---|---|---|
-| 后端冒烟 `scripts/smoke-v1.63.mjs` | **86 / 86 通过** | 临时数据目录，含 mock LLM、授权、公司置顶、回收站、分页、用量、移交、强制删除、备份兼容 |
-| 页面全按钮回归（DOM 级） | **91 / 91 通过** | jsdom 执行真实页面脚本 + 真实 3101 服务 + mock LLM；覆盖登录/改密、四个 Tab、侧边栏全部菜单（含公司整体置顶）、系统管理六个面板、模型配置、回收站、用量、退出 |
-| 事件处理函数清单校验 | **101 / 101 已定义** | `scripts/qa-button-inventory.mjs` 生成清单，回归末尾逐个断言 `typeof window[name] === 'function'` |
+| 后端冒烟 `scripts/smoke-v1.63.mjs` | **95 / 95 通过** | 临时数据目录，含 mock LLM、授权、公司置顶、回收站、分页、用量、移交、强制删除、备份兼容、备份策略/清理 |
+| 页面全按钮回归（DOM 级） | **93 / 93 通过** | jsdom 执行真实页面脚本 + 真实 3101 服务 + mock LLM；覆盖登录/改密、四个 Tab、侧边栏全部菜单（含公司整体置顶）、系统管理六个面板、备份策略/清理、模型配置、回收站、用量、退出 |
+| 事件处理函数清单校验 | **102 / 102 已定义** | `scripts/qa-button-inventory.mjs` 生成清单，回归末尾逐个断言 `typeof window[name] === 'function'` |
 | 未捕获 JS 异常 | **0** | 回归全程收集 `jsdomError`，页面导航类提示已排除 |
 | 非预期 alert | **0** | 文件导入/操作错误均走 toast |
 
 生产库零变更：所有测试使用 `.qa-test/data`（3101）与 `data/tmp/smoke163-*`，未打开 `data/newrock.db`。
+
+## 一·补充：V1.63.1 备份策略专项
+
+- 默认策略：启动前快照 **关闭**；每日 **10:00** 自动备份；自动/手动备份保留 **7 份**。
+- 冒烟验证：策略字段、启动后无启动快照、启动后 3 秒内无自动备份、构造 9 份 auto + 2 份 startup + 孤儿边车后调用 prune → auto=7 / startup=0 / 孤儿边车被删、普通用户 403。
+- DOM 验证：备份面板显示「10:00 / 保留 7 份 / 启动前快照已关闭」摘要；「清理旧备份」按钮可执行。
+- 现有历史启动快照会在升级后首次启动时按“关闭”策略自动清理（属于预期行为）。
 
 ## 二、真实浏览器说明（环境限制，需知）
 
@@ -55,15 +62,15 @@
 ```powershell
 # 后端冒烟（零依赖、临时数据目录）
 node scripts/smoke-v1.63.mjs
-# 期望 RESULT pass=86 fail=0
+# 期望 RESULT pass=95 fail=0
 
 # 页面全按钮回归（需要 jsdom，仅装在 .qa-test，不污染仓库依赖）
 powershell -NoProfile -ExecutionPolicy Bypass -File .qa-test\run-dom.ps1
-# 期望 RESULT pass=91 fail=0
+# 期望 RESULT pass=93 fail=0
 
 # 按钮清单
 node scripts/qa-button-inventory.mjs
-# 期望 [qa] 共 101 个页面事件处理函数
+# 期望 [qa] 共 102 个页面事件处理函数
 ```
 
 > `.qa-test/` 已被 `.gitignore` 忽略；其中 `dom-e2e.mjs`、`run-dom.ps1`、`e2e.mjs`、`run-e2e.ps1` 为本轮回归产物，可按需保留复用。
@@ -75,7 +82,7 @@ node scripts/qa-button-inventory.mjs
 - 任意加载失败都会把错误写入授权对象/当前生效授权区域，不再一直「加载中」；
 - 新增 `autostart/restart-newrock.ps1`（管理员运行：停旧进程 → 后台启动 → 健康检查打印版本）。
 
-重启后该面板即可正常使用；此项不影响后端冒烟与 DOM 回归结果（91/91）。
+重启后该面板即可正常使用；此项不影响后端冒烟与 DOM 回归结果（93/93）。
 
 ## 七、残余风险
 

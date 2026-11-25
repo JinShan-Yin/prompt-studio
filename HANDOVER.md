@@ -9,16 +9,16 @@
 
 ## 0. 一句话现状
 
-项目是 **NewRock AI Workbench v1.63**，单机 Node.js + Express 5 + SQLite，生产服务跑在 `http://127.0.0.1:3100`（LAN 模式）。V1.63 已完成并通过冒烟 86/86 + 页面全按钮回归 91/91；**生产 3100 仍是 v1.62 进程，需要管理员权限重启后才加载 v1.63 服务端改动**（前端静态文件刷新即生效）。
+项目是 **NewRock AI Workbench v1.63.1**，单机 Node.js + Express 5 + SQLite，生产服务跑在 `http://127.0.0.1:3100`（LAN 模式）。V1.63.1 已完成并通过冒烟 95/95 + 页面全按钮回归 93/93；**生产 3100 当前运行 v1.63.0，需要管理员权限重启后才加载 v1.63.1 服务端改动**（前端静态文件刷新即生效）。
 
 ---
 
 ## 1. 接手前必须知道的 6 件事
 
 1. **生产服务不要随意重启**：3100 是提升权限进程（PID 以实际为准），普通 shell `taskkill` 可能 Access denied。前端静态改动 Ctrl+F5；`server.js` 改动需管理员重启。一键重启：双击 `autostart\restart-newrock-elevated.bat`（弹 UAC 点“是”），或管理员 PowerShell 运行 `autostart\restart-newrock.ps1`；日志写入 `logs\restart-elevated.log`。
-2. **生产库是 `data/newrock.db`**，禁止用于测试。V1.63 迁移只加表/列，启动前会自动做一次文件级快照（`data/backups/startup`）。
+2. **生产库是 `data/newrock.db`**，禁止用于测试。V1.63.1 起**启动前快照默认关闭**；如需在结构迁移前备份，先手动「立即备份」，或临时设 `BACKUP_STARTUP_ENABLED=true`。
 3. **QA 必须隔离**：端口 3101 + `NEWROCK_DATA_DIR=.qa-test/data`；测试结束停进程并清理。生产库当前仍是 2 用户、0 业务数据、5 个模型配置（未被本轮测试触碰）。
-4. **Git**：本轮改动尚未提交（`public/index.html`、`server.js`、`scripts/smoke-v1.63.mjs`、文档）；提交前 `git status -sb` 确认。**不要提交** `.env`、`data/`、`logs/`、`.session-headers.jsonl`、`.qa-test/`。
+4. **Git**：本轮改动以 `git status -sb` 为准；提交前确认。**不要提交** `.env`、`data/`、`logs/`、`.session-headers.jsonl`、`.qa-test/`。
 5. **浏览器自动化受本机限制**：Edge 在本机因命名管道/mojo 被系统拒绝而无法启动（即使完全访问权限），真实浏览器 E2E 跑不了；本轮改用 jsdom DOM 级回归（见 §6）。
 6. **门禁策略按产品决定保持现状**：`/api/snapshots/create` 仍写死 `eval_pass=1 / eval_score=5.0`，`/api/gate/export` 仍放行；评测结果只落库做历史，不拦截提交/导出。
 
@@ -30,15 +30,15 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | `1.63.0`（package.json / 启动日志 / `/api/health`） |
+| 版本 | `1.63.1`（package.json / 启动日志 / `/api/health`） |
 | 入口 | `server.js`（约 4.3k 行） |
 | 前端 | `public/index.html`（约 6.6k 行，单文件原生 HTML/CSS/JS） |
 | 数据库 | `data/newrock.db`（SQLite + WAL） |
 | 主密钥 / 会话密钥 | `data/.vault-key` / `data/.session-secret` |
-| 路由数 | **78 条** `/api` |
+| 路由数 | **79 条** `/api` |
 | 生产 URL | http://127.0.0.1:3100 |
-| 冒烟 | `node scripts/smoke-v1.63.mjs`（86 项，临时目录，零依赖） |
-| 页面回归 | `.qa-test\run-dom.ps1`（jsdom，91 项；依赖已装在 `.qa-test`，仓库依赖未变） |
+| 冒烟 | `node scripts/smoke-v1.63.mjs`（95 项，临时目录，零依赖） |
+| 页面回归 | `.qa-test\run-dom.ps1`（jsdom，93 项；依赖已装在 `.qa-test`，仓库依赖未变） |
 
 启动：
 
@@ -46,7 +46,7 @@
 cd D:\prompt-studio
 npm start        # = node server.js
 curl.exe -s http://127.0.0.1:3100/api/health
-# 期望 version=1.63.0 / db_ok / mode=lan
+# 期望 version=1.63.1 / db_ok / mode=lan
 ```
 
 > 不要改这两个「3000」：`EVAL_KB_MAX=3000`、关闭超时 `3000`。
@@ -76,7 +76,15 @@ curl.exe -s http://127.0.0.1:3100/api/health
 
 ### 3.3 数据迁移（幂等）
 
-`eval_runs` 7 列；`companies/projects/kb_items/snapshots` 各 3 个软删列；`read_grants`、`llm_usage` 新表；`model_configs` 2 个单价列；6 个索引；`recycle_retention_days=30`。启动前文件快照先于迁移执行。
+`eval_runs` 7 列；`companies/projects/kb_items/snapshots` 各 3 个软删列；`read_grants`、`llm_usage` 新表；`model_configs` 2 个单价列；6 个索引；`recycle_retention_days=30`。V1.63.1 无结构变更；启动前快照默认关闭，迁移前请手动备份或临时开启。
+
+### 3.4 V1.63.1 备份策略
+
+- 自动备份：**每日 10:00**（`BACKUP_AUTO_HOUR`）在线备份一次，保留 **7 份**（`BACKUP_AUTO_KEEP`）；删除了旧版「每次启动 60 秒后首次备份」。
+- 启动前快照：**默认完全关闭**（`BACKUP_STARTUP_ENABLED=false`），启动时清理历史启动快照；临时开启时保留 3 份，只复制非空 WAL，不复制 `-shm`。
+- 漏备份兜底：最近 auto 不存在或超过 24h，启动 5 分钟后补备一次，随后回到每日 10:00。
+- 清理：`POST /api/admin/backups/prune`（超管，审计 Danger）；删 .db 同步删 `-wal/-shm`，启动自动清理孤儿边车。
+- 备份面板显示总量/策略/下次自动时间，并新增「清理旧备份」按钮。
 
 ---
 
@@ -87,8 +95,8 @@ server.js                    后端：路由、DB/迁移、权限、加密、备
 public/index.html            前端全部 UI/JS
 public/login.html            登录/注册/首登改密
 lib/markdownChunker.js       Markdown 切片
-scripts/smoke-v1.63.mjs      后端 86 项冒烟
-scripts/qa-button-inventory.mjs  页面事件清单（101 个）
+scripts/smoke-v1.63.mjs      后端 95 项冒烟
+scripts/qa-button-inventory.mjs  页面事件清单（102 个）
 scripts/smoke-v1.62.mjs      历史冒烟（保留参考）
 .qa-test/                    QA 产物（已忽略）：dom-e2e.mjs / run-dom.ps1 / e2e.mjs / run-e2e.ps1
 autostart/                   Windows/Linux 自启脚本
@@ -140,11 +148,11 @@ node scripts/smoke-v1.63.mjs
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .qa-test\run-dom.ps1
-# 期望 RESULT pass=91 fail=0
+# 期望 RESULT pass=93 fail=0
 ```
 
 - 环境：3101 + `.qa-test/data` 全新库；`.qa-test` 内 mock LLM 3301；jsdom 执行真实页面脚本。
-- 覆盖：登录/首登改密、四个 Tab、侧边栏全部菜单、系统管理六面板、模型配置、回收站、用量、退出；末尾校验清单内 101 个事件处理函数全部已定义。
+- 覆盖：登录/首登改密、四个 Tab、侧边栏全部菜单、系统管理六面板、备份策略与清理、模型配置、回收站、用量、退出；末尾校验清单内 102 个事件处理函数全部已定义。
 - **真实浏览器 E2E 不可用**：本机系统策略拒绝 Edge 的命名管道/IPC（mojo 0x5），Playwright/Edge 启动即崩溃；如需像素级回归，换一台不受限的机器或用真实浏览器人工抽查。
 
 ### 6.3 隔离 QA（人工）
@@ -167,6 +175,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .qa-test\run-dom.ps1
 9. **删除账号**：无数据直接删；有数据必须走强制删除二选一。
 10. **回滚注意**：升级后软删的数据在 v1.62 代码看来仍存在，回滚前先恢复需要保留的数据。
 11. **前端已更新但服务端未重启时**：授权面板会显示「服务端版本不匹配，请管理员重启 3100」并禁用保存，不再报「缺少 project_id」或一直「加载中」。
+12. **启动前快照默认关闭（产品决定）**：升级/迁移前请先「立即备份」或临时设 `BACKUP_STARTUP_ENABLED=true`；关闭状态下启动会清理 `data/backups/startup/` 历史快照。
 
 ---
 
@@ -212,4 +221,12 @@ feat(v1.63): 顶部系统管理合并 / 模板入口移除 / 文案与图标精�
 feat(v1.63): 评测落库、授权升级、回收站、知识库分页、用量看板、所有权移交、用户治理
 test(v1.63): 86 项冒烟 + 91 项页面全按钮回归
 docs(v1.63): README/UPDATE/QA/HANDOVER 同步
+fix(v1.63): 旧全量备份导入自动迁移 project_grants
+feat(v1.63): 父级公司整体置顶
+fix(v1.63): 授权面板/公司置顶在旧服务端下的提示 + 一键重启脚本
+fix(v1.63): 公司置顶菜单文案
+fix(v1.63): 重启脚本 UTF-8 BOM 兼容 Windows PowerShell 5.1
+feat(v1.63.1): 每日 10:00 备份、保留 7 份、关闭启动前快照、清理接口
+test(v1.63.1): 95 项冒烟 + 93 项 DOM 回归
+docs(v1.63.1): README/UPDATE/QA/HANDOVER/.env.example
 ```

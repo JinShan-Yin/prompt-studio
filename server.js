@@ -40,7 +40,7 @@ import { parseMarkdownChunks } from './lib/markdownChunker.js'; // v1.61：本�
 // 一、常量与运行环境
 // ============================================================
 
-const APP_VERSION = '1.63.0';
+const APP_VERSION = '1.63.1';
 const PORT = Number(process.env.PORT) || 3100;
 /** V1.63：知识库单文件上传上限（MB），前端通过 /api/auth/config 读取 */
 const KB_MAX_FILE_MB = Math.max(1, Math.min(200, Number(process.env.KB_MAX_FILE_MB) || 20));
@@ -327,6 +327,28 @@ const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const BACKUP_STARTUP_DIR = path.join(BACKUP_DIR, 'startup');
 const BACKUP_AUTO_DIR = path.join(BACKUP_DIR, 'auto');
 
+// ---------- V1.63.1：备份策略（.env 可调） ----------
+function envFlag(name, defaultValue) {
+  const raw = String(process.env[name] === undefined ? '' : process.env[name]).trim();
+  if (!raw) return defaultValue;
+  if (/^(1|true|yes|on)$/i.test(raw)) return true;
+  if (/^(0|false|no|off)$/i.test(raw)) return false;
+  return defaultValue;
+}
+function envInt(name, defaultValue, min, max) {
+  const value = Number(process.env[name]);
+  if (!Number.isFinite(value)) return defaultValue;
+  return Math.min(max, Math.max(min, Math.floor(value)));
+}
+/** 启动前快照默认关闭；如需在结构迁移前临时开启，设 BACKUP_STARTUP_ENABLED=true */
+const BACKUP_STARTUP_ENABLED = envFlag('BACKUP_STARTUP_ENABLED', false);
+const BACKUP_STARTUP_KEEP = envInt('BACKUP_STARTUP_KEEP', 3, 1, 90);
+const BACKUP_AUTO_ENABLED = envFlag('BACKUP_AUTO_ENABLED', true);
+/** 每日自动备份的本地小时（0-23），默认 10 点 */
+const BACKUP_AUTO_HOUR = envInt('BACKUP_AUTO_HOUR', 10, 0, 23);
+/** 自动/手动备份保留份数，默认 7 天 */
+const BACKUP_AUTO_KEEP = envInt('BACKUP_AUTO_KEEP', 7, 1, 90);
+
 function initBackupDirs() {
   for (const dir of [BACKUP_DIR, BACKUP_STARTUP_DIR, BACKUP_AUTO_DIR]) {
     try {
@@ -344,8 +366,23 @@ function fileStamp() {
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
-/** 只保留最近 keep 个 .db 备份 */
+/** 删除单个备份及其 -wal/-shm 边车，返回释放字节数 */
+function removeBackupFile(fullPath) {
+  let freed = 0;
+  let removed = false;
+  for (const target of [fullPath, fullPath + '-wal', fullPath + '-shm']) {
+    try {
+      const stat = fs.statSync(target);
+      freed += stat.size;
+      fs.unlinkSync(target);
+      if (target === fullPath) removed = true;
+    } catch (e) { /* 文件不存在/占用则跳过 */ }
+  }
+  return { freed, removed };
+}
+/** 只保留最近 keep 个 .db 备份，并清理已删 .db 的孤儿边车 */
 function pruneBackupDir(dir, keep) {
+  const result = { removed: 0, freed_bytes: 0 };
   try {
     const files = fs.readdirSync(dir)
       .filter((name) => name.endsWith('.db'))
@@ -355,11 +392,50 @@ function pruneBackupDir(dir, keep) {
       })
       .filter(Boolean)
       .sort((a, b) => b.mtime - a.mtime);
-    for (const item of files.slice(keep)) {
-      try { fs.unlinkSync(item.full); } catch (e) { /* ignore */ }
+    for (const item of files.slice(Math.max(0, keep))) {
+      const removed = removeBackupFile(item.full);
+      if (removed.removed) result.removed += 1;
+      result.freed_bytes += removed.freed;
+    }
+    // 清理没有同名 .db 的孤儿 -wal/-shm（旧版本 prune 只删 .db 留下的）
+    for (const name of fs.readdirSync(dir)) {
+      if (!/\.db-(wal|shm)$/.test(name)) continue;
+      const baseName = name.replace(/\.db-(wal|shm)$/, '.db');
+      if (fs.existsSync(path.join(dir, baseName))) continue;
+      try {
+        const stat = fs.statSync(path.join(dir, name));
+        result.freed_bytes += stat.size;
+        fs.unlinkSync(path.join(dir, name));
+      } catch (e) { /* ignore */ }
     }
   } catch (e) {
     console.warn('[backup] 清理旧备份失败:', dir, e.message);
+  }
+  return result;
+}
+/** 按当前策略清理全部备份（启动时/手动“清理旧备份”共用） */
+function pruneAllBackups() {
+  const startupKeep = BACKUP_STARTUP_ENABLED ? Math.max(0, BACKUP_STARTUP_KEEP) : 0;
+  const startup = pruneBackupDir(BACKUP_STARTUP_DIR, startupKeep);
+  const auto = pruneBackupDir(BACKUP_AUTO_DIR, BACKUP_AUTO_KEEP);
+  return {
+    removed: startup.removed + auto.removed,
+    freed_bytes: startup.freed_bytes + auto.freed_bytes,
+    kept_startup: Math.max(0, startupKeep),
+    kept_auto: BACKUP_AUTO_KEEP,
+  };
+}
+/** 最近一份 auto 备份的 mtime（毫秒）；没有则返回 0 */
+function latestBackupMtime(dir) {
+  try {
+    let latest = 0;
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith('.db')) continue;
+      try { latest = Math.max(latest, fs.statSync(path.join(dir, name)).mtimeMs); } catch (e) { /* ignore */ }
+    }
+    return latest;
+  } catch (e) {
+    return 0;
   }
 }
 
@@ -370,7 +446,7 @@ async function createDatabaseBackup(kind = 'auto') {
   const dest = path.join(dir, `${kind === 'startup' ? 'startup' : 'auto'}-${fileStamp()}.db`);
   await db.backup(dest);
   try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (e) { /* ignore */ }
-  pruneBackupDir(dir, kind === 'startup' ? 5 : 14);
+  pruneBackupDir(dir, kind === 'startup' ? BACKUP_STARTUP_KEEP : BACKUP_AUTO_KEEP);
   return dest;
 }
 
@@ -396,17 +472,22 @@ function listBackupFiles(limit = 50) {
 /** 启动前文件级快照：在打开数据库、执行任何迁移之前执行 */
 function snapshotBeforeStartup() {
   try {
-    if (!fs.existsSync(DB_PATH)) return '';
     initBackupDirs();
+    // V1.63.1：默认完全关闭启动前快照；关闭时顺带清理历史启动快照（保留策略视为 0）
+    if (!BACKUP_STARTUP_ENABLED) {
+      const result = pruneBackupDir(BACKUP_STARTUP_DIR, 0);
+      if (result.removed > 0) console.log(`[backup] 启动前快照已关闭，已清理历史启动快照 ${result.removed} 份`);
+      return '';
+    }
+    if (!fs.existsSync(DB_PATH)) return '';
     const dest = path.join(BACKUP_STARTUP_DIR, `startup-${fileStamp()}.db`);
     fs.copyFileSync(DB_PATH, dest);
-    for (const suffix of ['-wal', '-shm']) {
-      const side = DB_PATH + suffix;
-      if (fs.existsSync(side)) {
-        try { fs.copyFileSync(side, dest + suffix); } catch (e) { /* 忽略单文件失败 */ }
-      }
+    // 只复制非空 WAL；-shm 由 SQLite 自动重建，无需保留
+    const walSide = DB_PATH + '-wal';
+    if (fs.existsSync(walSide)) {
+      try { if (fs.statSync(walSide).size > 0) fs.copyFileSync(walSide, dest + '-wal'); } catch (e) { /* ignore */ }
     }
-    pruneBackupDir(BACKUP_STARTUP_DIR, 5);
+    pruneBackupDir(BACKUP_STARTUP_DIR, Math.max(1, BACKUP_STARTUP_KEEP));
     console.log('[backup] 启动前数据库快照:', dest);
     return dest;
   } catch (e) {
@@ -2424,7 +2505,38 @@ route(['POST'], '/api/admin/features/matrix', async (req, res) => {
 route(['GET'], '/api/admin/backups', async (req, res) => {
   const admin = currentSessionUser(req);
   if (!admin || admin.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可查看备份' });
-  return sendJson(res, 200, { success: true, data: listBackupFiles(50) });
+  const data = listBackupFiles(50);
+  const sizeBytes = data.reduce((sum, item) => sum + (Number(item.size) || 0), 0);
+  return sendJson(res, 200, {
+    success: true,
+    data,
+    policy: {
+      startup_enabled: BACKUP_STARTUP_ENABLED,
+      startup_keep: BACKUP_STARTUP_ENABLED ? BACKUP_STARTUP_KEEP : 0,
+      auto_enabled: BACKUP_AUTO_ENABLED,
+      auto_hour: BACKUP_AUTO_HOUR,
+      auto_keep: BACKUP_AUTO_KEEP,
+    },
+    totals: { count: data.length, size_bytes: sizeBytes },
+    next_auto_at: nextAutoBackupAt || null,
+  });
+});
+
+/** V1.63.1：按策略手动清理旧备份（超管） */
+route(['POST'], '/api/admin/backups/prune', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || admin.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可清理备份' });
+  try {
+    const result = pruneAllBackups();
+    logAction(admin.id, 'admin_backup_prune', 'backup', 'all', JSON.stringify(result), 'Danger');
+    return sendJson(res, 200, {
+      success: true,
+      ...result,
+      message: `已清理 ${result.removed} 份旧备份，释放 ${Math.round(result.freed_bytes / 1024)} KB`,
+    });
+  } catch (e) {
+    return sendJson(res, 500, { success: false, error: '清理失败：' + e.message });
+  }
 });
 
 route(['POST'], '/api/admin/backups/run', async (req, res) => {
@@ -4608,21 +4720,53 @@ function getLanUrls() {
   return urls;
 }
 
-/** 每日自动备份：启动 1 分钟后首次执行，之后每 24 小时；每次备份后做 WAL checkpoint */
+/**
+ * V1.63.1：每日固定时间自动备份（默认 10:00），不再"每次启动 60 秒后首备"。
+ * - 最近一份 auto 不存在或超过 24h：启动 5 分钟后补备；
+ * - 否则等到下一个 BACKUP_AUTO_HOUR 整点；
+ * - 每次执行后重新计算下一次（递归 setTimeout，避免睡眠/漂移）。
+ */
 let autoBackupTimer = null;
-function startAutoBackupScheduler() {
-  const runOnce = async (label) => {
+let nextAutoBackupAt = '';
+function msUntilNextAutoHour() {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), BACKUP_AUTO_HOUR, 0, 0, 0);
+  if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+  return next.getTime() - now.getTime();
+}
+function scheduleAutoBackup(delayMs, label) {
+  const delay = Math.max(1000, delayMs);
+  nextAutoBackupAt = new Date(Date.now() + delay).toISOString();
+  try {
+    console.log(`[backup] 下次自动备份: ${new Date(nextAutoBackupAt).toLocaleString('zh-CN')}（${label}，保留 ${BACKUP_AUTO_KEEP} 份）`);
+  } catch (e) { /* ignore */ }
+  if (autoBackupTimer) { try { clearTimeout(autoBackupTimer); } catch (e) { /* ignore */ } }
+  autoBackupTimer = setTimeout(async () => {
+    autoBackupTimer = null;
+    nextAutoBackupAt = '';
     try {
       const file = await createDatabaseBackup('auto');
-      console.log(`[backup] ${label}自动备份完成: ${path.basename(file)}`);
+      console.log('[backup] 自动备份完成:', path.basename(file));
     } catch (e) {
       console.warn('[backup] 自动备份失败:', e.message);
     }
     try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (e) { /* ignore */ }
-  };
-  setTimeout(() => { runOnce('首次'); }, 60 * 1000).unref();
-  autoBackupTimer = setInterval(() => { runOnce('每日'); }, 24 * 60 * 60 * 1000);
+    if (BACKUP_AUTO_ENABLED) scheduleAutoBackup(msUntilNextAutoHour(), '每日');
+  }, delay);
   autoBackupTimer.unref();
+}
+function startAutoBackupScheduler() {
+  if (!BACKUP_AUTO_ENABLED) {
+    nextAutoBackupAt = '';
+    console.log('[backup] 自动备份已关闭（BACKUP_AUTO_ENABLED=false）');
+    return;
+  }
+  // 启动时按保留策略收敛一次（历史版本可能留下超过 7 份的 auto 备份）
+  const prunedAuto = pruneBackupDir(BACKUP_AUTO_DIR, BACKUP_AUTO_KEEP);
+  if (prunedAuto.removed > 0) console.log(`[backup] 已按策略清理旧自动备份 ${prunedAuto.removed} 份`);
+  const last = latestBackupMtime(BACKUP_AUTO_DIR);
+  const needCatchUp = !last || Date.now() - last >= 24 * 60 * 60 * 1000;
+  scheduleAutoBackup(needCatchUp ? 5 * 60 * 1000 : msUntilNextAutoHour(), needCatchUp ? '启动补备' : '每日');
 }
 
 /** V1.63：回收站过期清理（启动 90 秒后首次，之后每 24 小时；串行删除） */
@@ -4638,7 +4782,7 @@ function startRecycleScheduler() {
 
 (async () => {
   console.log('========================================');
-  console.log(' NewRock AI Workbench v1.63（纯 Node.js + Express）');
+  console.log(' NewRock AI Workbench v1.63.1（纯 Node.js + Express）');
   console.log('========================================');
   console.log(`[server] 数据目录: ${DATA_DIR}`);
   console.log(`[server] 数据库: ${DB_PATH}`);

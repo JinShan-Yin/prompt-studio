@@ -1,7 +1,18 @@
-# NewRock AI Workbench v1.63 更新说明
+# NewRock AI Workbench v1.63.1 更新说明
 
-发布日期：2026-11-25
-适用：v1.62 → v1.63
+发布日期：2026-11-26
+适用：v1.63.0 → v1.63.1（含 v1.62 → v1.63 全部内容）
+
+## V1.63.1 备份策略调整
+
+- **自动备份**：删除「每次启动 60 秒后首次自动备份」；改为**每日 10:00** 一次（`BACKUP_AUTO_HOUR`），保留 **7 份**（`BACKUP_AUTO_KEEP`）。
+- **启动前快照默认完全关闭**（`BACKUP_STARTUP_ENABLED=false`）；关闭时启动会清理历史启动快照。临时开启时保留 3 份，且只复制非空 WAL、不复制 `-shm`。
+- **漏备份兜底**：最近 auto 不存在或超过 24h，启动 5 分钟后补备一次，随后回到每日 10:00。
+- **边车清理**：删除 .db 时同步删除 `-wal/-shm`；启动自动清理无主子文件，解决“文件数虚高”。
+- **可视化与手动清理**：备份面板显示总量/策略/下次自动时间；新增「清理旧备份」与 `POST /api/admin/backups/prune`（超管，审计 Danger）。
+- **本次无数据库结构变更**，升级只需覆盖代码并重启。
+
+---
 
 ## 一、升级步骤
 
@@ -11,12 +22,14 @@
    Copy-Item data\newrock.db,data\newrock.db-wal,data\newrock.db-shm data\backup-v1.63\ -ErrorAction SilentlyContinue
    ```
 2. 覆盖代码（不要覆盖 `.env` 与 `data/`），执行 `npm install`（本次没有新增生产依赖）。
-3. `.env` 无需改动；如需要可加 `KB_MAX_FILE_MB=20` 调整知识库单文件上限（默认 20MB）。
+3. `.env` 无需改动；可选配置：`KB_MAX_FILE_MB=20`（知识库单文件上限）、`BACKUP_AUTO_HOUR=10`（每日备份小时）、`BACKUP_AUTO_KEEP=7`（保留份数）、`BACKUP_STARTUP_ENABLED=false`（启动前快照，默认关闭）。
 4. `npm start` 启动。启动日志应出现：
-   - `NewRock AI Workbench v1.63`
+   - `NewRock AI Workbench v1.63.1`
    - `[v1.63] 数据库升级完成（评测历史/回收站/授权/用量）`
-   - `已注册 API 路由: 77 条`
+   - `[backup] 下次自动备份: ... 10:00:00（每日，保留 7 份）`
+   - `已注册 API 路由: 79 条`
 5. 生产 3100 是管理员权限进程，重启需要管理员窗口；前端静态改动刷新即可。
+6. **首次以 v1.63.1 启动会按“关闭启动前快照”策略清理历史启动快照**（只删 `data/backups/startup/`，不动 auto 与手动备份）。如需保留迁移前快照，请升级前手动「立即备份」或在 `.env` 临时设 `BACKUP_STARTUP_ENABLED=true`。
 
 > 迁移只新增表/列：`read_grants`、`llm_usage`、`eval_runs` 补 7 列、4 张业务表各补 3 个软删列、`model_configs` 补 2 个单价列，并新增索引与默认 `recycle_retention_days=30`。不重建、不删除旧数据；失败可还原第 1 步备份。
 
@@ -44,6 +57,8 @@
 8. 修复 `/api/ai/polish` 因缺少 `stripCodeFence` 一直 500 的历史问题。
 9. 修复旧版「团管未分配团队时可看到所有无团队用户数据」「assign-team 隐式把团队管理员降级为普通用户」两个权限缺陷。
 10. 若只更新了前端静态文件而服务端仍是 v1.62，「项目只读授权」面板会显示「服务端版本不匹配，请重启 3100」并禁用保存（不再报「缺少 project_id」）；管理员重启后自动恢复。
+11. 备份策略变化：默认不再生成启动前快照；自动备份改为每日 10:00 并保留 7 份；备份列表新增总量/策略/下次时间与「清理旧备份」。
+12. 新增 `POST /api/admin/backups/prune`（超管）：按策略保留并清理孤儿边车，操作写入审计日志（Danger）。
 
 ## 四、回滚
 

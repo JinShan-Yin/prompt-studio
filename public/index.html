@@ -1602,9 +1602,11 @@
             <button type="button" class="btn btn-plain" onclick="exportBackup('business')">导出业务数据</button>
             <button type="button" class="btn btn-plain" onclick="exportBackup('full')">导出全量（含账号）</button>
             <button type="button" class="btn btn-plain" onclick="document.getElementById('backup-import-file').click()">导入备份</button>
+            <button type="button" class="btn btn-plain" onclick="pruneBackupNow()" title="按当前策略保留最新备份，删除更早备份与孤儿边车文件">清理旧备份</button>
             <button type="button" class="btn-link" onclick="loadBackupList()">刷新</button>
           </div>
           <input type="file" id="backup-import-file" accept=".json,application/json" style="display: none;" onchange="handleBackupImport(event.target.files)" />
+          <div id="backup-policy" class="sysadmin-hint" style="margin-bottom:8px;"></div>
           <div id="sysadmin-runtime" class="sysadmin-hint" style="margin-bottom:10px;"></div>
           <div class="sysadmin-table-wrap">
             <table class="table sysadmin-table">
@@ -6590,6 +6592,7 @@
 
 
     // ---------- 备份与运维 ----------
+    let backupPolicyCache = null;
     async function loadBackupList() {
       const tbody = document.getElementById('backup-tbody');
       const runtimeEl = document.getElementById('sysadmin-runtime');
@@ -6599,13 +6602,30 @@
           fetch('/api/health').then(function (res) { return res.json(); }).catch(function () { return null; }),
         ]);
         const rows = results[0] && results[0].success && Array.isArray(results[0].data) ? results[0].data : [];
+        const policy = results[0] && results[0].policy ? results[0].policy : null;
+        backupPolicyCache = policy;
+        const totals = results[0] && results[0].totals ? results[0].totals : null;
+        const nextAutoAt = results[0] ? results[0].next_auto_at : null;
         if (tbody) {
           tbody.innerHTML = rows.length ? rows.map(function (r) {
             return '<tr><td>' + (r.kind === 'startup' ? '启动前快照' : '自动/手动') + '</td>'
               + '<td>' + escapeHtml(r.name) + '</td>'
               + '<td>' + Math.round(Number(r.size || 0) / 1024) + ' KB</td>'
               + '<td>' + escapeHtml(formatDateTime(r.mtime)) + '</td></tr>';
-          }).join('') : '<tr><td colspan="4" style="text-align:center;color:#909399;">暂无备份（启动 1 分钟后生成首份自动备份）</td></tr>';
+          }).join('') : '<tr><td colspan="4" style="text-align:center;color:#909399;">暂无备份（每日 ' + (policy ? policy.auto_hour : 10) + ':00 自动生成）</td></tr>';
+        }
+        const policyEl = document.getElementById('backup-policy');
+        if (policyEl) {
+          if (policy) {
+            const count = totals ? totals.count : rows.length;
+            const sizeText = totals ? (Number(totals.size_bytes || 0) / 1024 / 1024).toFixed(2) + ' MB' : '—';
+            const startupText = policy.startup_enabled ? ('启动前快照保留 ' + policy.startup_keep + ' 份') : '启动前快照已关闭';
+            const autoText = policy.auto_enabled ? ('每日 ' + policy.auto_hour + ':00 自动备份，保留 ' + policy.auto_keep + ' 份') : '自动备份已关闭';
+            const nextText = nextAutoAt ? ('下次自动：' + formatDateTime(nextAutoAt)) : (policy.auto_enabled ? '下次自动：待计算' : '下次自动：已关闭');
+            policyEl.innerText = '共 ' + count + ' 份 · ' + sizeText + ' · ' + startupText + ' · ' + autoText + ' · ' + nextText;
+          } else {
+            policyEl.innerText = '';
+          }
         }
         const health = results[1];
         if (runtimeEl && health && health.success) {
@@ -6635,6 +6655,24 @@
       } catch (e) { showToast((e && e.message) || '备份失败'); }
     }
     window.runBackupNow = runBackupNow;
+
+    /** V1.63.1：按策略清理旧备份（保留最新 N 份 + 清孤儿边车） */
+    async function pruneBackupNow() {
+      const policy = backupPolicyCache || {};
+      const autoKeep = Number(policy.auto_keep) || 7;
+      const startupText = policy.startup_enabled ? ('启动前快照：保留最新 ' + (Number(policy.startup_keep) || 3) + ' 份') : '启动前快照：已关闭（历史快照将全部清理）';
+      if (!confirm('按当前策略清理旧备份？\n' + startupText + '\n每日自动：保留最新 ' + autoKeep + ' 份\n清理后不可恢复。')) return;
+      try {
+        const d = await safeFetchJson('/api/admin/backups/prune', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        if (d && d.success) {
+          showToast(d.message || '清理完成');
+          await loadBackupList();
+        } else {
+          showToast((d && (d.error || d.message)) || '清理失败');
+        }
+      } catch (e) { showToast((e && e.message) || '清理失败'); }
+    }
+    window.pruneBackupNow = pruneBackupNow;
 
 
     // ==================== V1.62：跨公司克隆（弹窗选择目标公司与快照复制模式） ====================

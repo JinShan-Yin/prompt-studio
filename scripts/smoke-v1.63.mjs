@@ -144,7 +144,7 @@ async function main() {
   ok('本地模式启动', await waitHealth(local.base));
   const c0 = makeClient(localPort);
   const health0 = await c0.request('/api/health');
-  ok('健康检查 200 / 版本 1.63.0', health0.status === 200 && health0.body.version === '1.63.0', JSON.stringify(health0.body));
+  ok('健康检查 200 / 版本 1.63.1', health0.status === 200 && health0.body.version === '1.63.1', JSON.stringify(health0.body));
   ok('本机模式：私有 Host 被拒', (await rawGet(localPort, '/api/health', '192.168.1.9:' + localPort)).status === 403);
   ok('本机模式：恶意 Host 被拒', (await rawGet(localPort, '/api/health', 'evil.example.com')).status === 403);
   const cfg0 = await c0.request('/api/auth/config');
@@ -166,6 +166,36 @@ async function main() {
   const adminCookie = adminLogin.cookie;
   const me = await c.request('/api/auth/me', { cookie: adminCookie });
   ok('me 返回超管权限', me.status === 200 && me.body.user.role === 'superadmin');
+
+  // ---------- V1.63.1 备份策略 ----------
+  const backupApi = await c.request('/api/admin/backups', { cookie: adminCookie });
+  ok('备份策略：每日 10:00、保留 7 份', backupApi.status === 200
+    && backupApi.body.policy
+    && backupApi.body.policy.startup_enabled === false
+    && backupApi.body.policy.auto_hour === 10
+    && backupApi.body.policy.auto_keep === 7, JSON.stringify(backupApi.body.policy));
+  ok('备份策略：启动后给出下次自动备份时间', backupApi.status === 200 && !!backupApi.body.next_auto_at, JSON.stringify(backupApi.body.next_auto_at));
+  const lanStartupDir = path.join(lan.dataDir, 'backups', 'startup');
+  const lanAutoDir = path.join(lan.dataDir, 'backups', 'auto');
+  const startupDbCount = function () {
+    try { return fs.readdirSync(lanStartupDir).filter(function (n) { return n.endsWith('.db'); }).length; } catch (e) { return 0; }
+  };
+  ok('启动前快照已完全关闭（新库无启动快照）', startupDbCount() === 0, 'startup_db=' + startupDbCount());
+  // 构造历史备份与孤儿边车，验证按策略清理
+  for (let i = 1; i <= 9; i++) fs.writeFileSync(path.join(lanAutoDir, 'auto-20260101_0000' + i + '.db'), 'x');
+  for (let i = 1; i <= 2; i++) fs.writeFileSync(path.join(lanStartupDir, 'startup-20260101_0000' + i + '.db'), 'x');
+  fs.writeFileSync(path.join(lanStartupDir, 'orphan-1.db-wal'), 'x');
+  fs.writeFileSync(path.join(lanStartupDir, 'orphan-1.db-shm'), 'x');
+  const pruneRes = await c.request('/api/admin/backups/prune', { method: 'POST', cookie: adminCookie, body: {} });
+  ok('清理旧备份接口可用', pruneRes.status === 200 && pruneRes.body.success === true, JSON.stringify(pruneRes.body));
+  const autoDbAfter = fs.readdirSync(lanAutoDir).filter(function (n) { return n.endsWith('.db'); }).length;
+  ok('自动备份保留 7 份', autoDbAfter === 7, 'auto_db=' + autoDbAfter);
+  ok('启动前快照历史被清理', startupDbCount() === 0, 'startup_db=' + startupDbCount());
+  ok('孤儿边车被清理', !fs.existsSync(path.join(lanStartupDir, 'orphan-1.db-wal')) && !fs.existsSync(path.join(lanStartupDir, 'orphan-1.db-shm')));
+  // 启动后短时间内不应出现新的自动备份（旧版是 60 秒后首备）
+  await sleep(3000);
+  const autoDbRightAfterBoot = fs.readdirSync(lanAutoDir).filter(function (n) { return n.endsWith('.db'); }).length;
+  ok('启动后不再立即生成自动备份', autoDbRightAfterBoot === autoDbAfter, 'auto_db=' + autoDbRightAfterBoot);
 
   const teamA = await c.request('/api/teams/create', { method: 'POST', cookie: adminCookie, body: { name: '团队A' } });
   const teamB = await c.request('/api/teams/create', { method: 'POST', cookie: adminCookie, body: { name: '团队B' } });
@@ -229,6 +259,7 @@ async function main() {
   ok('客户级授权给团队', companyGrant.status === 200, JSON.stringify(companyGrant.body));
   const u1Login = await login(c, '13800000011', 'abc123');
   const u1Cookie = u1Login.cookie;
+  ok('普通用户不能清理备份', (await c.request('/api/admin/backups/prune', { method: 'POST', cookie: u1Cookie, body: {} })).status === 403);
   const u1Projects = await c.request('/api/projects', { cookie: u1Cookie });
   const u1Sees = (u1Projects.body.data || []).map(function (x) { return x.id; });
   ok('团队授权覆盖客户下所有项目', u1Sees.indexOf(p1Id) >= 0 && u1Sees.indexOf(p2Id) >= 0, JSON.stringify(u1Sees));

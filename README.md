@@ -1,15 +1,16 @@
-# NewRock AI Workbench v1.63
+# NewRock AI Workbench v1.63.1
 
 企业级、多租户的**提示词协作与 AI 资产管理平台**。纯 Node.js（Express 5）+ 原生前端构建，用于集中管理 AI 智能体的提示词、知识库、多模型路由、提交记录与自动化评测。数据通过 SQLite 本地存储；默认仅监听本机 `127.0.0.1:3100`，开启 `LAN_ACCESS` 后可让局域网内设备访问。
 
-> **版本说明**：当前代码为 **v1.60 底座 + v1.61 知识库结构化升级 + v1.62（局域网 / 权限框架 / 置顶 / 跨公司克隆 / 个人 Key / 账号治理 / 备份与运维）+ v1.63（评测历史 / 客户级授权 / 回收站 / 知识库分页 / 用量看板 / 所有权移交 / 用户治理 + 顶部精简）**。
-> `package.json`、启动日志与 `/api/health` 统一为 `1.63.0`。
+> **版本说明**：当前代码为 **v1.60 底座 + v1.61 知识库结构化升级 + v1.62（局域网 / 权限框架 / 置顶 / 跨公司克隆 / 个人 Key / 账号治理 / 备份与运维）+ v1.63（评测历史 / 客户级授权 / 回收站 / 知识库分页 / 用量看板 / 所有权移交 / 用户治理 + 顶部精简）+ v1.63.1（备份降噪：每日 10:00 / 保留 7 份 / 关闭启动前快照）**。
+> `package.json`、启动日志与 `/api/health` 统一为 `1.63.1`。
 
 ---
 
 ## 目录
 
 - [功能特性](#功能特性)
+- [v1.63.1 更新要点](#v1631-更新要点)
 - [v1.63 更新要点](#v163-更新要点)
 - [v1.62 更新要点](#v162-更新要点)
 - [v1.61 更新要点](#v161-更新要点)
@@ -92,7 +93,7 @@
 
 - 备份两档：**业务数据**（10 张业务表，兼容旧备份）与**全量**（额外含 `users` / `teams` / `audit_logs` / `app_settings` / `project_grants` / `project_pins`）。
 - 备份导入：按 `version/scope` 分流严格校验（字段白名单、主键、引用完整性、至少 1 个可登录超管）；导入前自动落一份全量安全备份；事务失败自动回滚。
-- 自动备份：启动前文件级快照（保留 5 份）＋ 每日在线备份（保留 14 份）；管理面板可查看与手动触发。
+- 自动备份：**每日 10:00 在线备份一次，保留 7 份**（`BACKUP_AUTO_HOUR` / `BACKUP_AUTO_KEEP` 可调）；**启动前快照默认关闭**（`BACKUP_STARTUP_ENABLED=true` 可临时开启，保留 3 份）；管理面板可查看、手动触发与清理。
 - 数据库自动迁移：旧库改名、补列、多租户升级、`prompt_templates` 重建表，全部幂等，失败不影响启动。
 - 项目克隆：支持**跨公司克隆**（A 公司项目 → B 公司），可选「仅最新提交记录 / 全部提交记录 / 不复制」；知识库保留 `structure_mode`。
 
@@ -100,12 +101,25 @@
 
 - 默认仅监听 `127.0.0.1`，端口默认 `3100`；`LAN_ACCESS=true` 时监听 `0.0.0.0` 并只放行私有网段来源。
 - `GET /api/health` 免登录健康检查（版本 / 运行时长 / 数据库 / 模式 / 端口）。
-- 启动自动生成 WAL checkpoint + 启动前数据库快照；每日在线备份并保留最近 14 份。
+- 启动时做 WAL checkpoint；每日 10:00 自动备份并保留最近 7 份；停机超过 24 小时时启动 5 分钟后补备一次；启动前快照默认关闭。
 - `logs/service.log` 超 10MB 自动轮转（保留 5 份）；WAL 定期 checkpoint，退出前再收敛一次。
 - 启动自带端口占用检测与自动释放；`SIGINT` / `SIGTERM` 优雅关闭并关闭数据库。
 - 静态资源托管、SPA 回退、`/favicon.ico` 映射品牌 logo。
 - 三套开机自启：systemd、supervisord、Windows 任务计划 + VBS 静默启动（详见 `autostart/`）。
 - 管理员一键重启：双击 `autostart/restart-newrock-elevated.bat`（UAC 点“是”），或运行 `autostart/restart-newrock.ps1`（停旧进程 → 后台启动 → 等待 `/api/health` 并打印版本，日志见 `logs/restart-elevated.log`）。
+
+---
+
+## v1.63.1 更新要点
+
+| 类别 | 内容 |
+|---|---|
+| 自动备份降噪 | 删除「每次启动 60 秒后首次自动备份」；改为**每日 10:00** 一次（`BACKUP_AUTO_HOUR`），保留 **7 份**（`BACKUP_AUTO_KEEP`） |
+| 启动前快照 | **默认完全关闭**（`BACKUP_STARTUP_ENABLED=false`）；关闭时启动自动清理历史启动快照；如需迁移前备份可临时设为 true（保留 3 份，仅复制非空 WAL） |
+| 边车清理 | 删除 .db 时同步删除 `-wal/-shm`；启动自动清理无主边车，避免文件数虚高 |
+| 可观测与清理 | 备份面板显示总量/策略/下次自动时间；新增「清理旧备份」按钮与 `POST /api/admin/backups/prune`（超管，审计 Danger） |
+| 漏备份兜底 | 最近 auto 不存在或超过 24h 时，启动 5 分钟后补备一次，随后回到每日 10:00 |
+| 升级注意 | 可选在 `.env` 设置 `BACKUP_AUTO_HOUR` / `BACKUP_AUTO_KEEP` / `BACKUP_STARTUP_ENABLED`；本次无数据库结构变更 |
 
 ---
 
@@ -141,7 +155,7 @@
 | 个人 API Key | 模型中心新增「一键添加我的 Key」；首次保存自动激活；支持删除与设为当前；试用耗尽自动引导；普通用户不再看到超管专用的 `.env Key` 入口 |
 | 账号治理 | `users.status / session_version / last_login_at`；管理员可启用/禁用、强制下线、重置密码、删除空账号；禁用或踢下线后旧会话立即 401 |
 | 备份升级 | 备份分「业务数据 / 全量」两档；全量覆盖账号与权限；导入前全量安全备份；模型 Key 跨机恢复需同步 `data/.vault-key` |
-| 自动备份与运维 | 启动前快照 + 每日在线备份 + 保留策略；`/api/health`；日志轮转（`autostart/rotate-logs.ps1`）；WAL 定期 checkpoint |
+| 备份与运维 | 备份两档 + 导入校验；v1.63.1 起每日 10:00 在线备份、保留 7 份、启动前快照默认关闭；`/api/health`；日志轮转；WAL 定期 checkpoint |
 | 局域网安全 | 局域网模式默认关闭自助注册；新增登录失败限流（10 分钟 10 次）；会话密钥持久化到 `data/.session-secret`，Cookie 名统一为 `newrock.sid` |
 
 > 升级提醒：首次以 v1.62 启动前先把 `data/newrock.db`（含 `-wal/-shm`）复制到 `data/backup-v1.62/`。本次迁移只新增表与列，不重建、不删除旧数据。
@@ -286,7 +300,7 @@ SESSION_SECRET=
 ## 数据与迁移
 
 - **数据库文件**：`data/newrock.db`（WAL 模式，同时存在 `-wal` / `-shm`）。
-- **备份目录**：启动前快照 `data/backups/startup/`（保留 5 份）；每日/手动在线备份 `data/backups/auto/`（保留 14 份）；导入前安全备份 `data/backup-before-import-*.json`。
+- **备份目录**：启动前快照 `data/backups/startup/`（默认关闭；开启时保留 3 份）；每日/手动在线备份 `data/backups/auto/`（保留 7 份）；导入前安全备份 `data/backup-before-import-*.json`。
 - **旧库改名**：首次启动若只存在 `data/prompt-studio.db`，会自动改名为 `newrock.db`（含 WAL/SHM），失败则回退旧路径并打印错误。
 - **启动迁移**（全部幂等，失败仅记录日志、不影响启动）：
   - `snapshots` 补 `eval_pass` / `eval_score` / `remark`；
@@ -353,7 +367,7 @@ bash autostart/start-newrock.sh stop
 
 ## API 概览
 
-服务启动时注册 **78 条** `/api` 路由（启动日志会逐条打印）。主要分组：
+服务启动时注册 **79 条** `/api` 路由（启动日志会逐条打印）。主要分组：
 
 | 分组 | 代表端点 |
 |---|---|
@@ -367,7 +381,7 @@ bash autostart/start-newrock.sh stop
 | 回收站 | `GET /api/recycle/list`、`POST /api/recycle/restore`、`POST /api/recycle/purge` |
 | 模型 / 设置 | `GET/POST /api/settings/api-key`、`GET /api/models`、`POST /api/models/save`、`/delete`、`/test` |
 | 模板 / 润色 | `GET /api/templates`、`POST /api/templates/save`、`/delete`、`/extract`、`POST /api/ai/polish` |
-| 备份 | `GET /api/backup/export`、`POST /api/backup/import` |
+| 备份 | `GET /api/backup/export`、`POST /api/backup/import`、`GET /api/admin/backups`、`POST /api/admin/backups/run`、`POST /api/admin/backups/prune` |
 
 > `API_REFERENCE.md` 为精简版；完整路由、参数与返回结构以 `server.js` 与启动日志为准。
 
