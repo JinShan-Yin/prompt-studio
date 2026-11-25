@@ -39,7 +39,7 @@
 4. 角色变更会把 `session_version` 加 1，目标账号旧会话立即失效，需要重新登录。
 5. `/api/admin/users/delete` 有数据时返回 409；传 `{force:true, data_mode:'transfer'|'delete'}` 才执行强制删除。
 6. L1 中文数字规则收紧：只拦「≥3 位连续中文数字」「中文数字+元」「数字与中文数字混排」，「一起/十分/三点/千万」等不再误判。
-7. 全量备份新增 `read_grants`、`llm_usage`（可选表）；旧全量备份缺这两张表仍可导入，业务备份保持 10 表不变。
+7. 全量备份新增 `read_grants`、`llm_usage`（可选表）；旧全量备份缺这两张表仍可导入，导入后会自动把旧 `project_grants` 迁入 `read_grants`；业务备份保持 10 表不变。
 8. 修复 `/api/ai/polish` 因缺少 `stripCodeFence` 一直 500 的历史问题。
 9. 修复旧版「团管未分配团队时可看到所有无团队用户数据」「assign-team 隐式把团队管理员降级为普通用户」两个权限缺陷。
 

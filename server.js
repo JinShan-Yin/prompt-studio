@@ -4277,6 +4277,17 @@ route(['POST'], '/api/backup/import', async (req, res) => {
     db.prepare('DELETE FROM project_pins WHERE project_id NOT IN (SELECT id FROM projects)').run();
     db.prepare("DELETE FROM read_grants WHERE scope_type = 'project' AND scope_id NOT IN (SELECT id FROM projects)").run();
     db.prepare("DELETE FROM read_grants WHERE scope_type = 'company' AND scope_id NOT IN (SELECT id FROM companies)").run();
+    // V1.63：旧全量备份可能只有 project_grants，导入后自动迁入 read_grants（幂等）
+    try {
+      const legacyGrants = db.prepare('SELECT project_id, grantee_user_id, granted_by, created_at FROM project_grants').all();
+      const insertMigrated = db.prepare('INSERT OR IGNORE INTO read_grants (id, scope_type, scope_id, grantee_type, grantee_id, granted_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+      for (const grant of legacyGrants) {
+        if (!grant.project_id || !grant.grantee_user_id) continue;
+        insertMigrated.run('rg-' + crypto.randomUUID().split('-')[0], 'project', grant.project_id, 'user', grant.grantee_user_id, grant.granted_by || '', grant.created_at || '');
+      }
+    } catch (e) {
+      console.warn('[backup] 旧授权迁入 read_grants 失败（不影响导入）:', e.message);
+    }
     refreshAdminUserId();
     if (ADMIN_USER_ID) {
       db.prepare("UPDATE model_configs SET user_id = ? WHERE user_id IS NULL OR user_id = ''").run(ADMIN_USER_ID);
