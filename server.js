@@ -698,6 +698,13 @@ function initDb() {
         created_at TEXT DEFAULT '',
         UNIQUE(scope_type, scope_id, grantee_type, grantee_id)
       );
+      CREATE TABLE IF NOT EXISTS company_pins (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        company_id TEXT NOT NULL,
+        created_at TEXT,
+        UNIQUE(user_id, company_id)
+      );
       CREATE TABLE IF NOT EXISTS llm_usage (
         id TEXT PRIMARY KEY,
         user_id TEXT DEFAULT '',
@@ -719,6 +726,7 @@ function initDb() {
       CREATE INDEX IF NOT EXISTS idx_llm_usage_created ON llm_usage(created_at);
       CREATE INDEX IF NOT EXISTS idx_llm_usage_user ON llm_usage(user_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_read_grants_scope ON read_grants(scope_type, scope_id);
+      CREATE INDEX IF NOT EXISTS idx_company_pins_user ON company_pins(user_id);
       CREATE INDEX IF NOT EXISTS idx_companies_deleted ON companies(deleted_at);
       CREATE INDEX IF NOT EXISTS idx_projects_deleted ON projects(deleted_at);
       CREATE INDEX IF NOT EXISTS idx_kb_items_deleted ON kb_items(deleted_at);
@@ -1832,6 +1840,17 @@ function canReadProject(project, user) {
 function isRowDeleted(row) {
   return !!(row && String(row.deleted_at || '').trim() !== '');
 }
+/** V1.63：公司级可见性（所有者 / 公共 / 只读授权任一项目均可） */
+function canReadCompany(company, user) {
+  if (!company) return false;
+  if (canAccessOwner(company.user_id, user)) return true;
+  try {
+    const rows = db.prepare("SELECT * FROM projects WHERE company_id = ? AND COALESCE(deleted_at, '') = ''").all(company.id);
+    return rows.some((project) => canReadProject(project, user));
+  } catch (e) {
+    return false;
+  }
+}
 function requireProjectAccess(projectId, user, options = {}) {
   const project = projectId ? db.prepare('SELECT * FROM projects WHERE id = ?').get(String(projectId)) : null;
   if (!project) throw httpError(404, '项目不存在或无权访问');
@@ -2270,6 +2289,7 @@ route(['POST'], '/api/admin/users/delete', async (req, res) => {
         db.prepare('DELETE FROM read_grants WHERE (grantee_type = ? AND grantee_id = ?) OR granted_by = ?').run('user', target.id, target.id);
         db.prepare('DELETE FROM project_grants WHERE grantee_user_id = ? OR granted_by = ?').run(target.id, target.id);
         db.prepare('DELETE FROM project_pins WHERE user_id = ?').run(target.id);
+        db.prepare('DELETE FROM company_pins WHERE user_id = ?').run(target.id);
         db.prepare('DELETE FROM model_configs WHERE user_id = ?').run(target.id);
         db.prepare('DELETE FROM users WHERE id = ?').run(target.id);
       })();
@@ -2286,6 +2306,7 @@ route(['POST'], '/api/admin/users/delete', async (req, res) => {
         db.prepare('DELETE FROM read_grants WHERE grantee_type = ? AND grantee_id = ?').run('user', target.id);
         db.prepare('DELETE FROM project_grants WHERE grantee_user_id = ?').run(target.id);
         db.prepare('DELETE FROM project_pins WHERE user_id = ?').run(target.id);
+        db.prepare('DELETE FROM company_pins WHERE user_id = ?').run(target.id);
         db.prepare('DELETE FROM users WHERE id = ?').run(target.id);
       })();
       logAction(admin.id, 'admin_force_delete_user', 'user', target.id, `username=${target.username} mode=transfer counts=${JSON.stringify(counts)}`, 'Danger');
@@ -2306,6 +2327,7 @@ route(['POST'], '/api/admin/users/delete', async (req, res) => {
       db.prepare('DELETE FROM read_grants WHERE (grantee_type = ? AND grantee_id = ?) OR granted_by = ?').run('user', target.id, target.id);
       db.prepare('DELETE FROM project_grants WHERE grantee_user_id = ? OR granted_by = ?').run(target.id, target.id);
       db.prepare('DELETE FROM project_pins WHERE user_id = ?').run(target.id);
+      db.prepare('DELETE FROM company_pins WHERE user_id = ?').run(target.id);
       db.prepare('DELETE FROM users WHERE id = ?').run(target.id);
     })();
     logAction(admin.id, 'admin_force_delete_user', 'user', target.id, `username=${target.username} mode=delete counts=${JSON.stringify(counts)}`, 'Danger');
@@ -3051,6 +3073,7 @@ function purgeRecycleEntityByTable(table, id) {
       const projectIds = db.prepare('SELECT id FROM projects WHERE company_id = ?').all(id).map((r) => r.id);
       for (const pid of projectIds) purgeRecycleEntityByTable('projects', pid);
       db.prepare('DELETE FROM read_grants WHERE scope_type = ? AND scope_id = ?').run('company', id);
+      db.prepare('DELETE FROM company_pins WHERE company_id = ?').run(id);
       db.prepare('DELETE FROM companies WHERE id = ?').run(id);
     })();
     return true;
@@ -3141,7 +3164,12 @@ route(['GET'], '/api/companies', async (req, res) => {
   // 可见性统一走 canReadProject（含所有者 / 公共 / 客户级与项目级只读授权）
   const visibleProjects = db.prepare("SELECT * FROM projects WHERE COALESCE(deleted_at, '') = ''").all().filter((project) => canReadProject(project, user));
   const visible = companies.filter((company) => canAccessOwner(company.user_id, user) || visibleProjects.some((project) => String(project.company_id || '') === company.id));
-  sendJson(res, 200, { success: true, data: visible });
+  // V1.63：公司置顶按用户隔离
+  const pinnedSet = new Set();
+  try {
+    for (const row of db.prepare('SELECT company_id FROM company_pins WHERE user_id = ?').all(user.id)) pinnedSet.add(row.company_id);
+  } catch (e) { /* ignore */ }
+  sendJson(res, 200, { success: true, data: visible.map((company) => ({ ...company, pinned: pinnedSet.has(company.id) ? 1 : 0 })) });
 });
 
 route(['POST'], '/api/companies/create', async (req, res) => {
@@ -3299,6 +3327,25 @@ route(['POST'], '/api/projects/pin', async (req, res) => {
     db.prepare('DELETE FROM project_pins WHERE user_id = ? AND project_id = ?').run(user.id, projectId);
   }
   sendJson(res, 200, { success: true, pinned: pinned ? 1 : 0, message: pinned ? '已置顶' : '已取消置顶' });
+});
+
+/** V1.63：父级公司置顶（以公司名义把公司及其全部项目置顶，按用户隔离） */
+route(['POST'], '/api/companies/pin', async (req, res) => {
+  const body = req.body || {};
+  const user = currentSessionUser(req);
+  const companyId = typeof body.company_id === 'string' ? body.company_id.trim() : '';
+  if (!companyId) return sendJson(res, 400, { success: false, error: '缺少 company_id' });
+  const company = db.prepare("SELECT * FROM companies WHERE id = ? AND COALESCE(deleted_at, '') = ''").get(companyId);
+  if (!company) return sendJson(res, 404, { success: false, error: '客户/行业不存在或无权访问' });
+  if (!canReadCompany(company, user)) return sendJson(res, 403, { success: false, error: '无权访问该客户/行业' });
+  const pinned = body.pinned === true || body.pinned === 1 || body.pinned === '1';
+  if (pinned) {
+    db.prepare('INSERT OR IGNORE INTO company_pins (id, user_id, company_id, created_at) VALUES (?, ?, ?, ?)')
+      .run('cpin-' + crypto.randomUUID().split('-')[0], user.id, companyId, new Date().toISOString());
+  } else {
+    db.prepare('DELETE FROM company_pins WHERE user_id = ? AND company_id = ?').run(user.id, companyId);
+  }
+  sendJson(res, 200, { success: true, pinned: pinned ? 1 : 0, message: pinned ? '已按公司置顶全部内容' : '已取消公司置顶' });
 });
 
 // ---------- V1.63：只读授权（客户级 / 项目级 × 用户 / 团队 / 所有团队） ----------
@@ -4007,10 +4054,10 @@ const BACKUP_TABLES = [
 const FULL_BACKUP_TABLES = [
   ...BACKUP_TABLES,
   'users', 'teams', 'audit_logs', 'app_settings', 'project_grants', 'project_pins',
-  'read_grants', 'llm_usage',
+  'read_grants', 'llm_usage', 'company_pins',
 ];
 /** V1.63：新增表在旧全量备份中不存在，导入时按可选表处理（缺失则保留当前数据） */
-const OPTIONAL_BACKUP_TABLES = ['read_grants', 'llm_usage'];
+const OPTIONAL_BACKUP_TABLES = ['read_grants', 'llm_usage', 'company_pins'];
 
 /** 导出表为 JSON 快照对象（scope=business 保持 v1 结构；scope=full 为 v2） */
 function buildBackupSnapshot(scope = 'business') {
@@ -4277,6 +4324,8 @@ route(['POST'], '/api/backup/import', async (req, res) => {
     db.prepare('DELETE FROM project_pins WHERE project_id NOT IN (SELECT id FROM projects)').run();
     db.prepare("DELETE FROM read_grants WHERE scope_type = 'project' AND scope_id NOT IN (SELECT id FROM projects)").run();
     db.prepare("DELETE FROM read_grants WHERE scope_type = 'company' AND scope_id NOT IN (SELECT id FROM companies)").run();
+    db.prepare('DELETE FROM company_pins WHERE company_id NOT IN (SELECT id FROM companies)').run();
+    db.prepare('DELETE FROM company_pins WHERE user_id NOT IN (SELECT id FROM users)').run();
     // V1.63：旧全量备份可能只有 project_grants，导入后自动迁入 read_grants（幂等）
     try {
       const legacyGrants = db.prepare('SELECT project_id, grantee_user_id, granted_by, created_at FROM project_grants').all();

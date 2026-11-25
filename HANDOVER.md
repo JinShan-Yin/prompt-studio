@@ -9,7 +9,7 @@
 
 ## 0. 一句话现状
 
-项目是 **NewRock AI Workbench v1.63**，单机 Node.js + Express 5 + SQLite，生产服务跑在 `http://127.0.0.1:3100`（LAN 模式）。V1.63 已完成并通过冒烟 80/80 + 页面全按钮回归 90/90；**生产 3100 仍是 v1.62 进程，需要管理员权限重启后才加载 v1.63 服务端改动**（前端静态文件刷新即生效）。
+项目是 **NewRock AI Workbench v1.63**，单机 Node.js + Express 5 + SQLite，生产服务跑在 `http://127.0.0.1:3100`（LAN 模式）。V1.63 已完成并通过冒烟 86/86 + 页面全按钮回归 91/91；**生产 3100 仍是 v1.62 进程，需要管理员权限重启后才加载 v1.63 服务端改动**（前端静态文件刷新即生效）。
 
 ---
 
@@ -35,10 +35,10 @@
 | 前端 | `public/index.html`（约 6.6k 行，单文件原生 HTML/CSS/JS） |
 | 数据库 | `data/newrock.db`（SQLite + WAL） |
 | 主密钥 / 会话密钥 | `data/.vault-key` / `data/.session-secret` |
-| 路由数 | **77 条** `/api` |
+| 路由数 | **78 条** `/api` |
 | 生产 URL | http://127.0.0.1:3100 |
-| 冒烟 | `node scripts/smoke-v1.63.mjs`（80 项，临时目录，零依赖） |
-| 页面回归 | `.qa-test\run-dom.ps1`（jsdom，90 项；依赖已装在 `.qa-test`，仓库依赖未变） |
+| 冒烟 | `node scripts/smoke-v1.63.mjs`（86 项，临时目录，零依赖） |
+| 页面回归 | `.qa-test\run-dom.ps1`（jsdom，91 项；依赖已装在 `.qa-test`，仓库依赖未变） |
 
 启动：
 
@@ -70,6 +70,7 @@ curl.exe -s http://127.0.0.1:3100/api/health
 - **知识库**：`/api/kb/list` 分页 + 服务端搜索；`KB_MAX_FILE_MB`（默认 20）；413 JSON。
 - **用量看板**：`llm_usage` 表 + `/api/admin/usage/summary`；模型配置新增输入/输出单价。
 - **所有权移交**：`/api/projects/transfer` + candidates。
+- **父级公司整体置顶**：`/api/companies/pin` + `company_pins`（每人一套）；置顶区以公司名义展示公司及旗下全部项目，普通树不重复；只读授权用户可置顶可见公司。
 - **用户治理**：`/api/admin/users/role`；`/api/admin/users/delete` 支持 `force + data_mode`。
 - **修复**：L1 中文数字误判、团管空团队越权、assign-team 隐式降级、删除孤儿数据、上传 413、AI 润色缺少 `stripCodeFence`、成本舍入、同路径 GET/POST 路由冲突。
 
@@ -86,8 +87,8 @@ server.js                    后端：路由、DB/迁移、权限、加密、备
 public/index.html            前端全部 UI/JS
 public/login.html            登录/注册/首登改密
 lib/markdownChunker.js       Markdown 切片
-scripts/smoke-v1.63.mjs      后端 80 项冒烟
-scripts/qa-button-inventory.mjs  页面事件清单（100 个）
+scripts/smoke-v1.63.mjs      后端 86 项冒烟
+scripts/qa-button-inventory.mjs  页面事件清单（101 个）
 scripts/smoke-v1.62.mjs      历史冒烟（保留参考）
 .qa-test/                    QA 产物（已忽略）：dom-e2e.mjs / run-dom.ps1 / e2e.mjs / run-e2e.ps1
 autostart/                   Windows/Linux 自启脚本
@@ -132,18 +133,18 @@ API_REFERENCE.md             API 精简参考（以 server.js 实际路由为准
 
 ```powershell
 node scripts/smoke-v1.63.mjs
-# 期望 RESULT pass=80 fail=0（临时目录 data/tmp/smoke163-*）
+# 期望 RESULT pass=86 fail=0（临时目录 data/tmp/smoke163-*）
 ```
 
 ### 6.2 页面全按钮回归（DOM 级）
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .qa-test\run-dom.ps1
-# 期望 RESULT pass=90 fail=0
+# 期望 RESULT pass=91 fail=0
 ```
 
 - 环境：3101 + `.qa-test/data` 全新库；`.qa-test` 内 mock LLM 3301；jsdom 执行真实页面脚本。
-- 覆盖：登录/首登改密、四个 Tab、侧边栏全部菜单、系统管理六面板、模型配置、回收站、用量、退出；末尾校验清单内 100 个事件处理函数全部已定义。
+- 覆盖：登录/首登改密、四个 Tab、侧边栏全部菜单、系统管理六面板、模型配置、回收站、用量、退出；末尾校验清单内 101 个事件处理函数全部已定义。
 - **真实浏览器 E2E 不可用**：本机系统策略拒绝 Edge 的命名管道/IPC（mojo 0x5），Playwright/Edge 启动即崩溃；如需像素级回归，换一台不受限的机器或用真实浏览器人工抽查。
 
 ### 6.3 隔离 QA（人工）
@@ -208,6 +209,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .qa-test\run-dom.ps1
 ```
 feat(v1.63): 顶部系统管理合并 / 模板入口移除 / 文案与图标精修
 feat(v1.63): 评测落库、授权升级、回收站、知识库分页、用量看板、所有权移交、用户治理
-test(v1.63): 80 项冒烟 + 90 项页面全按钮回归
+test(v1.63): 86 项冒烟 + 91 项页面全按钮回归
 docs(v1.63): README/UPDATE/QA/HANDOVER 同步
 ```

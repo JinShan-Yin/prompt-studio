@@ -2203,9 +2203,31 @@
         return;
       }
 
-      // V1.62：置顶区只渲染项目（项目级整体置顶，显示所属公司），下方树过滤掉置顶项避免重复
+      // V1.63：置顶区支持「父级公司整体置顶」+ 单项目置顶
+      const pinnedCompanies = companies.filter(c => Number(c.pinned) === 1);
+      const pinnedCompanyIds = new Set(pinnedCompanies.map(c => c.id));
       let pinnedHtml = '';
+      pinnedCompanies.forEach(c => {
+        const children = Array.isArray(c.children) ? c.children : [];
+        pinnedHtml += `
+          <div class="menu-parent pinned-company" onclick="toggleCompany('${c.id}')">
+            <div style="display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden;">
+              <span style="font-size: 12px; color: #909399; flex-shrink:0;">${c.open ? '▼' : '▶'}</span>
+              <span style="font-size: 12px; flex-shrink:0;">📌</span>
+              <span title="${escapeHtml(c.name)}" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(c.name)}</span>
+              <span style="font-size: 11px; color: #909399; flex-shrink:0;">（全部项目）</span>
+            </div>
+            <div class="more-btn" onclick="event.stopPropagation(); showMenu(event, '${c.id}', 'company')">
+               <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+            </div>
+          </div>
+          <div style="display: ${c.open ? 'block' : 'none'};">
+            ${children.map(p => createTreeItemHTML(p, 'project', true)).join('')}
+          </div>
+        `;
+      });
       companies.forEach(c => {
+        if (pinnedCompanyIds.has(c.id)) return; // 公司整体置顶已包含全部项目，不再重复
         c.children.forEach(p => {
           if (Number(p.pinned) === 1) {
             pinnedHtml += createTreeItemHTML(Object.assign({}, p, { __label: p.name + ' · ' + c.name }), 'project', true);
@@ -2216,8 +2238,9 @@
         html += `<div style="padding: 8px 16px; font-size: 12px; color: #909399;">置顶</div>${pinnedHtml}<div style="height: 1px; background: #e4e7ed; margin: 8px 16px;"></div>`;
       }
 
-      // 渲染全部（已置顶项目不再重复出现在公司下）
+      // 渲染全部（公司整体置顶 / 单项目置顶均不再重复出现在下方树）
       companies.forEach(c => {
+        if (Number(c.pinned) === 1) return;
         const visibleChildren = c.children.filter(p => Number(p.pinned) !== 1);
         html += `
           <div class="menu-parent" onclick="toggleCompany('${c.id}')">
@@ -4243,6 +4266,7 @@
 
       if (type === 'company') {
         menuHtml = `
+          <div class="dropdown-item" onclick="toggleCompanyPin('${id}', ${Number(targetItem.pinned) === 1 ? 'false' : 'true'})">📌 ${Number(targetItem.pinned) === 1 ? '取消公司置顶' : '置顶公司（全部内容）'}</div>
           <div class="dropdown-item" onclick="openCreateModal('project', '${id}')">➕ 新项目</div>
           <div class="dropdown-item" onclick="enterMultiSelectMode()">☑️ 多选</div>
           <div class="dropdown-item" onclick="openEditModal('company', '${id}', '${targetItem.name}')">✏️ 重命名</div>
@@ -4536,6 +4560,29 @@
       }
     }
     window.togglePin = togglePin;
+
+    /** V1.63：父级公司置顶/取消（以公司名义置顶公司及其全部项目，每人一套） */
+    async function toggleCompanyPin(id, nextPinned) {
+      closeMenu();
+      const company = (companies || []).find(c => c.id === id);
+      const pinned = typeof nextPinned === 'boolean' ? nextPinned : !(company && Number(company.pinned) === 1);
+      try {
+        const d = await safeFetchJson('/api/companies/pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ company_id: id, pinned }),
+        });
+        if (d && d.success) {
+          showToast(d.message || (pinned ? '已按公司置顶全部内容' : '已取消公司置顶'));
+          await fetchData();
+        } else {
+          showToast((d && (d.error || d.message)) || '操作失败');
+        }
+      } catch (e) {
+        showToast((e && e.message) || '操作失败');
+      }
+    }
+    window.toggleCompanyPin = toggleCompanyPin;
 
     function closeModal() {
       document.getElementById('global-modal').style.display = 'none';

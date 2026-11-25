@@ -250,6 +250,23 @@ async function main() {
   const u4ProjectsAfter = await c.request('/api/projects', { cookie: u4Login.cookie });
   ok('所有团队授权覆盖无团队用户', (u4ProjectsAfter.body.data || []).some(function (x) { return x.id === p2Id; }));
 
+  // 公司整体置顶
+  const compPin = await c.request('/api/companies/pin', { method: 'POST', cookie: adminCookie, body: { company_id: compId, pinned: true } });
+  ok('公司整体置顶成功', compPin.status === 200 && compPin.body.pinned === 1, JSON.stringify(compPin.body));
+  const adminCompList = await c.request('/api/companies', { cookie: adminCookie });
+  ok('公司置顶回显', (adminCompList.body.data || []).some(function (x) { return x.id === compId && x.pinned === 1; }));
+  const u1CompList = await c.request('/api/companies', { cookie: u1Cookie });
+  ok('公司置顶按用户隔离', (u1CompList.body.data || []).some(function (x) { return x.id === compId && x.pinned === 0; }));
+  const u1CompPin = await c.request('/api/companies/pin', { method: 'POST', cookie: u1Cookie, body: { company_id: compId, pinned: true } });
+  ok('只读授权用户可置顶可见公司', u1CompPin.status === 200 && u1CompPin.body.pinned === 1, JSON.stringify(u1CompPin.body));
+  const compB = await c.request('/api/companies/create', { method: 'POST', cookie: adminCookie, body: { name: '无授权公司' } });
+  await c.request('/api/projects/create', { method: 'POST', cookie: adminCookie, body: { name: '无授权项目', company_id: compB.body.id } });
+  const u5PinLogin = await login(c, '13800000015', 'abc123');
+  const noAccessPin = await c.request('/api/companies/pin', { method: 'POST', cookie: u5PinLogin.cookie, body: { company_id: compB.body.id, pinned: true } });
+  ok('无权访问公司不能置顶', noAccessPin.status === 403 || noAccessPin.status === 404, String(noAccessPin.status));
+  const compUnpin = await c.request('/api/companies/pin', { method: 'POST', cookie: adminCookie, body: { company_id: compId, pinned: false } });
+  ok('取消公司置顶成功', compUnpin.status === 200 && compUnpin.body.pinned === 0);
+
   // 团管跨团队授权应 403
   const u3OldLogin = await login(c, '13800000013', 'abc123');
   const u3Promote = await c.request('/api/admin/users/role', { method: 'POST', cookie: adminCookie, body: { user_id: u3Id, role: 'teamadmin', team_id: teamBId } });
@@ -379,7 +396,7 @@ async function main() {
 
   // ---------- 11) 备份可选表兼容 ----------
   const fullBackup = await c.request('/api/backup/export?scope=full', { cookie: adminCookie });
-  ok('全量备份含新表', fullBackup.status === 200 && !!fullBackup.body.tables.read_grants && !!fullBackup.body.tables.llm_usage, Object.keys(fullBackup.body.tables || {}).join(','));
+  ok('全量备份含新表', fullBackup.status === 200 && !!fullBackup.body.tables.read_grants && !!fullBackup.body.tables.llm_usage && !!fullBackup.body.tables.company_pins, Object.keys(fullBackup.body.tables || {}).join(','));
   const legacyFull = JSON.parse(JSON.stringify(fullBackup.body));
   delete legacyFull.tables.read_grants;
   delete legacyFull.tables.llm_usage;
