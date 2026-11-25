@@ -1589,7 +1589,7 @@
           <div class="sysadmin-list" id="grant-team-list"></div>
           <div class="sysadmin-list" id="grant-user-list" style="margin-top:8px;"></div>
           <div style="margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-            <button type="button" class="btn-plain" onclick="saveProjectGrants()">保存只读授权</button>
+            <button type="button" class="btn-plain" id="grant-save-btn" onclick="saveProjectGrants()">保存只读授权</button>
             <span class="sysadmin-hint">「所有团队」仅超级管理员可选；团管只能授权本团队成员。</span>
           </div>
           <div class="sysadmin-section-title" style="margin-top:16px;">当前生效授权</div>
@@ -5661,6 +5661,7 @@
     let systemAdminCompanies = [];
     let grantPreselectProjectId = '';
     let grantPreselectCompanyId = '';
+    let grantBackendVersion = '';
     let grantPanel = { company: null, projects: [], teams: [], users: [], grants: { company: [], project: [] } };
     let grantSelectedProjects = [];
     let recycleState = { page: 1, pageSize: 20, total: 0, retention: 30 };
@@ -6061,8 +6062,34 @@
       const u = (grantPanel.users || []).find(function (x) { return x.id === id; });
       return '用户：' + (u ? u.username : id);
     }
+    /** V1.63：服务端版本探测（重启前旧后端没有公司级授权接口，需要给出明确提示而不是一直「加载中」） */
+    function backendSupportsCompanyGrants() {
+      if (!grantBackendVersion) return true;
+      const parts = String(grantBackendVersion).split('.').map(function (n) { return Number(n) || 0; });
+      const major = parts[0] || 0;
+      const minor = parts[1] || 0;
+      return major > 1 || (major === 1 && minor >= 63);
+    }
+    function renderGrantUnavailable(message) {
+      const saveBtn = document.getElementById('grant-save-btn');
+      if (saveBtn) saveBtn.disabled = true;
+      const picker = document.getElementById('grant-project-picker');
+      if (picker) { picker.style.display = 'none'; picker.innerHTML = ''; }
+      ['grant-team-list', 'grant-user-list', 'grant-current-list'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<div class="sysadmin-hint" style="color:#b45309;">' + escapeHtml(message) + '</div>';
+      });
+    }
+    window.backendSupportsCompanyGrants = backendSupportsCompanyGrants;
+
     async function loadGrantPanel() {
       try {
+        try {
+          const health = await safeFetchJson('/api/health');
+          grantBackendVersion = health && health.version ? String(health.version) : '';
+        } catch (e) { grantBackendVersion = ''; }
+        const saveBtn = document.getElementById('grant-save-btn');
+        if (saveBtn) saveBtn.disabled = true;
         const results = await Promise.all([safeFetchJson('/api/companies'), safeFetchJson('/api/projects')]);
         systemAdminCompanies = results[0] && results[0].success && Array.isArray(results[0].data) ? results[0].data : [];
         systemAdminProjects = results[1] && results[1].success && Array.isArray(results[1].data) ? results[1].data : [];
@@ -6097,12 +6124,19 @@
         if (statusEl) statusEl.innerText = '暂无客户/行业';
         return;
       }
+      if (!backendSupportsCompanyGrants()) {
+        renderGrantUnavailable('当前服务端版本 ' + (grantBackendVersion || '未知') + ' 尚未加载 V1.63 授权接口；请管理员以管理员权限重启 3100 后刷新本页。');
+        if (statusEl) statusEl.innerText = '服务端版本不匹配';
+        return;
+      }
       if (statusEl) statusEl.innerText = '加载中…';
       try {
         const d = await safeFetchJson('/api/projects/grants?company_id=' + encodeURIComponent(companyId));
         if (!d || !d.success) {
-          if (statusEl) statusEl.innerText = '';
-          showToast((d && (d.error || d.message)) || '加载授权失败');
+          const errText = (d && (d.error || d.message)) || '未知错误';
+          renderGrantUnavailable('加载授权失败：' + errText);
+          if (statusEl) statusEl.innerText = '加载失败';
+          showToast('加载授权失败：' + errText);
           return;
         }
         grantPanel = d.data || grantPanel;
@@ -6126,6 +6160,8 @@
         renderGrantScope();
         renderGrantTargets();
         renderGrantCurrent();
+        const saveBtnOk = document.getElementById('grant-save-btn');
+        if (saveBtnOk) saveBtnOk.disabled = false;
         if (statusEl) statusEl.innerText = '客户：' + ((grantPanel.company && grantPanel.company.name) || companyId);
       } catch (e) {
         if (statusEl) statusEl.innerText = '';

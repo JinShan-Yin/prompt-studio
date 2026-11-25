@@ -15,7 +15,7 @@
 
 ## 1. 接手前必须知道的 6 件事
 
-1. **生产服务不要随意重启**：3100 是提升权限进程（PID 以实际为准），普通 shell `taskkill` 可能 Access denied。前端静态改动 Ctrl+F5；`server.js` 改动需管理员重启。
+1. **生产服务不要随意重启**：3100 是提升权限进程（PID 以实际为准），普通 shell `taskkill` 可能 Access denied。前端静态改动 Ctrl+F5；`server.js` 改动需管理员重启。一键重启：管理员 PowerShell 运行 `autostart\restart-newrock.ps1`（停旧进程 → 后台启动 → 健康检查并打印版本）。
 2. **生产库是 `data/newrock.db`**，禁止用于测试。V1.63 迁移只加表/列，启动前会自动做一次文件级快照（`data/backups/startup`）。
 3. **QA 必须隔离**：端口 3101 + `NEWROCK_DATA_DIR=.qa-test/data`；测试结束停进程并清理。生产库当前仍是 2 用户、0 业务数据、5 个模型配置（未被本轮测试触碰）。
 4. **Git**：本轮改动尚未提交（`public/index.html`、`server.js`、`scripts/smoke-v1.63.mjs`、文档）；提交前 `git status -sb` 确认。**不要提交** `.env`、`data/`、`logs/`、`.session-headers.jsonl`、`.qa-test/`。
@@ -166,6 +166,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .qa-test\run-dom.ps1
 8. **角色变更后目标账号需重新登录**（会话版本 +1）。
 9. **删除账号**：无数据直接删；有数据必须走强制删除二选一。
 10. **回滚注意**：升级后软删的数据在 v1.62 代码看来仍存在，回滚前先恢复需要保留的数据。
+11. **前端已更新但服务端未重启时**：授权面板会显示「服务端版本不匹配，请管理员重启 3100」并禁用保存，不再报「缺少 project_id」或一直「加载中」。
 
 ---
 
