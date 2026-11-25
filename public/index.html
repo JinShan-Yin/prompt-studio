@@ -145,14 +145,16 @@
     table.snapshot-table th:nth-child(2), table.snapshot-table td:nth-child(2) { width: auto; text-align: left; padding-left: 16px; }
     table.snapshot-table th:nth-child(3), table.snapshot-table td:nth-child(3) { width: 170px; text-align: left; }
     table.snapshot-table th:nth-child(4), table.snapshot-table td:nth-child(4) { width: 130px; text-align: center; }
-    table.snapshot-table th:nth-child(5), table.snapshot-table td:nth-child(5) { width: 230px; text-align: right; padding-right: 16px; }
+    table.snapshot-table th:nth-child(5) { width: 230px; text-align: right; padding-right: 22px; }
+    table.snapshot-table td:nth-child(5) { width: 230px; text-align: right; padding-right: 16px; }
     table.snapshot-table th, table.snapshot-table td {
       padding: 12px 8px; border-bottom: 1px solid #ebeef5; vertical-align: middle;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     table.snapshot-table .snap-check-col { text-align: center; padding-left: 8px; padding-right: 8px; }
-    table.snapshot-table .snap-row-actions { display: flex; flex-wrap: nowrap; gap: 4px; justify-content: flex-end; }
-    table.snapshot-table .snap-row-actions .snap-btn { padding: 3px 6px; font-size: 12px; white-space: nowrap; }
+    table.snapshot-table .snap-row-actions { display: flex; flex-wrap: nowrap; align-items: center; width: 100%; gap: 4px; justify-content: flex-end; }
+    table.snapshot-table .snap-row-actions .snap-btn { display: inline-flex; align-items: center; justify-content: center; height: 24px; padding: 3px 6px; font-size: 12px; line-height: 1; white-space: nowrap; }
+    table.snapshot-table .snap-row-actions .snap-download-wrap { display: inline-flex; align-items: center; }
     /* 三态优先级：普通行 hover 极浅灰 */
     table.snapshot-table tbody tr { transition: background-color 0.15s ease; }
     table.snapshot-table tbody tr:hover { background: #f5f7fa; }
@@ -459,9 +461,6 @@
     .model-quick-link:hover { color: var(--primary); }
     .model-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
-    .label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-    .label-row .form-label { margin-bottom: 0; }
-
     /* ==================== V3.0 阶段四：功能样式 ==================== */
     /* 2) 左侧树搜索（深色侧边栏适配） */
     .tree-search-wrap { padding: 0 12px 10px; }
@@ -474,13 +473,6 @@
     .tree-search-input:focus { border-color: #818cf8; background: rgba(255, 255, 255, 0.1); box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.22); }
     .tree-empty { padding: 14px 16px; font-size: 13px; color: var(--sidebar-text); text-align: center; }
 
-    /* 5) Token 红线进度条（4px，上限 4000） */
-    .token-progress-track { height: 4px; width: 100%; background: #e5e7eb; border-radius: 999px; overflow: hidden; margin-bottom: 6px; }
-    .token-progress-fill { height: 100%; width: 0; border-radius: 999px; background: var(--success); transition: width 0.2s ease, background-color 0.2s ease; }
-    .token-progress-fill.warn { background: #eab308; }
-    .token-progress-fill.danger { background: var(--danger); }
-    .token-progress-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
-    .token-progress-meta .limit-warning { color: var(--danger); font-weight: 600; }
 
 
     /* 3) AI 生成刁钻测试题 */
@@ -724,7 +716,7 @@
     }
     /* ---------- 二、次要按钮 / 辅助操作去色：白底细灰边、深灰文字 ---------- */
     .btn-secondary, .btn-success, .btn-warning,
-    #copy-prompt-btn, #chat-clear-btn {
+    #chat-clear-btn {
       background: #ffffff !important;
       background-color: #ffffff !important;
       color: #4b5563 !important;
@@ -737,14 +729,14 @@
       font-weight: 500 !important;
     }
     .btn-secondary:hover:not(:disabled), .btn-success:hover:not(:disabled), .btn-warning:hover:not(:disabled),
-    #copy-prompt-btn:hover:not(:disabled), #chat-clear-btn:hover:not(:disabled) {
+    #chat-clear-btn:hover:not(:disabled) {
       background: #f9fafb !important;
       color: #111827 !important;
       border-color: #e5e7eb !important;
       box-shadow: none !important;
       text-decoration: none !important;
     }
-    /* 文本型辅助操作（清空对话 / 刷新列表 / 批量导入 / 导出 / 清理排版等）统一为次操作按钮 */
+    /* 文本型辅助操作（清空对话 / 刷新列表 / 批量导入 / 导出等）统一为次操作按钮 */
     .btn-link {
       background: #ffffff !important;
       color: #4b5563 !important;
@@ -793,12 +785,6 @@
     }
     .menu-child.active:hover { background: #f3f4f6 !important; color: #1a1a1a !important; }
     .menu-child:hover:not(.active) { background: #f3f4f6 !important; color: var(--ui-text) !important; }
-    /* Token 进度条：0-80% 深空灰 / >80%-100% 橙 / 满 100% 及超限 红 */
-    .token-progress-fill { background: #1a1a1a !important; transition: width 0.2s ease, background-color 0.2s ease !important; }
-    .token-progress-fill.warn { background: #f59e0b !important; }
-    .token-progress-fill.warn[style*="width: 100%"] { background: #c0392b !important; }
-    .token-progress-fill.danger { background: #c0392b !important; }
-    .token-progress-track { background: #f3f4f6 !important; }
     /* ---------- 五、去丑补丁：焦点柔光 / 空数据居中提示 ---------- */
     button:focus, button:active { outline: none !important; }
     button:focus-visible:not(.btn-primary) { outline: none !important; box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12) !important; }
@@ -824,8 +810,7 @@
     }
 
     /* ==================== V4.0：模板库 / 快捷键 / 备份 ==================== */
-    .label-actions { display: flex; align-items: center; gap: 10px; }
-    .polish-btn { font-size: 12px; white-space: nowrap; padding: 0; }
+    .polish-btn { white-space: nowrap; padding: 0; }
     .polish-btn.loading { opacity: 0.6; pointer-events: none; }
     .tpl-box { width: 860px; max-width: calc(100vw - 32px); max-height: 90vh; display: flex; flex-direction: column; }
     .tpl-body { overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; }
@@ -996,7 +981,7 @@
     body.public-readonly .editor-input, body.public-readonly .form-textarea { background: #f8fafc; }
     body.public-readonly .btn-primary,
     body.public-readonly .polish-btn,
-    body.public-readonly #clean-format-btn,
+    body.public-readonly #generate-snapshot-btn,
     body.public-readonly #kb-batch-delete-btn { opacity: .5; }
     @media (max-width: 900px) { .kb-main-grid { grid-template-columns: 1fr; } .kb-right { border-left: none; padding-left: 0; } }
     /* 审计日志面板（仅超管） */
@@ -1043,10 +1028,6 @@
     .status-disabled { background: #fdf3f2; color: #c0392b; }
     .sysadmin-table .btn-link { margin-right: 8px; }
 
-    /* Tab1 顶部 Token 进度工具栏 */
-    .token-toolbar { margin-bottom: 16px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f8fafc; }
-    .token-toolbar-head { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #64748b; margin-bottom: 8px; }
-    .token-toolbar-head > span:first-child { font-weight: 600; color: #334155; }
     /* Tab3 评测：左对话模拟器 / 右评测数据面板（双栏） */
     /* v1.60 重构：删除右侧批处理回归卡片后，左侧多轮对话卡片占满整行（单列） */
     #main-content[data-active-tab="eval"] { display: block; }
@@ -1092,8 +1073,8 @@
         <span class="brand-name">NewRock AI Workbench</span>
       </div>
       <button class="btn-new" onclick="openCreateModal('project')">
-        <svg width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-        开启新项目
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: 0 0 auto;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+        新增项目
       </button>
       <div class="tree-search-wrap">
         <div class="tree-search-box">
@@ -1155,30 +1136,14 @@
             <div class="card-header-actions">
               <button class="btn-link" id="apply-template-btn" type="button" onclick="openTemplateApplyModal()">📂 应用模板</button>
               <button class="btn-link" id="restore-template-btn" type="button" onclick="restoreInitialTemplate()" style="display: none;">↩️ 恢复初始模板</button>
-              <button class="btn-link" id="clean-format-btn" type="button" onclick="cleanupFormatting()">🧹 清理排版</button>
+              <button class="btn-link polish-btn" id="polish-system" type="button" onclick="polishLayer('SYSTEM')">✨ AI 润色</button>
             </div>
           </div>
           <div class="card-body">
-            <div class="token-toolbar">
-              <div class="token-toolbar-head">
-                <span>Token 进度</span>
-                <span id="token-progress-label">Token 占用 0%</span>
-                <span class="limit-warning" id="token-limit-warning" style="display: none;">⚠️ 超出 1,000,000 Token 上限</span>
-              </div>
-              <div class="token-progress-track" id="token-progress-track" title="Token 上限 1,000,000">
-                <div class="token-progress-fill" id="token-progress-bar"></div>
-              </div>
-            </div>
             <div class="form-group">
-              <div class="label-row">
-                <label class="form-label" for="val-system">系统提示词</label>
-                <div class="label-actions">
-                  <button class="btn-link polish-btn" id="polish-system" type="button" onclick="polishLayer('SYSTEM')">✨ AI 润色</button>
-                </div>
-              </div>
               <div class="editor-wrap">
                 <div class="editor-mirror" id="mirror-system" aria-hidden="true"></div>
-                <textarea id="val-system" class="form-textarea editor-input" rows="12" spellcheck="false"></textarea>
+                <textarea id="val-system" class="form-textarea editor-input" rows="12" spellcheck="false" aria-label="系统提示词"></textarea>
               </div>
             </div>
             <div class="editor-stats" id="editor-stats">
@@ -1190,8 +1155,7 @@
             <div class="editor-actions">
               <input type="text" id="snapshot-remark-input" placeholder="填写版本备注" maxlength="200" autocomplete="off"
                 style="flex: 1; min-width: 180px; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; color: #374151; outline: none;" />
-              <button class="btn btn-primary" id="generate-snapshot-btn" onclick="generateSnapshot()">提交</button>
-              <button class="btn btn-secondary" id="copy-prompt-btn" type="button" onclick="copyPromptAsText()">复制为txt</button>
+              <button class="btn btn-secondary" id="generate-snapshot-btn" onclick="generateSnapshot()">提交</button>
             </div>
           </div>
         </div>
@@ -2046,7 +2010,7 @@
         const el = document.getElementById(id);
         if (el) el.readOnly = readOnly;
       });
-      ['generate-snapshot-btn', 'clean-format-btn', 'polish-system'].forEach((id) => {
+      ['generate-snapshot-btn', 'polish-system'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.disabled = readOnly;
       });
@@ -2226,7 +2190,7 @@
       return `
         <div class="menu-child ${activeClass} ${isChecked ? 'tree-item-selected' : ''}" style="${paddingStyle}" onclick="${clickHandler}">
           ${checkboxWrap}
-          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex:1; padding-right:8px;">${escapeHtml(item.__label || item.name)}</span>
+          <span title="${escapeHtml(item.__label || item.name)}" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex:1; padding-right:8px;">${escapeHtml(item.__label || item.name)}</span>
           <div class="more-btn" onclick="event.stopPropagation(); showMenu(event, '${item.id}', '${type}')">
             <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
           </div>
@@ -4141,7 +4105,7 @@
     function openCreateModal(type, companyId = '') {
       closeMenu();
       const modal = document.getElementById('global-modal');
-      document.getElementById('modal-title').innerText = type === 'company' ? '创建客户或行业' : '开启新项目';
+      document.getElementById('modal-title').innerText = type === 'company' ? '创建客户或行业' : '新增项目';
       document.getElementById('modal-title').style.color = '#303133';
       const createMsgEl = document.getElementById('modal-message');
       createMsgEl.style.display = 'none';
@@ -4999,37 +4963,6 @@
       }
     }
 
-    /** 复制为txt：POST /api/prompt/assemble（不写库）→ 剪贴板 */
-    async function copyPromptAsText() {
-      if (!activeProjectId) { showToast('请先选择一个项目'); return; }
-      const btn = document.getElementById('copy-prompt-btn');
-      const originalText = btn ? btn.innerText : '';
-      if (btn) { btn.disabled = true; btn.innerText = '组装中...'; }
-      try {
-        const d = await safeFetchJson(`/api/prompt/assemble`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project_id: activeProjectId,
-            layers: getCurrentLayers()
-          })
-        });
-        // CQO 纯净度要求：复制到剪贴板的文本不得带首尾冗余空白（内部 ### 层级结构保留）
-        const finalPrompt = d && d.success && typeof d.final_prompt === 'string' ? d.final_prompt.trim() : '';
-        if (!finalPrompt) {
-          showToast((d && (d.error || d.message)) || '组装失败，无法复制');
-          return;
-        }
-        const ok = await copyTextToClipboard(finalPrompt);
-        if (ok) showToast(`已复制到剪贴板（${finalPrompt.length} 字符）`);
-        else showToast('复制失败，请检查浏览器剪贴板权限');
-      } catch (e) {
-        showToast((e && e.message) || '复制失败，请稍后重试');
-      } finally {
-        if (btn) { btn.disabled = false; btn.innerText = originalText || '复制为txt'; }
-      }
-    }
-    window.copyPromptAsText = copyPromptAsText;
 
     /** Ctrl/Cmd + S → 生成快照（阻止浏览器另存为；弹窗打开/无项目时不触发；输入法组合态放行） */
     function initShortcuts() {
@@ -5072,78 +5005,11 @@
       const tokensEl = document.getElementById('stats-tokens');
       if (charsEl) charsEl.innerText = String(totalChars);
       if (tokensEl) tokensEl.innerText = String(totalTokens);
-      updateTokenProgress(totalTokens);
     }
     window.updateEditorStats = updateEditorStats;
     window.scheduleEditorStats = scheduleEditorStats;
 
-    // ==================== v1.60：Token 红线进度条（上限 1,000,000） ====================
-    const TOKEN_LIMIT = 1000000;
-    /** 进度条：≤80% 绿、80%~100% 黄、>100% 红；超限显示红色提示（随 updateEditorStats 同步） */
-    function updateTokenProgress(totalTokens) {
-      const bar = document.getElementById('token-progress-bar');
-      if (!bar) return;
-      const label = document.getElementById('token-progress-label');
-      const warning = document.getElementById('token-limit-warning');
-      const ratio = totalTokens / TOKEN_LIMIT;
-      const pct = Math.max(0, Math.min(ratio * 100, 100));
-      bar.style.width = pct.toFixed(1) + '%';
-      bar.classList.remove('warn', 'danger');
-      if (ratio > 1) bar.classList.add('danger');
-      else if (ratio > 0.8) bar.classList.add('warn'); // ≤80% 绿；>80% 且 ≤100% 黄；>100% 红
-      if (label) label.innerText = `Token 占用 ${(ratio * 100).toFixed(0)}%（${totalTokens}/${TOKEN_LIMIT}）`;
-      if (warning) {
-        warning.style.display = ratio > 1 ? 'inline' : 'none';
-        if (ratio > 1) warning.innerText = `⚠️ 超出 1,000,000 Token 上限（当前 ${totalTokens} Token）`;
-      }
-    }
-    window.updateTokenProgress = updateTokenProgress;
-    window.TOKEN_LIMIT = TOKEN_LIMIT;
 
-    // ==================== V3.0 阶段四：一键清理排版 ====================
-    /** 对系统提示词执行：行首尾空白去除、连续空行折叠为 1、删除首尾空行、中文逗号「，」→ 英文逗号「,」 */
-    function cleanupFormatting() {
-      if (guardPublicProject()) return;
-      let removedChars = 0;
-      let changedBlocks = 0;
-      EDITOR_LAYERS.forEach(layer => {
-        const el = document.getElementById('val-' + layer.toLowerCase());
-        if (!el) return;
-        const original = el.value || '';
-        if (!original) return;
-        const rawLines = original.split('\n').map((line) => line
-          .replace(/^[\s\u3000]+|[\s\u3000]+$/g, '')
-          // 连续全角/半角逗号折叠为 1 个（保留原全角形态，不强制转英文逗号）
-          .replace(/，{2,}/g, '，')
-          .replace(/,{2,}/g, ','));
-        const cleanedLines = [];
-        let lastBlank = false;
-        rawLines.forEach((line) => {
-          if (line === '') {
-            if (!lastBlank && cleanedLines.length > 0) cleanedLines.push(''); // 连续空行折叠为单个
-            lastBlank = true;
-          } else {
-            cleanedLines.push(line);
-            lastBlank = false;
-          }
-        });
-        while (cleanedLines.length > 0 && cleanedLines[cleanedLines.length - 1] === '') cleanedLines.pop(); // 删除末尾空行
-        const next = cleanedLines.join('\n');
-        if (next !== original) {
-          changedBlocks++;
-          removedChars += Math.max(0, original.length - next.length);
-          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-          setter.call(el, next);
-          el.dispatchEvent(new Event('input', { bubbles: true })); // 刷新镜像高亮/自动撑高/Token 统计
-        }
-      });
-      if (changedBlocks === 0) {
-        showToast('排版已是最clean状态，无需清理');
-        return;
-      }
-      showToast(`🧹 清理排版完成：${changedBlocks} 个编辑框，共减少 ${removedChars} 个字符`);
-    }
-    window.cleanupFormatting = cleanupFormatting;
 
     // ==================== 模块一：双层镜像编辑器（镜像 div + 透明 textarea） ====================
     // 绝不使用 contenteditable：保留原生 textarea（generateSnapshot 等依赖 .value），
@@ -6260,7 +6126,6 @@
     initModelConfigUI(); // V3.0 阶段二：模型配置中心
     initGlobalEscHandler(); // V3.0 阶段四：Esc 关闭最上层弹层
     initTabsAndHeader(); // V5.0 阶段二：Tab 初始态 + 顶部用户信息 + 草稿监听
-    updateTokenProgress(0); // V3.0 阶段四：Token 进度条初始态
 
     window.onload = fetchData;
   </script>
