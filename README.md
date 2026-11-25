@@ -105,7 +105,7 @@
 - 启动自带端口占用检测与自动释放；`SIGINT` / `SIGTERM` 优雅关闭并关闭数据库。
 - 静态资源托管、SPA 回退、`/favicon.ico` 映射品牌 logo。
 - 三套开机自启：systemd、supervisord、Windows 任务计划 + VBS 静默启动（详见 `autostart/`）。
-- 管理员一键重启：`autostart/restart-newrock.ps1`（停旧进程 → 后台启动 → 等待 `/api/health` 并打印版本）。
+- 管理员一键重启：双击 `autostart/restart-newrock-elevated.bat`（UAC 点“是”），或运行 `autostart/restart-newrock.ps1`（停旧进程 → 后台启动 → 等待 `/api/health` 并打印版本，日志见 `logs/restart-elevated.log`）。
 
 ---
 
