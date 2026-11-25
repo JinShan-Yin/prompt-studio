@@ -219,7 +219,7 @@ const FEATURE_DEFS = [
   { key: 'edit', label: '提示词编辑' },
   { key: 'kb', label: '知识库管理' },
   { key: 'eval', label: '智能体评测' },
-  { key: 'snapshot', label: '历史快照' },
+  { key: 'snapshot', label: '提交记录' },
 ];
 const FEATURE_KEYS = FEATURE_DEFS.map((item) => item.key);
 /** 默认矩阵：全开，升级后行为与 V1.61 完全一致 */
@@ -2042,7 +2042,7 @@ route(['POST'], '/api/admin/users/delete', async (req, res) => {
   if (target.id === admin.id) return sendJson(res, 403, { success: false, error: '不能删除自己的账号' });
   if (target.role === 'superadmin') return sendJson(res, 403, { success: false, error: '不能删除超级管理员账号' });
   const tables = [
-    ['companies', '客户/行业'], ['projects', '项目'], ['kb_items', '知识条目'], ['snapshots', '历史快照'],
+    ['companies', '客户/行业'], ['projects', '项目'], ['kb_items', '知识条目'], ['snapshots', '提交记录'],
     ['model_configs', '模型配置'], ['prompt_templates', '提示词模板'],
   ];
   const counts = {};
@@ -2496,7 +2496,7 @@ route(['GET'], '/api/projects/export_zip', async (req, res) => {
   if (!project) return sendJson(res, 404, { success: false, error: '项目不存在' });
 
   const snapshots = db.prepare('SELECT id, created_at, eval_pass, eval_score, final_prompt_content FROM snapshots WHERE project_id = ? ORDER BY created_at ASC').all(projectId);
-  if (snapshots.length === 0) return sendJson(res, 404, { success: false, error: '该项目暂无历史快照可导出' });
+  if (snapshots.length === 0) return sendJson(res, 404, { success: false, error: '该项目暂无提交记录可导出' });
 
   const manifest = {
     project_id: project.id,

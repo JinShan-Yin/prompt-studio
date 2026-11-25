@@ -1142,7 +1142,7 @@
         <button type="button" class="tab-item" data-tab="edit" onclick="switchTab('edit')">📝 提示词编辑</button>
         <button type="button" class="tab-item" data-tab="kb" onclick="switchTab('kb')">📚 知识库管理</button>
         <button type="button" class="tab-item" data-tab="eval" onclick="switchTab('eval')">⚖️ 智能体评测</button>
-        <button type="button" class="tab-item" data-tab="snapshot" onclick="switchTab('snapshot')">🕒 历史快照</button>
+        <button type="button" class="tab-item" data-tab="snapshot" onclick="switchTab('snapshot')">🕒 提交记录</button>
       </div>
 
       <!-- 核心功能区 (默认隐藏，选中项目后显示) -->
@@ -1190,7 +1190,7 @@
             <div class="editor-actions">
               <input type="text" id="snapshot-remark-input" placeholder="填写版本备注" maxlength="200" autocomplete="off"
                 style="flex: 1; min-width: 180px; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; color: #374151; outline: none;" />
-              <button class="btn btn-primary" id="generate-snapshot-btn" onclick="generateSnapshot()">生成历史快照</button>
+              <button class="btn btn-primary" id="generate-snapshot-btn" onclick="generateSnapshot()">提交</button>
               <button class="btn btn-secondary" id="copy-prompt-btn" type="button" onclick="copyPromptAsText()">复制为txt</button>
             </div>
           </div>
@@ -1289,7 +1289,7 @@
         <!-- 卡片5：历史快照（Tab4，v1.60 重构：吸附操作条 + 前端分页 + 预览） -->
         <div class="card" data-tab="snapshot">
           <div class="card-header">
-            <span>🕒 历史快照</span>
+            <span>🕒 提交记录</span>
             <div class="card-header-actions">
               <button class="btn-link" onclick="loadSnapshots()">刷新列表</button>
             </div>
@@ -1318,7 +1318,7 @@
                 </tr>
               </thead>
               <tbody id="snapshot-tbody">
-                <tr><td colspan="5" style="text-align: center; color: #909399;">暂无历史快照</td></tr>
+                <tr><td colspan="5" style="text-align: center; color: #909399;">暂无提交记录</td></tr>
               </tbody>
             </table>
             </div>
@@ -1529,10 +1529,10 @@
           <input id="clone-project-name" class="form-input" type="text" maxlength="100" placeholder="默认：源项目名（副本）" />
         </div>
         <div class="form-group">
-          <label class="form-label">快照复制</label>
+          <label class="form-label">提交记录复制</label>
           <label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0;"><input type="radio" name="clone-copy-mode" value="latest" checked /> 仅最新一个（推荐，克隆后可回滚到原提示词）</label>
-          <label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0;"><input type="radio" name="clone-copy-mode" value="all" /> 全部历史快照</label>
-          <label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0;"><input type="radio" name="clone-copy-mode" value="none" /> 不复制快照</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0;"><input type="radio" name="clone-copy-mode" value="all" /> 全部提交记录</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0;"><input type="radio" name="clone-copy-mode" value="none" /> 不复制提交记录</label>
         </div>
         <div style="font-size:12px; color:#64748b; line-height:1.6;">复制品归你所有，可自由修改；公共参考项目与共享只读项目同样可以克隆。</div>
       </div>
@@ -1612,7 +1612,7 @@
             <button type="button" class="btn-link" onclick="loadProjectGrants()">刷新</button>
             <span id="grant-status" class="sysadmin-status"></span>
           </div>
-          <div class="sysadmin-hint" style="margin-bottom:10px;">被授权人可只读访问该项目的提示词、知识库与历史快照；所有写操作会被服务端拒绝。</div>
+          <div class="sysadmin-hint" style="margin-bottom:10px;">被授权人可只读访问该项目的提示词、知识库与提交记录；所有写操作会被服务端拒绝。</div>
           <div id="grant-user-list" class="sysadmin-list"></div>
           <div style="margin-top:14px;"><button type="button" class="btn-plain" onclick="saveProjectGrants()">保存只读授权</button></div>
         </div>
@@ -2305,7 +2305,7 @@
         return;
       }
       if (snapshotPending) {
-        showToast('正在生成快照，请稍候');
+        showToast('正在提交，请稍候');
         return;
       }
       snapshotPending = true;
@@ -2326,7 +2326,7 @@
           })
         });
         if (d.success) {
-          showToast(`快照生成成功！`);
+          showToast(`提交成功！`);
           if (remarkInput) remarkInput.value = '';
           loadSnapshots(); // 刷新表格
         } else {
@@ -3549,7 +3549,7 @@
       const tbody = document.getElementById('snapshot-tbody');
       const pageRows = getCurrentPageSnapshots();
       if (pageRows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #909399;">暂无历史快照</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #909399;">暂无提交记录</td></tr>';
       } else {
         tbody.innerHTML = pageRows.map((snap) => {
           const isPass = snap.eval_pass === 1;
@@ -5531,7 +5531,7 @@
 
     // ==================== V4.0 阶段二：快捷键面板 Modal ====================
     const SHORTCUT_ROWS = [
-      { keys: ['Ctrl / ⌘', 'S'], desc: '生成快照（阻止浏览器另存为）' },
+      { keys: ['Ctrl / ⌘', 'S'], desc: '提交（阻止浏览器另存为）' },
       { keys: ['Esc'], desc: '关闭最上层弹窗 / 下拉菜单' },
       { keys: ['Enter'], desc: '聊天输入框：发送消息' },
       { keys: ['Shift', 'Enter'], desc: '聊天输入框：换行' },
@@ -5936,7 +5936,7 @@
       if (!box) return;
       const features = defs || [
         { key: 'edit', label: '提示词编辑' }, { key: 'kb', label: '知识库管理' },
-        { key: 'eval', label: '智能体评测' }, { key: 'snapshot', label: '历史快照' },
+        { key: 'eval', label: '智能体评测' }, { key: 'snapshot', label: '提交记录' },
       ];
       const roles = [['user', '普通用户'], ['teamadmin', '团队管理员'], ['superadmin', '超级管理员（永久全开）']];
       box.innerHTML = features.map(function (f) {
@@ -5948,7 +5948,8 @@
             + (checked ? ' checked' : '') + (role === 'superadmin' ? ' disabled' : '')
             + ' onchange="onMatrixToggle(this)" /> ' + label + '</label>';
         }).join('');
-        return '<div class="feature-row"><span>' + escapeHtml(f.label) + '</span>' + cells + '</div>';
+        const label = f.label === '历史快照' ? '提交记录' : f.label;
+        return '<div class="feature-row"><span>' + escapeHtml(label) + '</span>' + cells + '</div>';
       }).join('');
     }
     function onMatrixToggle(el) {
@@ -5994,7 +5995,7 @@
       if (!sel || !box) return;
       const user = systemAdminUsers.find(function (u) { return u.id === sel.value; });
       if (!user) { box.innerHTML = '<div class="sysadmin-hint">请选择账号</div>'; return; }
-      const features = [['edit', '提示词编辑'], ['kb', '知识库管理'], ['eval', '智能体评测'], ['snapshot', '历史快照']];
+      const features = [['edit', '提示词编辑'], ['kb', '知识库管理'], ['eval', '智能体评测'], ['snapshot', '提交记录']];
       box.innerHTML = features.map(function (pair) {
         const key = pair[0], label = pair[1];
         const override = user.overrides && typeof user.overrides[key] === 'boolean' ? user.overrides[key] : null;
