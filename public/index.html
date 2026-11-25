@@ -140,15 +140,14 @@
     .table tr:hover { background: #f5f7fa; }
 
     /* 模块二：历史快照标准 HTML Table 规范，table-layout:fixed 锁定列宽，表头数据严格对齐 */
-    table.snapshot-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+    table.snapshot-table { width: 100%; min-width: 900px; table-layout: fixed; border-collapse: collapse; }
     table.snapshot-table th:nth-child(1), table.snapshot-table td:nth-child(1) { width: 40px; }
-    table.snapshot-table th:nth-child(2), table.snapshot-table td:nth-child(2) { width: 25%; }
-    table.snapshot-table th:nth-child(3), table.snapshot-table td:nth-child(3) { width: 20%; }
-    table.snapshot-table th:nth-child(4), table.snapshot-table td:nth-child(4) { width: 20%; }
-    table.snapshot-table th:nth-child(5), table.snapshot-table td:nth-child(5) { width: 10%; }
-    table.snapshot-table th:nth-child(6), table.snapshot-table td:nth-child(6) { width: 25%; }
+    table.snapshot-table th:nth-child(2), table.snapshot-table td:nth-child(2) { width: auto; text-align: left; padding-left: 16px; }
+    table.snapshot-table th:nth-child(3), table.snapshot-table td:nth-child(3) { width: 170px; text-align: left; }
+    table.snapshot-table th:nth-child(4), table.snapshot-table td:nth-child(4) { width: 130px; text-align: center; }
+    table.snapshot-table th:nth-child(5), table.snapshot-table td:nth-child(5) { width: 230px; text-align: right; padding-right: 16px; }
     table.snapshot-table th, table.snapshot-table td {
-      padding: 12px 8px; border-bottom: 1px solid #ebeef5;
+      padding: 12px 8px; border-bottom: 1px solid #ebeef5; vertical-align: middle;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     table.snapshot-table .snap-check-col { text-align: center; padding-left: 8px; padding-right: 8px; }
@@ -808,7 +807,7 @@
       border-color: #1a1a1a !important;
       box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1) !important;
     }
-    #snapshot-tbody td { text-align: center !important; color: #9ca3af !important; padding: 26px 12px !important; font-size: 13px !important; }
+    #snapshot-tbody td[colspan] { text-align: center !important; color: #9ca3af; padding: 26px 12px !important; font-size: 13px !important; }
     .kb-empty, .chat-empty, .model-empty, #empty-state { text-align: center !important; color: #9ca3af !important; }
     .card-header { gap: 12px; }
 
@@ -963,7 +962,8 @@
     .snap-btn:disabled { opacity: .45; cursor: not-allowed; filter: none; }
 
     /* 备注列 */
-    .snap-remark-cell { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #475569; font-size: 12.5px; }
+    .snap-remark-cell { color: #475569; font-size: 12.5px; }
+    .snap-remark-cell > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .snap-remark-empty { color: #cbd5e1; }
 
     /* 原生分页器 */
@@ -1310,16 +1310,15 @@
             <table class="table snapshot-table">
               <thead>
                 <tr>
-                  <th class="snap-check-col" style="width: 40px; text-align: center;"><input type="checkbox" id="select-all-snapshots" title="全选当前页" style="display: inline-block; appearance: auto; -webkit-appearance: auto;" onchange="toggleSelectAllCurrentPage(this.checked)" aria-label="全选当前页" /></th>
-                  <th style="width: 25%; text-align: left; padding-left: 16px;">快照 ID</th>
-                  <th style="width: 20%; text-align: left;">备注</th>
-                  <th style="width: 20%; text-align: left;">生成时间</th>
-                  <th style="width: 10%; text-align: center;">评测状态</th>
-                  <th style="width: 25%; text-align: right; padding-right: 16px;">操作</th>
+                  <th class="snap-check-col"><input type="checkbox" id="select-all-snapshots" title="全选当前页" style="display: inline-block; appearance: auto; -webkit-appearance: auto;" onchange="toggleSelectAllCurrentPage(this.checked)" aria-label="全选当前页" /></th>
+                  <th>版本备注</th>
+                  <th>生成时间</th>
+                  <th>评测状态</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody id="snapshot-tbody">
-                <tr><td colspan="6" style="text-align: center; color: #909399;">暂无历史快照</td></tr>
+                <tr><td colspan="5" style="text-align: center; color: #909399;">暂无历史快照</td></tr>
               </tbody>
             </table>
             </div>
@@ -2262,7 +2261,7 @@
       
       // 选中项目后，清空旧数据并重新拉取该项目的知识库和快照
       document.getElementById('kb-list-container').innerHTML = '<div class="kb-empty">加载中...</div>';
-      document.getElementById('snapshot-tbody').innerHTML = '<tr><td colspan="6" style="text-align: center; color: #909399;">加载中...</td></tr>';
+      document.getElementById('snapshot-tbody').innerHTML = '<tr><td colspan="5" style="text-align: center; color: #909399;">加载中...</td></tr>';
       // v1.60 重构：切换项目重置快照分页到第 1 页并清空跨页选中
       currentSnapshotPage = 1;
       selectedSnapshotIds = [];
@@ -3519,7 +3518,7 @@
     async function loadSnapshots() {
       if (!activeProjectId) return;
       const tbody = document.getElementById('snapshot-tbody');
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #909399;">加载中...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #909399;">加载中...</td></tr>';
       try {
         const d = await safeFetchJson(`/api/snapshots/list?project_id=${encodeURIComponent(activeProjectId)}`);
         allSnapshots = (d && d.success && Array.isArray(d.data)) ? d.data : [];
@@ -3532,7 +3531,7 @@
         renderSnapshotTable();
       } catch (e) {
         allSnapshots = [];
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--danger);">${escapeHtml(e.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger);">${escapeHtml(e.message)}</td></tr>`;
         renderSnapshotPagination();
         updateSnapshotActionBar();
       }
@@ -3550,7 +3549,7 @@
       const tbody = document.getElementById('snapshot-tbody');
       const pageRows = getCurrentPageSnapshots();
       if (pageRows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #909399;">暂无历史快照</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #909399;">暂无历史快照</td></tr>';
       } else {
         tbody.innerHTML = pageRows.map((snap) => {
           const isPass = snap.eval_pass === 1;
@@ -3565,11 +3564,10 @@
           return `
             <tr>
               <td class="snap-check-col" style="text-align: center;"><input type="checkbox" class="snapshot-checkbox" value="${escapeHtml(snap.id)}" style="display: inline-block; appearance: auto; -webkit-appearance: auto;" ${checked} ${disabled} onchange="onSnapshotRowCheck(this)" aria-label="选择快照" /></td>
-              <td style="padding-left: 16px; font-family: var(--font-mono); color: var(--primary);">${escapeHtml(snap.id)}</td>
-              <td>${remarkHtml}</td>
+              <td class="snap-remark-cell">${remarkHtml}</td>
               <td>${new Date(snap.created_at).toLocaleString()}</td>
-              <td style="text-align: center;"><span class="tag ${tagClass}">${statusText}</span></td>
-              <td style="text-align: right; padding-right: 16px;">
+              <td><span class="tag ${tagClass}">${statusText}</span></td>
+              <td>
                 <span class="snap-row-actions">
                   <button type="button" class="snap-btn snap-btn-text" onclick="openSnapshotPreview('${escapeHtml(snap.id)}')">👁️ 预览</button>
                   <span class="snap-download-wrap">
