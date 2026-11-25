@@ -9,7 +9,7 @@
 
 ## 0. 一句话现状
 
-项目是 **NewRock AI Workbench v1.63.1**，单机 Node.js + Express 5 + SQLite，生产服务跑在 `http://127.0.0.1:3100`（LAN 模式）。V1.63.1 已完成并通过冒烟 95/95 + 页面全按钮回归 93/93；**生产 3100 当前运行 v1.63.0，需要管理员权限重启后才加载 v1.63.1 服务端改动**（前端静态文件刷新即生效）。
+项目是 **NewRock AI Workbench v1.63.1**，单机 Node.js + Express 5 + SQLite，生产服务跑在 `http://127.0.0.1:3100`（LAN 模式）。V1.63.1 已完成并通过冒烟 95/95 + 页面全按钮回归 93/93；**生产 3100 已于 2026-11-26 00:16 重启到 v1.63.1**（启动快照已清理 5 份、auto 保留 7 份、下次自动备份 10:00）。
 
 ---
 
@@ -35,7 +35,7 @@
 | 前端 | `public/index.html`（约 6.6k 行，单文件原生 HTML/CSS/JS） |
 | 数据库 | `data/newrock.db`（SQLite + WAL） |
 | 主密钥 / 会话密钥 | `data/.vault-key` / `data/.session-secret` |
-| 路由数 | **79 条** `/api` |
+| 路由数 | **78 条** `/api` |
 | 生产 URL | http://127.0.0.1:3100 |
 | 冒烟 | `node scripts/smoke-v1.63.mjs`（95 项，临时目录，零依赖） |
 | 页面回归 | `.qa-test\run-dom.ps1`（jsdom，93 项；依赖已装在 `.qa-test`，仓库依赖未变） |
