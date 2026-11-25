@@ -4266,7 +4266,7 @@
 
       if (type === 'company') {
         menuHtml = `
-          <div class="dropdown-item" onclick="toggleCompanyPin('${id}', ${Number(targetItem.pinned) === 1 ? 'false' : 'true'})">📌 ${Number(targetItem.pinned) === 1 ? '取消公司置顶' : '置顶公司（全部内容）'}</div>
+          <div class="dropdown-item" onclick="toggleCompanyPin('${id}', ${Number(targetItem.pinned) === 1 ? 'false' : 'true'})">📌 ${Number(targetItem.pinned) === 1 ? '取消置顶（全部内容）' : '置顶（全部内容）'}</div>
           <div class="dropdown-item" onclick="openCreateModal('project', '${id}')">➕ 新项目</div>
           <div class="dropdown-item" onclick="enterMultiSelectMode()">☑️ 多选</div>
           <div class="dropdown-item" onclick="openEditModal('company', '${id}', '${targetItem.name}')">✏️ 重命名</div>
@@ -4566,6 +4566,15 @@
       closeMenu();
       const company = (companies || []).find(c => c.id === id);
       const pinned = typeof nextPinned === 'boolean' ? nextPinned : !(company && Number(company.pinned) === 1);
+      // 服务端未重启时给出明确提示，而不是笼统的「接口不存在」
+      try {
+        const health = await safeFetchJson('/api/health');
+        const parts = String((health && health.version) || '').split('.').map(function (n) { return Number(n) || 0; });
+        if (health && health.version && (parts[0] < 1 || (parts[0] === 1 && parts[1] < 63))) {
+          showToast('服务端版本 ' + health.version + ' 尚未加载公司置顶功能，请管理员重启 3100 后再试');
+          return;
+        }
+      } catch (e) { /* 版本探测失败则继续请求，由后端错误兜底 */ }
       try {
         const d = await safeFetchJson('/api/companies/pin', {
           method: 'POST',
@@ -4573,10 +4582,15 @@
           body: JSON.stringify({ company_id: id, pinned }),
         });
         if (d && d.success) {
-          showToast(d.message || (pinned ? '已按公司置顶全部内容' : '已取消公司置顶'));
+          showToast(d.message || (pinned ? '已置顶全部内容' : '已取消置顶'));
           await fetchData();
         } else {
-          showToast((d && (d.error || d.message)) || '操作失败');
+          const errText = (d && (d.error || d.message)) || '操作失败';
+          if (String(errText).indexOf('接口不存在') >= 0) {
+            showToast('服务端仍是旧版本（缺少公司置顶接口），请管理员重启 3100 后再试');
+          } else {
+            showToast(errText);
+          }
         }
       } catch (e) {
         showToast((e && e.message) || '操作失败');
