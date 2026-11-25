@@ -10,7 +10,7 @@
 ## 0. 一句话现状
 
 项目是 **NewRock AI Workbench v1.62**，单机 Node.js + Express 5 + SQLite，生产服务跑在 `http://127.0.0.1:3100`（LAN 模式）。  
-V1.62 功能与近期 UI 精修均已完成并提交；**代码分支领先远程 10 个提交（含本文件提交；以 `git status -sb` 为准），尚未 push**。当前没有进行中的代码任务。
+V1.62 功能与近期 UI 精修均已完成并提交；**origin/main 已包含代码提交 `858dd7c`、交接提交 `cef3743` 与 tag `v1.62`**。当前本地与远程一致；若本地再修订交接/.gitignore，会 ahead 1，具体以 `git status -sb` 为准。当前没有进行中的代码任务。
 
 ---
 
@@ -19,9 +19,9 @@ V1.62 功能与近期 UI 精修均已完成并提交；**代码分支领先远�
 1. **生产服务不要随意重启**：3100 当前监听 `0.0.0.0:3100`，PID **22300**，是提升权限的进程，普通 shell 的 `taskkill` 可能 Access denied。前端静态改动刷新即可；改 `server.js` 必须用管理员权限重启才生效。
 2. **生产库是 `data/newrock.db`**，不是旧的 `data/prompt-studio.db`。禁止用生产库做测试。
 3. **QA 必须隔离**：用 `NEWROCK_DATA_DIR` 指向独立目录 + 端口 3101；测试结束删除临时目录/库。生产库当前：2 用户、2 公司、4 项目、67 条提交记录、464 条知识库、5 个模型、1 个模板。
-4. **Git 未推送**：`main...origin/main [ahead 10]`（含本文件提交，以 `git status -sb` 为准）。最新代码提交是 `858dd7c`。推送前先确认远程/权限。
-5. **未跟踪文件**：仓库根有 `.session-headers.jsonl`（DSH 会话头文件），不要提交；建议加入 `.gitignore` 或删除。
-6. **本文件如已提交，会额外增加一个 docs 提交**；ahead 数请以 `git status -sb` 为准。
+4. **Git 状态**：远程 `origin/main` 已同步到 `cef3743`（含本交接文件 + tag `v1.62`）；最新代码提交是 `858dd7c`。若本地有新的修订，以 `git status -sb` 的 ahead 数为准；推送前确认远程/权限。
+5. **本地临时文件**：`.session-headers.jsonl`（DSH 会话头文件）已由 `.gitignore` 忽略，**不要提交**；`.qa-test/` 同样忽略。
+6. **本文件已提交在 `cef3743`**；若新窗口再修订本文件，会产生一个本地 docs 提交，ahead 数以 `git status -sb` 为准。
 
 ---
 
@@ -237,6 +237,8 @@ curl.exe -s http://127.0.0.1:3100/api/health
 ## 11. 最近提交清单
 
 ```
+cef3743 docs: 更新 V1.62 交接文档并忽略本地临时文件（origin/main，tag v1.62）
+01f1456 docs: 增加新窗口移交记录 HANDOVER.md
 858dd7c feat(ui): 精简编辑页并修正新增项目/提交记录操作列 + docs(qa): 16 项回归通过
 32bda54 feat(ui): 生成历史快照改为提交，历史快照改为提交记录 + docs(qa): 11 项回归通过
 b1f0898 fix(ui): 历史快照表格移除快照 ID 列并修正对齐/列宽/版本备注 + docs(qa): 12 项回归通过
