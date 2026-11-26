@@ -40,7 +40,7 @@ import { parseMarkdownChunks } from './lib/markdownChunker.js'; // v1.61：本�
 // 一、常量与运行环境
 // ============================================================
 
-const APP_VERSION = '1.64.0';
+const APP_VERSION = '1.65.0';
 const PORT = Number(process.env.PORT) || 3100;
 /** V1.63：知识库单文件上传上限（MB），前端通过 /api/auth/config 读取 */
 const KB_MAX_FILE_MB = Math.max(1, Math.min(200, Number(process.env.KB_MAX_FILE_MB) || 20));
@@ -806,6 +806,10 @@ function initDb() {
       CREATE INDEX IF NOT EXISTS idx_eval_runs_project ON eval_runs(project_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_llm_usage_created ON llm_usage(created_at);
       CREATE INDEX IF NOT EXISTS idx_llm_usage_user ON llm_usage(user_id, created_at);
+      -- V1.65：审计日志分页/筛选索引（此前无任何索引）
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action, created_at);
       CREATE INDEX IF NOT EXISTS idx_read_grants_scope ON read_grants(scope_type, scope_id);
       CREATE INDEX IF NOT EXISTS idx_company_pins_user ON company_pins(user_id);
       CREATE INDEX IF NOT EXISTS idx_companies_deleted ON companies(deleted_at);
@@ -1726,7 +1730,7 @@ app.use((req, res, next) => {
   const startedAt = Date.now();
   res.on('finish', () => {
     const elapsed = Date.now() - startedAt;
-    console.log(`[API] ${req.method} ${req.originalUrl.split('?')[0]} -> ${res.statusCode} (${elapsed}ms)`);
+    console.log(`[API] ${new Date().toISOString()} ${req.method} ${req.originalUrl.split('?')[0]} -> ${res.statusCode} (${elapsed}ms)`);
   });
   next();
 });
@@ -1759,7 +1763,8 @@ app.use((req, res, next) => {
 
 // 白名单：登录页 / 登录注册接口 / 启动配置 / 健康检查；其余未登录访问一律拦截
 const AUTH_WHITELIST_PATHS = new Set(['/login.html', '/api/auth/login', '/api/auth/register', '/api/auth/logout', '/api/auth/config', '/api/health']);
-const AUTH_PUBLIC_STATIC_RE = /^\/(logo\.png|favicon\.ico)$/i;
+// v1.65：vendor 目录是公开前端库（marked / DOMPurify），未登录也要能取，避免会话过期后硬刷新拿不到渲染库
+const AUTH_PUBLIC_STATIC_RE = /^\/(logo\.png|favicon\.ico|vendor\/)/i;
 function destroySessionQuietly(req) {
   try { if (req.session) req.session.destroy(() => {}); } catch (e) { /* ignore */ }
 }
@@ -1964,10 +1969,10 @@ function requireCompanyAccess(companyId, user, options = {}) {
   if (!canAccessOwner(company.user_id, user)) throw httpError(403, '无权访问该客户/行业');
   return company;
 }
-/** 校验快照访问权（优先 user_id，缺失则回落到项目归属） */
+/** 校验提交记录访问权（优先 user_id，缺失则回落到项目归属） */
 function requireSnapshotAccess(snapshotId, user, options = {}) {
   const snapshot = snapshotId ? db.prepare('SELECT * FROM snapshots WHERE id = ?').get(String(snapshotId)) : null;
-  if (!snapshot) throw httpError(404, '快照不存在或无权访问');
+  if (!snapshot) throw httpError(404, '提交记录不存在或无权访问');
   if (!options.allowDeleted && isRowDeleted(snapshot)) throw httpError(404, '提交记录已在回收站');
   let ownerId = snapshot.user_id;
   let projectRow = null;
@@ -1976,7 +1981,7 @@ function requireSnapshotAccess(snapshotId, user, options = {}) {
     if (!ownerId && projectRow) ownerId = projectRow.user_id;
   }
   if (!options.allowDeleted && projectRow && isRowDeleted(projectRow)) throw httpError(404, '所属项目已在回收站');
-  if (!canAccessOwner(ownerId, user) && !(projectRow && canReadProject(projectRow, user))) throw httpError(403, '无权访问该快照');
+  if (!canAccessOwner(ownerId, user) && !(projectRow && canReadProject(projectRow, user))) throw httpError(403, '无权访问该提交记录');
   return snapshot;
 }
 /** 校验知识库条目访问权（回落到所属项目） */
@@ -2552,28 +2557,79 @@ route(['POST'], '/api/admin/backups/run', async (req, res) => {
   }
 });
 
+/**
+ * V1.65：审计日志分页 + 条件筛选（仅超管）
+ * 入参：page / page_size(=limit) / level / action / user_id / q / from / to(ISO)
+ * 出参：{ success, data, total, page, page_size, has_more, summary:{info,warn,danger} }
+ * 说明：from/to 由前端把本地日期边界转成 ISO 后传入，服务端只做 UTC 字符串比较。
+ */
 route(['GET'], '/api/admin/audit-logs', async (req, res) => {
   const admin = currentSessionUser(req);
   if (!admin || admin.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可查看审计日志' });
-  const limit = Math.min(Number(req.query.limit) || 200, 1000);
+  const page = Math.max(1, Math.floor(Number(req.query.page) || 1));
+  const pageSize = Math.min(200, Math.max(1, Math.floor(Number(req.query.page_size || req.query.limit) || 50)));
   const level = String(req.query.level || '').trim();
   const action = String(req.query.action || '').trim();
-  const usernames = new Map();
-  try {
-    for (const u of db.prepare('SELECT id, username, role FROM users').all()) usernames.set(u.id, u);
-  } catch (e) { /* ignore */ }
-  let where = [];
-  let params = [];
-  if (['Info', 'Warn', 'Danger'].includes(level)) { where.push('level = ?'); params.push(level); }
+  const userId = String(req.query.user_id || '').trim();
+  const keyword = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
+  const fromRaw = String(req.query.from || '').trim();
+  const toRaw = String(req.query.to || '').trim();
+  let fromIso = '';
+  let toIso = '';
+  if (fromRaw) {
+    const ts = Date.parse(fromRaw);
+    if (!Number.isFinite(ts)) return sendJson(res, 400, { success: false, code: 'INVALID_RANGE', error: '起始时间不是合法时间' });
+    fromIso = new Date(ts).toISOString();
+  }
+  if (toRaw) {
+    const ts = Date.parse(toRaw);
+    if (!Number.isFinite(ts)) return sendJson(res, 400, { success: false, code: 'INVALID_RANGE', error: '结束时间不是合法时间' });
+    toIso = new Date(ts).toISOString();
+  }
+  if (fromIso && toIso && fromIso > toIso) {
+    return sendJson(res, 400, { success: false, code: 'INVALID_RANGE', error: '起始时间不能晚于结束时间' });
+  }
+  const where = [];
+  const params = [];
+  const sqlLevel = "COALESCE(NULLIF(level, ''), 'Info')";
+  if (['Info', 'Warn', 'Danger'].includes(level)) { where.push(`${sqlLevel} = ?`); params.push(level); }
   if (action) { where.push('action = ?'); params.push(action); }
-  const sql = 'SELECT * FROM audit_logs' + (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY rowid DESC LIMIT ?';
-  const rows = db.prepare(sql).all(...params, limit).map((r) => ({
-    ...r,
-    level: r.level || 'Info',
-    ip: r.ip || '',
-    username: (usernames.get(r.user_id) && usernames.get(r.user_id).username) || r.user_id || '',
-  }));
-  sendJson(res, 200, { success: true, data: rows });
+  if (userId) { where.push('user_id = ?'); params.push(userId); }
+  if (fromIso) { where.push('created_at >= ?'); params.push(fromIso); }
+  if (toIso) { where.push('created_at <= ?'); params.push(toIso); }
+  if (keyword) {
+    const like = '%' + keyword.replace(/[\\%_]/g, (ch) => '\\' + ch) + '%';
+    where.push("(action LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\' OR target_id LIKE ? ESCAPE '\\' OR user_id IN (SELECT id FROM users WHERE username LIKE ? ESCAPE '\\'))");
+    params.push(like, like, like, like);
+  }
+  const whereSql = where.length ? ' WHERE ' + where.join(' AND ') : '';
+  try {
+    const totalRow = db.prepare('SELECT COUNT(*) AS c FROM audit_logs' + whereSql).get(...params);
+    const total = totalRow ? Number(totalRow.c) || 0 : 0;
+    const summary = { info: 0, warn: 0, danger: 0 };
+    for (const row of db.prepare(`SELECT ${sqlLevel} AS lv, COUNT(*) AS c FROM audit_logs${whereSql} GROUP BY lv`).all(...params)) {
+      const key = String(row.lv || 'Info').toLowerCase();
+      if (key === 'info') summary.info = Number(row.c) || 0;
+      else if (key === 'warn') summary.warn = Number(row.c) || 0;
+      else if (key === 'danger') summary.danger = Number(row.c) || 0;
+    }
+    const offset = (page - 1) * pageSize;
+    const usernames = new Map();
+    try {
+      for (const u of db.prepare('SELECT id, username, role FROM users').all()) usernames.set(u.id, u);
+    } catch (e) { /* ignore */ }
+    const rows = db.prepare('SELECT * FROM audit_logs' + whereSql + ' ORDER BY rowid DESC LIMIT ? OFFSET ?')
+      .all(...params, pageSize, offset)
+      .map((r) => ({
+        ...r,
+        level: r.level || 'Info',
+        ip: r.ip || '',
+        username: (usernames.get(r.user_id) && usernames.get(r.user_id).username) || r.user_id || '',
+      }));
+    sendJson(res, 200, { success: true, data: rows, total, page, page_size: pageSize, has_more: offset + rows.length < total, summary });
+  } catch (e) {
+    sendJson(res, 500, { success: false, error: '读取审计日志失败：' + e.message });
+  }
 });
 
 // ------------------------------------------------------------
@@ -2581,6 +2637,26 @@ route(['GET'], '/api/admin/audit-logs', async (req, res) => {
 // ------------------------------------------------------------
 
 // ---------- V1.63：LLM 用量 / 成本汇总（管理员；团管按团队） ----------
+/** V1.65：模型单价表（同名列取较高单价，避免不同用户配置差异导致失真）；聚合与逐条明细共用 */
+function getModelPriceMap() {
+  const priceMap = new Map();
+  try {
+    for (const row of db.prepare('SELECT model_name, price_input_per_m, price_output_per_m FROM model_configs').all()) {
+      const key = String(row.model_name || '');
+      const next = { input: Number(row.price_input_per_m) || 0, output: Number(row.price_output_per_m) || 0 };
+      const prev = priceMap.get(key);
+      if (!prev || next.input + next.output >= prev.input + prev.output) priceMap.set(key, next);
+    }
+  } catch (e) { /* ignore */ }
+  return priceMap;
+}
+/** 单次调用成本估算（与汇总口径一致） */
+function estimateUsageCost(priceMap, row) {
+  const price = priceMap.get(String(row.model_name || '')) || { input: 0, output: 0 };
+  const prompt = Math.max(0, Number(row.prompt_tokens) || 0);
+  const completion = Math.max(0, Number(row.completion_tokens) || 0);
+  return (prompt * price.input + completion * price.output) / 1000000;
+}
 function collectUsageSummary(admin, days) {
   const from = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
   const ids = visibleOwnerIds(admin);
@@ -2591,16 +2667,7 @@ function collectUsageSummary(admin, days) {
   } else if (ids.length > 0) {
     rows = db.prepare(selectSql + ` AND user_id IN (${ids.map(() => '?').join(', ')}) ORDER BY rowid DESC LIMIT 100000`).all(from, ...ids);
   }
-  // 模型单价（同名列取较高单价，避免不同用户配置差异导致失真）
-  const priceMap = new Map();
-  try {
-    for (const row of db.prepare('SELECT model_name, price_input_per_m, price_output_per_m FROM model_configs').all()) {
-      const key = String(row.model_name || '');
-      const next = { input: Number(row.price_input_per_m) || 0, output: Number(row.price_output_per_m) || 0 };
-      const prev = priceMap.get(key);
-      if (!prev || next.input + next.output >= prev.input + prev.output) priceMap.set(key, next);
-    }
-  } catch (e) { /* ignore */ }
+  const priceMap = getModelPriceMap();
   const usernames = new Map();
   try {
     for (const u of db.prepare('SELECT id, username FROM users').all()) usernames.set(u.id, u.username || '');
@@ -2697,23 +2764,140 @@ route(['GET'], '/api/admin/usage/summary', async (req, res) => {
   sendJson(res, 200, { success: true, data: result.data });
 });
 
-/** V1.64：用量 CSV 导出（按天 × 模型 × 用途 × 用户聚合；UTF-8 BOM） */
+/** CSV 单元格转义（逗号/引号/换行） */
+function csvCell(value) {
+  const text = String(value === null || value === undefined ? '' : value);
+  return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+}
+/** V1.65：CSV 注入防护（文本单元格以 = + - @ 开头时前置单引号） */
+function csvText(value) {
+  const text = String(value === null || value === undefined ? '' : value);
+  return /^[=+\-@\t\r]/.test(text) ? "'" + text : text;
+}
+const USAGE_DETAIL_DEFAULT_ROWS = 50000;
+const USAGE_DETAIL_MAX_ROWS = 100000;
+const USAGE_DETAIL_HEADER = ['时间', '日期(UTC)', '用户', '项目', '提供方', '模型', '路由', '用途', '状态', '输入token', '输出token', '总token', '耗时ms', '估算成本(元)'];
+/** 明细导出的「合计」行（14 列） */
+function usageDetailTotalRow(sums) {
+  return ['合计', '', '', '', '', '', '', '', '', sums.prompt, sums.completion, sums.total, sums.latency, (Math.round(sums.cost * 1000000) / 1000000).toFixed(6)].map(csvCell).join(',');
+}
+
+/**
+ * V1.64：用量 CSV 导出（按天 × 模型 × 用途 × 用户聚合；UTF-8 BOM）
+ * V1.65：新增 mode=detail 逐条明细（默认/aggregate 时聚合输出完全不变）
+ * 入参：mode / days(1-365) / from / to / user_id / model / purpose / status / max_rows(1-100000)
+ */
 route(['GET'], '/api/admin/usage/export', async (req, res) => {
   const admin = currentSessionUser(req);
   if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
   const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+  const mode = String(req.query.mode || 'aggregate').toLowerCase();
+  if (mode !== 'aggregate' && mode !== 'detail') {
+    return sendJson(res, 400, { success: false, code: 'INVALID_MODE', error: 'mode 只支持 aggregate 或 detail' });
+  }
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+  if (mode === 'detail') {
+    const fromRaw = String(req.query.from || '').trim();
+    const toRaw = String(req.query.to || '').trim();
+    let fromIso = '';
+    let toIso = '';
+    if (fromRaw) {
+      const ts = Date.parse(fromRaw);
+      if (!Number.isFinite(ts)) return sendJson(res, 400, { success: false, code: 'INVALID_RANGE', error: '起始时间不是合法时间' });
+      fromIso = new Date(ts).toISOString();
+    }
+    if (toRaw) {
+      const ts = Date.parse(toRaw);
+      if (!Number.isFinite(ts)) return sendJson(res, 400, { success: false, code: 'INVALID_RANGE', error: '结束时间不是合法时间' });
+      toIso = new Date(ts).toISOString();
+    }
+    if (fromIso && toIso && fromIso > toIso) {
+      return sendJson(res, 400, { success: false, code: 'INVALID_RANGE', error: '起始时间不能晚于结束时间' });
+    }
+    const maxRows = Math.min(USAGE_DETAIL_MAX_ROWS, Math.max(1, Math.floor(Number(req.query.max_rows) || USAGE_DETAIL_DEFAULT_ROWS)));
+    const ids = visibleOwnerIds(admin);
+    const where = [];
+    const params = [];
+    if (fromIso) { where.push('u.created_at >= ?'); params.push(fromIso); }
+    else { where.push('u.created_at >= ?'); params.push(new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10)); }
+    if (toIso) { where.push('u.created_at <= ?'); params.push(toIso); }
+    const userId = String(req.query.user_id || '').trim();
+    const modelName = String(req.query.model || '').trim();
+    const purpose = String(req.query.purpose || '').trim();
+    const status = String(req.query.status || '').trim();
+    if (userId) { where.push('u.user_id = ?'); params.push(userId); }
+    if (modelName) { where.push('u.model_name = ?'); params.push(modelName); }
+    if (purpose) { where.push('u.purpose = ?'); params.push(purpose); }
+    if (status) { where.push('u.status = ?'); params.push(status); }
+    if (ids !== null) {
+      if (ids.length === 0) {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`usage-detail-${stamp}.csv`)}`);
+        return res.send('\uFEFF' + [USAGE_DETAIL_HEADER.join(','), usageDetailTotalRow({ prompt: 0, completion: 0, total: 0, cost: 0, latency: 0 })].join('\r\n'));
+      }
+      where.push(`u.user_id IN (${ids.map(() => '?').join(', ')})`);
+      params.push(...ids);
+    }
+    const whereSql = ' WHERE ' + where.join(' AND ');
+    let total = 0;
+    try {
+      const totalRow = db.prepare('SELECT COUNT(*) AS c FROM llm_usage u' + whereSql).get(...params);
+      total = totalRow ? Number(totalRow.c) || 0 : 0;
+    } catch (e) {
+      return sendJson(res, 500, { success: false, error: '统计用量明细失败：' + e.message });
+    }
+    if (total > maxRows) {
+      return sendJson(res, 400, { success: false, code: 'TOO_MANY_ROWS', total, max_rows: maxRows, error: `明细共 ${total} 条，超过单次导出上限 ${maxRows} 条，请缩小时间范围` });
+    }
+    let rows = [];
+    try {
+      rows = db.prepare(
+        'SELECT u.created_at, u.user_id, u.project_id, u.provider, u.model_name, u.route_kind, u.purpose, u.status, u.prompt_tokens, u.completion_tokens, u.total_tokens, u.latency_ms, p.name AS project_name, us.username '
+        + 'FROM llm_usage u LEFT JOIN projects p ON p.id = u.project_id LEFT JOIN users us ON us.id = u.user_id'
+        + whereSql + ' ORDER BY u.rowid DESC LIMIT ?'
+      ).all(...params, maxRows);
+    } catch (e) {
+      return sendJson(res, 500, { success: false, error: '读取用量明细失败：' + e.message });
+    }
+    const priceMap = getModelPriceMap();
+    const lines = [USAGE_DETAIL_HEADER.join(',')];
+    const sums = { prompt: 0, completion: 0, total: 0, cost: 0, latency: 0 };
+    for (const row of rows) {
+      const prompt = Math.max(0, Number(row.prompt_tokens) || 0);
+      const completion = Math.max(0, Number(row.completion_tokens) || 0);
+      const tokenTotal = Math.max(0, Number(row.total_tokens) || (prompt + completion));
+      const cost = estimateUsageCost(priceMap, row);
+      const latency = Math.max(0, Number(row.latency_ms) || 0);
+      sums.prompt += prompt; sums.completion += completion; sums.total += tokenTotal; sums.cost += cost; sums.latency += latency;
+      lines.push([
+        row.created_at || '',
+        String(row.created_at || '').slice(0, 10),
+        csvText(row.username || row.user_id || ''),
+        csvText(row.project_name || ''),
+        csvText(row.provider || ''),
+        csvText(row.model_name || ''),
+        csvText(row.route_kind || ''),
+        csvText(row.purpose || ''),
+        csvText(row.status || ''),
+        prompt, completion, tokenTotal, latency, cost.toFixed(6),
+      ].map(csvCell).join(','));
+    }
+    lines.push(usageDetailTotalRow(sums));
+    const fileName = `usage-detail-${stamp}-${days}d.csv`;
+    logAction(admin.id, 'usage_export', 'usage', '', `mode=detail rows=${rows.length} days=${days} from=${fromIso || '-'} to=${toIso || '-'}`);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+    return res.send('\uFEFF' + lines.join('\r\n'));
+  }
+
   const result = collectUsageSummary(admin, days);
-  const csvCell = (value) => {
-    const text = String(value === null || value === undefined ? '' : value);
-    return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
-  };
   const lines = [['日期', '模型', '提供方', '用途', '用户', '请求数', '输入token', '输出token', '总token', '估算成本(元)'].map(csvCell).join(',')];
   for (const row of result.combos) {
     lines.push([row.date, row.model_name, row.provider, row.purpose, row.username, row.requests, row.prompt_tokens, row.completion_tokens, row.total_tokens, Number(row.est_cost || 0).toFixed(6)].map(csvCell).join(','));
   }
   const totals = result.data.totals;
   lines.push(['合计', '', '', '', '', totals.requests, totals.prompt_tokens, totals.completion_tokens, totals.total_tokens, Number(totals.est_cost || 0).toFixed(6)].map(csvCell).join(','));
-  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const fileName = `usage-${stamp}-${days}d.csv`;
   logAction(admin.id, 'usage_export', 'usage', '', `days=${days} rows=${result.combos.length}`);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -3010,7 +3194,7 @@ route(['POST'], '/api/snapshots/create', async (req, res) => {
     final_prompt: prompt,
     context_applied: contextToReplacements(context),
     eval_run_id: linkedEvalRunId,
-    message: '快照成功存入',
+    message: '提交成功',
   });
 });
 
@@ -3026,8 +3210,8 @@ route(['GET'], '/api/snapshots/detail', async (req, res) => {
   const id = req.query.id || body.id;
   if (!id) return sendJson(res, 400, { success: false, error: '缺少 id' });
   requireSnapshotAccess(id, currentSessionUser(req));
-  const row = db.prepare('SELECT id, project_id, final_prompt_content, created_at, module_versions_json, eval_pass, eval_score FROM snapshots WHERE id = ?').get(id);
-  if (!row) return sendJson(res, 404, { success: false, error: '快照不存在' });
+  const row = db.prepare('SELECT id, project_id, final_prompt_content, created_at, module_versions_json, eval_pass, eval_score, remark FROM snapshots WHERE id = ?').get(id);
+  if (!row) return sendJson(res, 404, { success: false, error: '提交记录不存在' });
   sendJson(res, 200, {
     success: true,
     data: {
@@ -3037,6 +3221,7 @@ route(['GET'], '/api/snapshots/detail', async (req, res) => {
       created_at: row.created_at,
       eval_pass: row.eval_pass,
       eval_score: row.eval_score,
+      remark: row.remark || '',
       layers: safeParseLayers(row.module_versions_json),
     },
   });
@@ -3053,6 +3238,27 @@ route(['POST'], '/api/snapshots/delete', async (req, res) => {
   const result = softDeleteSnapshot(id, delUser);
   logAction(delUser.id, 'snapshot_delete', 'snapshot', id, `batch=${result.batch} soft=1`);
   sendJson(res, 200, { success: true, deleted: 1, id, batch: result.batch, message: '已移入回收站（30 天内可恢复）' });
+});
+
+/**
+ * V1.65：手动编辑提交记录的「版本备注」（空串 = 清空）
+ * 入参：{ id, remark }；权限：可读该记录 且 所属项目可写（共享只读/公共项目 403）
+ */
+route(['POST'], '/api/snapshots/update-remark', async (req, res) => {
+  const body = req.body || {};
+  const id = typeof body.id === 'string' ? body.id.trim() : '';
+  if (!id) return sendJson(res, 400, { success: false, error: '缺少 id' });
+  if (body.remark !== undefined && typeof body.remark !== 'string') {
+    return sendJson(res, 400, { success: false, error: 'remark 必须是字符串' });
+  }
+  const remark = typeof body.remark === 'string' ? body.remark.trim().slice(0, 200) : '';
+  const user = currentSessionUser(req);
+  const snapshot = requireSnapshotAccess(id, user);
+  if (snapshot.project_id) requireProjectWritable(snapshot.project_id, user);
+  const info = db.prepare('UPDATE snapshots SET remark = ? WHERE id = ?').run(remark, id);
+  if (!info || info.changes === 0) return sendJson(res, 404, { success: false, error: '提交记录不存在' });
+  logAction(user.id, 'snapshot_remark_update', 'snapshot', id, `len=${remark.length} remark=${remark}`);
+  sendJson(res, 200, { success: true, id, remark, message: '版本备注已更新' });
 });
 
 route(['POST'], '/api/prompt/assemble', async (req, res) => {
@@ -3890,7 +4096,7 @@ route(['GET'], '/api/gate/export', async (req, res) => {
   // 核心门禁：检查数据库中的评测结果
   if (snap.eval_pass !== 1) {
     res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-    return res.end(`【发布门禁拦截】\n该快照未通过评测（得分：${snap.eval_score}），禁止导出！\n请在生成快照时提供符合标准的模拟对话。`);
+    return res.end(`【发布门禁拦截】\n该提交记录未通过评测（得分：${snap.eval_score}），禁止导出！\n请在提交时提供符合标准的模拟对话。`);
   }
 
   // 项目名称必须在导出时实时从 DB 读取（重命名后旧快照同步生效），并清洗换行注入
@@ -3903,7 +4109,7 @@ route(['GET'], '/api/gate/export', async (req, res) => {
 
   let content;
   if (isMd) {
-    const metaHeader = `# 快照导出 ${snap.id}\n\n- **项目 ID**：${snap.project_id}\n- **项目名称**：${projectName}\n- **评测得分**：${snap.eval_score}\n- **生成时间**：${snap.created_at}\n\n---\n\n`;
+    const metaHeader = `# 提交记录导出 ${snap.id}\n\n- **项目 ID**：${snap.project_id}\n- **项目名称**：${projectName}\n- **评测得分**：${snap.eval_score}\n- **生成时间**：${snap.created_at}\n\n---\n\n`;
     content = metaHeader + promptBody;
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
   } else {
@@ -4772,7 +4978,7 @@ route(['POST'], '/api/projects/clone', async (req, res) => {
   logAction(cloneUser.id, 'project_clone', 'project', newProjectId, `source=${sourceId} target_company=${targetCompanyId} kb=${counts.kb} snapshots=${counts.snapshots} mode=${copyMode}`);
   sendJson(res, 200, {
     success: true,
-    message: `克隆成功：项目 + ${counts.kb} 条知识库 + ${counts.snapshots} 条快照（全新 id）`,
+    message: `克隆成功：项目 + ${counts.kb} 条知识库 + ${counts.snapshots} 条提交记录（全新 id）`,
     project_id: newProjectId,
     name: newName,
     company_id: targetCompanyId,
@@ -5001,7 +5207,7 @@ function startRecycleScheduler() {
 
 (async () => {
   console.log('========================================');
-  console.log(' NewRock AI Workbench v1.64.0（纯 Node.js + Express）');
+  console.log(` NewRock AI Workbench v${APP_VERSION}（纯 Node.js + Express）`);
   console.log('========================================');
   console.log(`[server] 数据目录: ${DATA_DIR}`);
   console.log(`[server] 数据库: ${DB_PATH}`);

@@ -1,6 +1,6 @@
 {
   "name": "newrock-ai-workbench",
-  "version": "1.64.0",
+  "version": "1.65.0",
   "description": "NewRock AI Workbench - 企业级多租户提示词协作与资产管理平台",
   "main": "server.js",
   "type": "module",

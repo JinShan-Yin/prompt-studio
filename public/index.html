@@ -7,6 +7,8 @@
   <style>
     /* ==================== Sprint3：UI 规范 v2.0 设计变量 ==================== */
     :root {
+      /* 只读编辑器底色：10% 半透明（改成 0.20 即 20%）；必须保持半透明，不能盖住 mirror 文字 */
+      --readonly-tint: rgba(15, 23, 42, 0.10);
       /* 品牌主色 / 语义色 */
       --primary: #1a1a1a;
       --primary-hover: #333333;
@@ -935,6 +937,8 @@
     /* 备注列 */
     .snap-remark-cell { color: #475569; font-size: 12.5px; }
     .snap-remark-cell > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .snap-remark-edit { cursor: pointer; }
+    .snap-remark-edit:hover { text-decoration: underline dashed #94a3b8; text-underline-offset: 3px; }
     .snap-remark-empty { color: #cbd5e1; }
 
     /* 原生分页器 */
@@ -964,7 +968,14 @@
     .tree-check-wrap { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; margin-right: 8px; }
     .tree-checkbox { width: 15px; height: 15px; accent-color: #1a1a1a; cursor: pointer; }
     .tree-item-selected { background: #f3f4f6 !important; }
-    body.public-readonly .editor-input, body.public-readonly .form-textarea { background: #f8fafc; }
+    /* v1.65：只读项目编辑器——半透明底（不得用不透明色，否则会盖住下层 mirror 的文字） */
+    body.public-readonly .form-textarea { background: #f8fafc; }
+    body.public-readonly textarea.editor-input {
+      background: var(--readonly-tint);
+      border-style: dashed;
+      border-color: #c8ccd6;
+    }
+    body.public-readonly .editor-wrap .editor-mirror { color: var(--text-main); }
     body.public-readonly .btn-primary,
     body.public-readonly .polish-btn,
     body.public-readonly #generate-snapshot-btn,
@@ -975,6 +986,12 @@
     .audit-body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
     .audit-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .audit-level-select { width: 160px; }
+    .audit-date-input { width: 140px; }
+    .audit-user-select { width: 150px; }
+    .audit-q-input { width: 210px; }
+    .audit-page-size { width: 92px; }
+    .audit-pager { display: flex; align-items: center; justify-content: flex-end; gap: 10px; font-size: 12px; color: #64748b; }
+    .audit-page-info { font-family: var(--font-mono); }
     .audit-status { font-size: 12px; color: #64748b; margin-left: auto; }
     .audit-table-wrap { overflow: auto; max-height: 60vh; border: 1px solid #e5e7eb; border-radius: 10px; }
     .audit-table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -1043,12 +1060,10 @@
     .export-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
   </style>
 
-  <!-- v1.61：Markdown 渲染（marked 9.1.6，bootcdn 国内源）+ 本地 vendor 兜底，保证离线/CDN 故障时仍可用 -->
-  <script src="https://cdn.bootcdn.net/ajax/libs/marked/9.1.6/marked.min.js"></script>
-  <script>if (typeof marked === 'undefined') { document.write('<script src="/vendor/marked.min.js"><\/script>'); }</script>
-  <!-- v1.61：XSS 净化（DOMPurify 3.0.6，bootcdn 国内源）+ 本地 vendor 兜底 -->
-  <script src="https://cdn.bootcdn.net/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
-  <script>if (typeof DOMPurify === 'undefined') { document.write('<script src="/vendor/purify.min.js"><\/script>'); }</script>
+  <!-- v1.65：Markdown 渲染库改为本地 vendor（marked 9.1.6 / DOMPurify 3.0.6）。
+       原 CDN 版本是解析阻塞的跨域脚本，首次加载（无缓存）会卡住整页渲染；本地文件随仓库分发，零外网依赖。 -->
+  <script src="/vendor/marked.min.js"></script>
+  <script src="/vendor/purify.min.js"></script>
 </head>
 <body>
   <div class="app-container">
@@ -1293,9 +1308,9 @@
 
   <!-- v1.60 重构：快照预览 Modal（pre 保留换行，Esc 关闭） -->
   <div id="snap-preview-modal" class="snap-preview-mask" style="display:none;" onclick="if (event.target === this) closeSnapshotPreview();">
-    <div class="snap-preview-box" role="dialog" aria-modal="true" aria-label="快照预览">
+    <div class="snap-preview-box" role="dialog" aria-modal="true" aria-label="提交记录预览">
       <div class="snap-preview-header">
-        <span class="snap-preview-title" id="snap-preview-title">快照预览</span>
+        <span class="snap-preview-title" id="snap-preview-title">提交记录预览</span>
         <button type="button" class="snap-preview-close" onclick="closeSnapshotPreview()" aria-label="关闭">✕</button>
       </div>
       <div class="snap-preview-body">
@@ -1320,7 +1335,20 @@
             <option value="Warn">Warn（黄）</option>
             <option value="Danger">Danger（红）</option>
           </select>
+          <input id="audit-from" type="date" class="form-input audit-date-input" title="起始日期（本地时区零点）" onchange="loadAuditLogs()" />
+          <span class="audit-hint">至</span>
+          <input id="audit-to" type="date" class="form-input audit-date-input" title="结束日期（含当天）" onchange="loadAuditLogs()" />
+          <select id="audit-user" class="form-input audit-user-select" onchange="loadAuditLogs()">
+            <option value="">全部用户</option>
+          </select>
+          <input id="audit-q" type="text" class="form-input audit-q-input" placeholder="关键词（动作/详情/对象/用户）" onchange="loadAuditLogs()" />
+          <select id="audit-page-size" class="form-input audit-page-size" onchange="loadAuditLogs()">
+            <option value="50">50/页</option>
+            <option value="100">100/页</option>
+            <option value="200">200/页</option>
+          </select>
           <button type="button" class="btn-link" onclick="loadAuditLogs()">刷新</button>
+          <button type="button" class="btn-link" onclick="resetAuditFilters()">重置</button>
           <span class="audit-status" id="audit-log-status"></span>
         </div>
         <div class="audit-table-wrap">
@@ -1332,6 +1360,11 @@
               <tr><td colspan="7" style="text-align:center;color:#909399;">加载中...</td></tr>
             </tbody>
           </table>
+        </div>
+        <div class="audit-pager">
+          <button type="button" class="btn-link" id="audit-prev-btn" onclick="goAuditPage(-1)">上一页</button>
+          <span class="audit-page-info" id="audit-page-info"></span>
+          <button type="button" class="btn-link" id="audit-next-btn" onclick="goAuditPage(1)">下一页</button>
         </div>
         <div class="audit-hint">黑匣子只读：仅超级管理员可查看，不提供修改/删除接口；代管修改记录为 Warn，高危删除记录为 Danger。</div>
       </div>
@@ -1664,6 +1697,7 @@
               <option value="365">最近 365 天</option>
             </select>
             <button type="button" class="btn-plain" onclick="exportUsageCsv()">⬇ 导出 CSV</button>
+            <button type="button" class="btn-plain" id="usage-detail-export-btn" onclick="exportUsageDetailCsv()" title="逐条调用明细（按当前时间范围）">⬇ 导出明细 CSV</button>
             <label class="sysadmin-check" title="0 = 关闭告警">日 token 阈值
               <input id="usage-alert-tokens" class="form-input" type="number" min="0" step="1000" style="width:120px;" placeholder="0=关闭" />
             </label>
@@ -1732,21 +1766,21 @@
     <div class="diff-panel">
       <div class="diff-header">
         <div class="diff-title">
-          <span>📊 快照对比</span>
+          <span>📊 提交记录对比</span>
           <span id="diff-snapshot-id" style="color: var(--primary); font-family: var(--font-mono);"></span>
           <span class="diff-stats" id="diff-stats"><span class="diff-added-stat" id="diff-added">+0</span> / <span class="diff-removed-stat" id="diff-removed">-0</span></span>
         </div>
         <div class="diff-header-actions">
-          <span class="diff-legend"><span class="diff-legend-red">■ 旧快照多出/不同行</span>　<span class="diff-legend-green">■ 当前编辑器新增/不同行</span></span>
+          <span class="diff-legend"><span class="diff-legend-red">■ 旧提交记录多出/不同行</span>　<span class="diff-legend-green">■ 当前编辑器新增/不同行</span></span>
           <button type="button" class="model-close-btn" onclick="closeDiffModal()" title="关闭" aria-label="关闭">×</button>
         </div>
       </div>
       <div class="diff-columns-head">
-        <span>左侧：旧快照（final_prompt）</span>
+        <span>左侧：旧提交记录（final_prompt）</span>
         <span>右侧：当前编辑器（实时组装）</span>
       </div>
       <div class="diff-body" id="diff-body">
-        <div class="diff-loading">点击快照行「对比当前」后在此展示行级差异…</div>
+        <div class="diff-loading">点击提交记录行「对比当前」后在此展示行级差异…</div>
       </div>
     </div>
   </div>
@@ -2028,32 +2062,90 @@
     });
 
     // ---------- V5 终极 QA F3：审计日志（黑匣子）面板 ----------
+    const auditState = { page: 1, pageSize: 50, total: 0, totalPages: 1, usersLoaded: false };
     function openAuditLogPanel() {
       if (!currentUserInfo || currentUserInfo.role !== 'superadmin') { showToast('仅超级管理员可查看审计日志'); return; }
       const modal = document.getElementById('audit-log-modal');
       if (!modal) return;
       modal.style.display = 'flex';
+      loadAuditUsers();
       loadAuditLogs();
     }
     function closeAuditLogPanel() {
       const modal = document.getElementById('audit-log-modal');
       if (modal) modal.style.display = 'none';
     }
-    async function loadAuditLogs() {
+    /** 审计面板「用户」下拉：超管可看全部账号，只在首次打开时拉一次 */
+    async function loadAuditUsers() {
+      if (auditState.usersLoaded) return;
+      const select = document.getElementById('audit-user');
+      if (!select) return;
+      try {
+        const d = await safeFetchJson('/api/admin/users');
+        if (!d || !d.success || !Array.isArray(d.data)) return;
+        const options = d.data.map((u) => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.username || u.id)}</option>`).join('');
+        select.innerHTML = '<option value="">全部用户</option>' + options;
+        auditState.usersLoaded = true;
+      } catch (e) { /* 保持「全部用户」，不影响筛选 */ }
+    }
+    /** 本地日期字符串（YYYY-MM-DD）→ ISO；endOfDay=true 取当日 23:59:59.999 */
+    function auditDateBoundary(value, endOfDay) {
+      const text = String(value || '').trim();
+      if (!text) return '';
+      const parts = text.split('-').map((n) => Number(n));
+      if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return '';
+      const dt = new Date(parts[0], parts[1] - 1, parts[2], endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+      return Number.isFinite(dt.getTime()) ? dt.toISOString() : '';
+    }
+    function updateAuditPager() {
+      const info = document.getElementById('audit-page-info');
+      const prev = document.getElementById('audit-prev-btn');
+      const next = document.getElementById('audit-next-btn');
+      if (info) info.innerText = `第 ${auditState.page} / ${auditState.totalPages} 页`;
+      if (prev) prev.disabled = auditState.page <= 1;
+      if (next) next.disabled = auditState.page >= auditState.totalPages;
+    }
+    async function loadAuditLogs(page) {
       const tbody = document.getElementById('audit-log-tbody');
       const status = document.getElementById('audit-log-status');
-      const filter = document.getElementById('audit-level-filter');
       if (!tbody) return;
-      const level = filter ? filter.value : '';
+      const levelEl = document.getElementById('audit-level-filter');
+      const userEl = document.getElementById('audit-user');
+      const qEl = document.getElementById('audit-q');
+      const sizeEl = document.getElementById('audit-page-size');
+      const level = levelEl ? levelEl.value : '';
+      const userId = userEl ? userEl.value : '';
+      const keyword = qEl ? qEl.value.trim() : '';
+      const pageSize = Math.min(200, Math.max(1, Number(sizeEl && sizeEl.value) || 50));
+      const from = auditDateBoundary(document.getElementById('audit-from') && document.getElementById('audit-from').value, false);
+      const to = auditDateBoundary(document.getElementById('audit-to') && document.getElementById('audit-to').value, true);
+      const targetPage = Math.max(1, Math.floor(Number(page) || 1));
+      auditState.pageSize = pageSize;
+      if (from && to && from > to) {
+        if (status) status.innerText = '起始日期不能晚于结束日期';
+        return;
+      }
+      const params = new URLSearchParams({ page: String(targetPage), page_size: String(pageSize) });
+      if (level) params.set('level', level);
+      if (userId) params.set('user_id', userId);
+      if (keyword) params.set('q', keyword);
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
       if (status) status.innerText = '加载中...';
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#909399;">加载中...</td></tr>';
       try {
-        const url = '/api/admin/audit-logs?limit=200' + (level ? '&level=' + encodeURIComponent(level) : '');
-        const res = await fetch(url);
-        const d = await res.json().catch(() => null);
+        const d = await safeFetchJson('/api/admin/audit-logs?' + params.toString());
         if (!d || !d.success) throw new Error((d && d.error) || '加载失败');
         const rows = Array.isArray(d.data) ? d.data : [];
-        if (status) status.innerText = '共 ' + rows.length + ' 条' + (level ? '（' + level + '）' : '');
+        const total = Number(d.total) || 0;
+        const summary = d.summary || { info: 0, warn: 0, danger: 0 };
+        auditState.page = Math.max(1, Number(d.page) || targetPage);
+        auditState.total = total;
+        auditState.totalPages = Math.max(1, Math.ceil(total / pageSize));
+        if (status) {
+          status.innerText = `共 ${total} 条（Info ${Number(summary.info) || 0} / Warn ${Number(summary.warn) || 0} / Danger ${Number(summary.danger) || 0}）`;
+        }
+        updateAuditPager();
         if (rows.length === 0) {
           tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#909399;">暂无日志</td></tr>';
           return;
@@ -2076,11 +2168,28 @@
       } catch (e) {
         if (status) status.innerText = '';
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#c0392b;">' + escapeHtml(e.message || '加载失败') + '</td></tr>';
+        updateAuditPager();
       }
+    }
+    function goAuditPage(delta) {
+      const next = auditState.page + Number(delta || 0);
+      if (next < 1 || next > auditState.totalPages) return;
+      loadAuditLogs(next);
+    }
+    function resetAuditFilters() {
+      ['audit-level-filter', 'audit-user', 'audit-q', 'audit-from', 'audit-to'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      const sizeEl = document.getElementById('audit-page-size');
+      if (sizeEl) sizeEl.value = '50';
+      loadAuditLogs(1);
     }
     window.openAuditLogPanel = openAuditLogPanel;
     window.closeAuditLogPanel = closeAuditLogPanel;
     window.loadAuditLogs = loadAuditLogs;
+    window.goAuditPage = goAuditPage;
+    window.resetAuditFilters = resetAuditFilters;
 
     /** V1.62：只读模式（公共参考项目 / 共享只读项目共用），以服务端 can_write 为准 */
     function setPublicProjectMode(project) {
@@ -2177,7 +2286,7 @@
       if (selectedProjectIds.length === 0) return showToast('请先勾选项目');
       if (window.isPublicProject) return showToast('无权修改公共项目');
       const ids = selectedProjectIds.slice();
-      openConfirmModal('批量删除项目', `确认删除选中的 ${ids.length} 个项目？（含其知识库与快照将无法访问）`, async () => {
+      openConfirmModal('批量删除项目', `确认删除选中的 ${ids.length} 个项目？（含其知识库与提交记录将无法访问）`, async () => {
         closeModal();
         for (const id of ids) {
           try {
@@ -3706,7 +3815,7 @@
     // 4. 历史快照
     // ==================== v1.60 重构：前端分页 + 跨页勾选 + 预览 + 批量删除 ====================
     const SNAPSHOT_PAGE_SIZE = 20;
-    let allSnapshots = [];          // 一次性拉取的全部快照
+    let allSnapshots = [];          // 一次性拉取的全部提交记录
     let currentSnapshotPage = 1;    // 当前页码（从 1 开始）
     let selectedSnapshotIds = [];   // 跨页维护的选中 ID（全局数组，翻页不清空）
 
@@ -3753,12 +3862,17 @@
           const disabled = isPass ? '' : 'disabled';
           const checked = selectedSnapshotIds.includes(snap.id) ? 'checked' : '';
           const remark = (snap.remark || '').trim();
-          const remarkHtml = remark
-            ? `<span title="${escapeHtml(remark)}">${escapeHtml(remark)}</span>`
-            : '<span class="snap-remark-empty">—</span>';
+          // v1.65：版本备注可在列表内手动编辑（只读项目不渲染入口，后端仍 403 兜底）
+          const canEditRemark = !window.isPublicProject;
+          const remarkInner = remark
+            ? `<span title="${escapeHtml(remark)}${canEditRemark ? '（点击编辑）' : ''}">${escapeHtml(remark)}</span>`
+            : `<span class="snap-remark-empty" title="${canEditRemark ? '点击编辑版本备注' : ''}">${canEditRemark ? '✏️ 添加备注' : '—'}</span>`;
+          const remarkHtml = canEditRemark
+            ? `<span class="snap-remark-edit" role="button" tabindex="0" title="点击编辑版本备注" onclick="editSnapshotRemark('${escapeHtml(snap.id)}')">${remarkInner}</span>`
+            : remarkInner;
           return `
             <tr>
-              <td class="snap-check-col" style="text-align: center;"><input type="checkbox" class="snapshot-checkbox" value="${escapeHtml(snap.id)}" style="display: inline-block; appearance: auto; -webkit-appearance: auto;" ${checked} ${disabled} onchange="onSnapshotRowCheck(this)" aria-label="选择快照" /></td>
+              <td class="snap-check-col" style="text-align: center;"><input type="checkbox" class="snapshot-checkbox" value="${escapeHtml(snap.id)}" style="display: inline-block; appearance: auto; -webkit-appearance: auto;" ${checked} ${disabled} onchange="onSnapshotRowCheck(this)" aria-label="选择提交记录" /></td>
               <td class="snap-remark-cell">${remarkHtml}</td>
               <td>${new Date(snap.created_at).toLocaleString()}</td>
               <td><span class="tag ${tagClass}">${statusText}</span></td>
@@ -3792,6 +3906,59 @@
       updateSnapshotActionBar();
     }
     window.onSnapshotRowCheck = onSnapshotRowCheck;
+
+    /** v1.65：手动编辑提交记录的「版本备注」（复用全局 #modal-input；空串 = 清除备注） */
+    function editSnapshotRemark(id) {
+      if (guardPublicProject()) return;
+      const snap = (allSnapshots || []).find((s) => s.id === id);
+      if (!snap) { showToast('提交记录不存在'); return; }
+      const current = String(snap.remark || '').trim();
+      const modal = document.getElementById('global-modal');
+      const titleEl = document.getElementById('modal-title');
+      if (!modal || !titleEl) return;
+      titleEl.innerText = '修改版本备注';
+      titleEl.style.color = '#303133';
+      const msgEl = document.getElementById('modal-message');
+      if (msgEl) { msgEl.style.display = 'none'; msgEl.style.maxHeight = ''; msgEl.style.overflowY = ''; }
+      const companySelect = document.getElementById('modal-company-select-container');
+      if (companySelect) companySelect.style.display = 'none';
+      const newCompanyContainer = document.getElementById('modal-new-company-container');
+      if (newCompanyContainer) newCompanyContainer.style.display = 'none';
+      const inputContainer = document.getElementById('modal-input-container');
+      if (inputContainer) inputContainer.style.display = 'block';
+      const inputEl = document.getElementById('modal-input');
+      if (inputEl) {
+        inputEl.type = 'text';
+        inputEl.setAttribute('maxlength', '200');
+        inputEl.placeholder = '版本备注（留空 = 清除备注）';
+        inputEl.value = current;
+      }
+      const confirmBtn = document.getElementById('modal-confirm-btn');
+      if (confirmBtn) { confirmBtn.className = 'btn-plain'; confirmBtn.disabled = false; confirmBtn.innerText = '保存'; }
+      modal.style.display = 'flex';
+      if (inputEl) inputEl.focus();
+      modalCallback = async () => {
+        const next = String((inputEl && inputEl.value) || '').trim().slice(0, 200);
+        if (next === current) { closeModal(); return; }
+        try {
+          const d = await safeFetchJson('/api/snapshots/update-remark', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, remark: next }),
+          });
+          if (d && d.success) {
+            showToast(next ? '版本备注已更新' : '版本备注已清除');
+            closeModal();
+            await loadSnapshots();
+          } else {
+            showToast((d && (d.error || d.message)) || '保存失败');
+          }
+        } catch (e) {
+          showToast((e && e.message) || '保存失败');
+        }
+      };
+    }
+    window.editSnapshotRemark = editSnapshotRemark;
 
     /** 表头全选：把当前页可选项并入数组，绝不清空跨页数据；取消则移除当前页 */
     function toggleSelectAllCurrentPage(checked) {
@@ -3856,9 +4023,9 @@
 
     /** 批量删除：强 confirm，循环调用单条删除接口 */
     async function deleteSelectedSnapshots() {
-      if (selectedSnapshotIds.length === 0) { showToast('请先勾选快照'); return; }
+      if (selectedSnapshotIds.length === 0) { showToast('请先勾选提交记录'); return; }
       const ids = selectedSnapshotIds.slice();
-      if (!window.confirm(`确定要删除选中的 ${ids.length} 个快照吗？此操作不可恢复。`)) return;
+      if (!window.confirm(`确定要删除选中的 ${ids.length} 条提交记录吗？删除后将移入回收站（30 天内可恢复）。`)) return;
       let ok = 0, fail = 0;
       for (const id of ids) {
         try {
@@ -3870,14 +4037,14 @@
         } catch (e) { fail++; }
       }
       selectedSnapshotIds = [];
-      showToast(fail === 0 ? `已删除 ${ok} 个快照` : `删除完成：成功 ${ok} 个，失败 ${fail} 个`);
+      showToast(fail === 0 ? '已删除' : `删除完成：成功 ${ok} 条，失败 ${fail} 条`);
       await loadSnapshots();
     }
     window.deleteSelectedSnapshots = deleteSelectedSnapshots;
 
     /** 批量下载：串行 Blob + 300ms 间隔，防多文件拦截 */
     async function batchDownloadSnapshots(format) {
-      if (selectedSnapshotIds.length === 0) return showToast('请先勾选快照');
+      if (selectedSnapshotIds.length === 0) return showToast('请先勾选提交记录');
       const ids = selectedSnapshotIds.slice();
       const safeFormat = format === 'md' ? 'md' : 'txt';
       if (ids.length > 1) showToast('若浏览器拦截，请在地址栏提示中允许“多文件下载”');
@@ -3904,9 +4071,9 @@
       if (okCount === 0) {
         showToast('请允许多文件下载');
       } else if (failCount > 0) {
-        showToast('部分快照下载失败，请允许多文件下载后重试');
+        showToast('部分提交记录下载失败，请允许多文件下载后重试');
       } else {
-        showToast(`已下载 ${okCount} 个快照（${safeFormat}）`);
+        showToast(`已下载 ${okCount} 条提交记录（${safeFormat}）`);
       }
     }
     window.batchDownloadSnapshots = batchDownloadSnapshots;
@@ -4049,15 +4216,15 @@
       const title = document.getElementById('snap-preview-title');
       if (!modal || !pre) return;
       pre.textContent = '加载中...';
-      title.innerText = `快照预览 · ${id}`;
+      title.innerText = `提交记录预览 · ${id}`;
       modal.style.display = 'flex';
       try {
         const d = await safeFetchJson(`/api/snapshots/detail?id=${encodeURIComponent(id)}`);
         if (!d || !d.success || !d.data) {
-          pre.textContent = (d && (d.error || d.message)) || '快照详情获取失败';
+          pre.textContent = (d && (d.error || d.message)) || '提交记录详情获取失败';
           return;
         }
-        title.innerText = `快照预览 · ${d.data.id}`;
+        title.innerText = `提交记录预览 · ${d.data.id}`;
         // textContent 写入 <pre>，天然保留换行且防 XSS
         pre.textContent = d.data.final_prompt_content == null ? '' : String(d.data.final_prompt_content);
         pre.scrollTop = 0;
@@ -4084,7 +4251,7 @@
      *  竞态修复：rollbackSeq + projectIdAtRollback 双守卫；切项目 / 连点多个快照时只允许最新一次生效。 */
     let rollbackSeq = 0;
     async function rollbackSnapshot(id) {
-      if (!id) { showToast('快照 ID 无效'); return; }
+      if (!id) { showToast('提交记录 ID 无效'); return; }
       const projectIdAtRollback = activeProjectId;
       if (!projectIdAtRollback) { showToast('请先选择一个项目'); return; }
       const seq = ++rollbackSeq;
@@ -4093,17 +4260,17 @@
         // 双守卫：已有更新的回滚 / 已切换项目 → 丢弃在途响应，绝不再写编辑器
         if (seq !== rollbackSeq || activeProjectId !== projectIdAtRollback) return;
         if (!d || !d.success || !d.data) {
-          showToast((d && (d.error || d.message)) || '快照详情获取失败');
+          showToast((d && (d.error || d.message)) || '提交记录详情获取失败');
           return;
         }
         // 归属校验：后端返回 project_id 时，快照必须属于当前项目
         if (d.data.project_id != null && String(d.data.project_id) !== String(activeProjectId)) {
-          showToast('该快照不属于当前项目，已取消回滚');
+          showToast('该提交记录不属于当前项目，已取消回滚');
           return;
         }
         const layers = d.data.layers;
         if (!Array.isArray(layers) || layers.length === 0) {
-          showToast('该快照没有可回滚的层内容');
+          showToast('该提交记录没有可回滚的层内容');
           return;
         }
         const byLayer = {};
@@ -4144,7 +4311,7 @@
         // 再主动全量刷新一次，确保初始化/赋值后的镜像与统计一定是最新的
         if (typeof window.refreshAllEditorMirrors === 'function') window.refreshAllEditorMirrors();
         if (typeof window.updateEditorStats === 'function') window.updateEditorStats();
-        showToast(`已回滚到快照 ${id}（尚未生成新快照，请确认后重新生成）`);
+        showToast(`已回滚到提交记录 ${id}（尚未生成新提交记录，请确认后重新提交）`);
         const sysEl = document.getElementById('val-system');
         if (sysEl && typeof sysEl.scrollIntoView === 'function') sysEl.scrollIntoView({ block: 'center' });
       } catch (e) {
@@ -4225,7 +4392,7 @@
 
     /** 打开全屏 Diff：GET 旧快照 detail.final_prompt_content + 当前 assemble → 行级 LCS 对比 */
     async function openSnapshotDiff(snapshotId) {
-      if (!snapshotId) { showToast('快照 ID 无效'); return; }
+      if (!snapshotId) { showToast('提交记录 ID 无效'); return; }
       if (!activeProjectId) { showToast('请先选择一个项目'); return; }
       const projectIdAtOpen = activeProjectId;
       const seq = ++diffSeq;
@@ -4235,7 +4402,7 @@
       const idEl = document.getElementById('diff-snapshot-id');
       if (idEl) idEl.innerText = snapshotId;
       if (stats) stats.innerHTML = '<span class="diff-loading" style="padding: 0;">对比中…</span>';
-      if (body) body.innerHTML = '<div class="diff-loading">正在加载旧快照与当前编辑器内容…</div>';
+      if (body) body.innerHTML = '<div class="diff-loading">正在加载旧提交记录与当前编辑器内容…</div>';
       if (modal) modal.style.display = 'flex';
       try {
         const [detail, currentPrompt] = await Promise.all([
@@ -4244,8 +4411,8 @@
         ]);
         if (seq !== diffSeq || activeProjectId !== projectIdAtOpen) return; // 已关闭/已切项目：丢弃在途结果
         if (!detail || !detail.success || !detail.data) {
-          showToast((detail && (detail.error || detail.message)) || '旧快照加载失败');
-          if (body) body.innerHTML = '<div class="diff-loading">旧快照加载失败</div>';
+          showToast((detail && (detail.error || detail.message)) || '旧提交记录加载失败');
+          if (body) body.innerHTML = '<div class="diff-loading">旧提交记录加载失败</div>';
           return;
         }
         const snapshot = detail.data;
@@ -5541,17 +5708,17 @@
 
     /** 历史快照「📋 复制」：拉 detail 的 final_prompt_content → 剪贴板（优先 clipboard，降级 execCommand） */
     async function copySnapshotText(id) {
-      if (!id) { showToast('快照 ID 无效'); return; }
+      if (!id) { showToast('提交记录 ID 无效'); return; }
       try {
         const d = await safeFetchJson(`/api/snapshots/detail?id=${encodeURIComponent(id)}`);
         if (!d || !d.success || !d.data) {
-          showToast((d && (d.error || d.message)) || '快照加载失败');
+          showToast((d && (d.error || d.message)) || '提交记录加载失败');
           return;
         }
         const text = String(d.data.final_prompt_content || '');
-        if (!text.trim()) { showToast('该快照内容为空'); return; }
+        if (!text.trim()) { showToast('该提交记录内容为空'); return; }
         const ok = await copyTextToClipboard(text);
-        showToast(ok ? `已复制快照 ${id}（${text.length} 字符）` : '复制失败，请手动选择复制');
+        showToast(ok ? `已复制提交记录 ${id}（${text.length} 字符）` : '复制失败，请手动选择复制');
       } catch (e) {
         showToast((e && e.message) || '复制失败');
       }
@@ -5984,8 +6151,7 @@
             + (checked ? ' checked' : '') + (role === 'superadmin' ? ' disabled' : '')
             + ' onchange="onMatrixToggle(this)" /> ' + label + '</label>';
         }).join('');
-        const label = f.label === '历史快照' ? '提交记录' : f.label;
-        return '<div class="feature-row"><span>' + escapeHtml(label) + '</span>' + cells + '</div>';
+        return '<div class="feature-row"><span>' + escapeHtml(f.label) + '</span>' + cells + '</div>';
       }).join('');
     }
     function onMatrixToggle(el) {
@@ -6608,6 +6774,46 @@
       showToast('已开始导出用量 CSV');
     }
     window.exportUsageCsv = exportUsageCsv;
+
+    /** V1.65：用量逐条明细导出（fetch→blob，才能把 400/超限错误提示出来） */
+    async function exportUsageDetailCsv() {
+      const btn = document.getElementById('usage-detail-export-btn');
+      if (btn) btn.disabled = true;
+      try {
+        const url = '/api/admin/usage/export?mode=detail&days=' + encodeURIComponent(usageState.days);
+        const res = await fetch(url);
+        const contentType = String(res.headers.get('content-type') || '');
+        if (!res.ok || contentType.indexOf('text/csv') < 0) {
+          let payload = null;
+          try { payload = await res.json(); } catch (e) { payload = null; }
+          if (payload && payload.code === 'TOO_MANY_ROWS') {
+            showToast(`数据过多（${payload.total} 条 > 上限 ${payload.max_rows}），请缩小时间范围后重试`);
+          } else {
+            showToast((payload && (payload.error || payload.message)) || '导出失败');
+          }
+          return;
+        }
+        const blob = await res.blob();
+        const disposition = String(res.headers.get('content-disposition') || '');
+        const match = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+        const fileName = match ? decodeURIComponent(match[1]) : `usage-detail-${usageState.days}d.csv`;
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = fileName;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+        showToast(`已导出最近 ${usageState.days} 天明细`);
+      } catch (e) {
+        showToast((e && e.message) || '导出失败');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+    window.exportUsageDetailCsv = exportUsageDetailCsv;
 
     async function saveUsageAlerts() {
       if (!(currentUserInfo && currentUserInfo.role === 'superadmin')) { showToast('仅超级管理员可修改告警阈值'); return; }

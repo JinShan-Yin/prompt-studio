@@ -1,15 +1,16 @@
-# NewRock AI Workbench v1.64.0
+# NewRock AI Workbench v1.65.0
 
 企业级、多租户的**提示词协作与 AI 资产管理平台**。纯 Node.js（Express 5）+ 原生前端构建，用于集中管理 AI 智能体的提示词、知识库、多模型路由、提交记录与自动化评测。数据通过 SQLite 本地存储；默认仅监听本机 `127.0.0.1:3100`，开启 `LAN_ACCESS` 后可让局域网内设备访问。
 
-> **版本说明**：当前代码为 **v1.60 底座 + v1.61 知识库结构化升级 + v1.62（局域网 / 权限框架 / 置顶 / 跨公司克隆 / 个人 Key / 账号治理 / 备份与运维）+ v1.63（评测历史 / 客户级授权 / 回收站 / 知识库分页 / 用量看板 / 所有权移交 / 用户治理 + 顶部精简）+ v1.63.1（备份降噪：每日 10:00 / 保留 7 份 / 关闭启动前快照）+ v1.64（回收站批量治理与保留期配置 / 用量 CSV 导出与阈值告警）**。
-> `package.json`、启动日志与 `/api/health` 统一为 `1.64.0`。
+> **版本说明**：当前代码为 **v1.60 底座 + v1.61 知识库结构化升级 + v1.62（局域网 / 权限框架 / 置顶 / 跨公司克隆 / 个人 Key / 账号治理 / 备份与运维）+ v1.63（评测历史 / 客户级授权 / 回收站 / 知识库分页 / 用量看板 / 所有权移交 / 用户治理 + 顶部精简）+ v1.63.1（备份降噪：每日 10:00 / 保留 7 份 / 关闭启动前快照）+ v1.64（回收站批量治理与保留期配置 / 用量 CSV 导出与阈值告警）+ v1.65（审计日志分页筛选 / 用量逐条明细导出 / 提交记录备注可编辑 / 只读编辑器可见性 / 首登加载提速 / 文案统一为「提交记录」）**。
+> `package.json`、启动日志与 `/api/health` 统一为 `1.65.0`。
 
 ---
 
 ## 目录
 
 - [功能特性](#功能特性)
+- [v1.65 更新要点](#v165-更新要点)
 - [v1.64 更新要点](#v164-更新要点)
 - [v1.63.1 更新要点](#v1631-更新要点)
 - [v1.63 更新要点](#v163-更新要点)
@@ -39,7 +40,7 @@
 - 手机号或邮箱注册、bcrypt 密码哈希、首次登录会提示修改密码（可“稍后再说”跳过）、管理员重置密码为 `123456`。
 - 数据按 `user_id` + 角色做行级隔离：个人仅见本人，团管可见同团队，超管可见全部。
 - 公共参考项目（`global` / `team` 两种范围）全员或同团队只读访问。
-- 审计日志（黑匣子）：记录登录、增删改、代管操作、备份导入等；分 `Info` / `Warn` / `Danger` 三级并记录 IP，仅超管可查看。
+- 审计日志（黑匣子）：记录登录、增删改、代管操作、备份导入等；分 `Info` / `Warn` / `Danger` 三级并记录 IP，仅超管可查看；支持**分页**与级别 / 时间范围 / 用户 / 关键词筛选（v1.65）。
 - 普通用户可使用超管配置的公共模型 Key 试用 3 次；超出后需配置自己的 Key。
 
 ### 提示词工程
@@ -65,7 +66,7 @@
 
 ### 提交记录
 
-- 提交（保存组装后的完整提示词 + 原始 layers + 语境替换结果 + 版本备注）。
+- 提交（保存组装后的完整提示词 + 原始 layers + 语境替换结果 + 版本备注）；**版本备注可在列表内直接编辑**（v1.65，留空即清除）。
 - 前端分页（20 条/页）、跨页多选、批量删除、版本备注展示。
 - 预览：只读弹窗展示提交记录正文，`Esc` 关闭。
 - 对比：纯原生行级 LCS 算法，左旧右新双栏 Diff，超大文本自动退化为整段对比防卡死。
@@ -108,6 +109,20 @@
 - 静态资源托管、SPA 回退、`/favicon.ico` 映射品牌 logo。
 - 三套开机自启：systemd、supervisord、Windows 任务计划 + VBS 静默启动（详见 `autostart/`）。
 - 管理员一键重启：双击 `autostart/restart-newrock-elevated.bat`（UAC 点“是”），或运行 `autostart/restart-newrock.ps1`（停旧进程 → 后台启动 → 等待 `/api/health` 并打印版本，日志见 `logs/restart-elevated.log`）。
+
+---
+
+## v1.65 更新要点
+
+| 类别 | 内容 |
+|---|---|
+| 审计日志可用性 | `GET /api/admin/audit-logs` 新增 `page/page_size/user_id/q/from/to`，返回 `total/has_more/summary{info,warn,danger}`；`audit_logs` 新增 3 个索引；面板加日期范围 / 用户 / 关键词筛选与翻页；`limit` 保留为 `page_size` 别名（上限 200） |
+| 用量明细导出 | `GET /api/admin/usage/export?mode=detail`：逐条 14 列（含项目 / 耗时）+ 合计行 + BOM；`max_rows`（默认 5 万）超限返回 400 `TOO_MANY_ROWS`，不静默截断；聚合导出行保持原样 |
+| 提交记录备注可编辑 | 新接口 `POST /api/snapshots/update-remark` `{id,remark}`：≤200 字、空串清除、项目可写校验、审计 `snapshot_remark_update`；列表备注单元格点击即改 |
+| 只读项目编辑器修复 | 共享只读项目原本因 textarea 不透明底色盖住镜像文字，正文**完全不可见**；改为 10% 半透明底（`--readonly-tint`）+ 虚线边框，正文可见可复制 |
+| 首登加载提速 | `index.html` 移除两条解析阻塞的 bootcdn 脚本，改用本地 `/vendor/marked.min.js`、`/vendor/purify.min.js`（9.1.6 / 3.0.6）；`/vendor/*` 加入免登录静态白名单；访问日志加 ISO 时间戳 |
+| 文案统一 | 提交记录删除提示改为「已删除」（成功）/「删除完成：成功 N 条，失败 M 条」；全站用户可见文案不再出现「快照」，统一「提交记录」；新增 `scripts/qa-wording.mjs` 守卫（备份域「启动前快照」保留） |
+| 兼容性 | **无表 / 列变更**，仅 3 个索引；聚合导出、审计旧 `limit` 调用、发布门禁与备份策略均不变 |
 
 ---
 
@@ -247,17 +262,18 @@ curl -I http://127.0.0.1:3100/               # 未登录 302 到登录页
 
 ```
 .
-├── server.js                  # 主入口：路由、中间件、DB 初始化、LLM 路由、启动逻辑（约 4.9k 行）
+├── server.js                  # 主入口：路由、中间件、DB 初始化、LLM 路由、启动逻辑（约 5.2k 行）
 ├── package.json
 ├── .env.example               # 环境变量模板
 ├── lib/
 │   └── markdownChunker.js     # v1.61 本地 Markdown 切片（标题切块 / 熔断 / 表格自然语言化）
+├── scripts/                   # 零依赖 QA 脚本：smoke-v1.65.mjs / qa-wording.mjs / qa-button-inventory.mjs
 ├── public/
 │   ├── index.html             # 主工作台（单文件，内嵌 CSS/HTML/JS）
 │   ├── login.html             # 登录 / 注册 / 修改密码提示页
 │   ├── logo.png
 │   ├── vbs.ico
-│   └── vendor/                # marked / DOMPurify 本地离线副本（CDN 失败时兜底）
+│   └── vendor/                # marked 9.1.6 / DOMPurify 3.0.6 本地库（v1.65 起唯一加载源）
 ├── data/                      # SQLite 数据库、备份与加密密钥（git 忽略）
 │   ├── newrock.db             # 业务库（WAL：newrock.db-wal / -shm）
 │   ├── .vault-key             # 模型 Key 加密主密钥（0600，迁移时务必保留）
@@ -322,7 +338,8 @@ SESSION_SECRET=
   - `model_configs` 补齐动态路由所需列；
   - 新建 `teams` / `users` / `audit_logs`，业务表补 `user_id`，旧数据归属超管；
   - 历史明文模型 Key 自动加密；
-  - `prompt_templates` 三层合并为 `system_prompt` 并重建表（迁移前自动备份到 `data/backup-v1.60/`）。
+  - `prompt_templates` 三层合并为 `system_prompt` 并重建表（迁移前自动备份到 `data/backup-v1.60/`）；
+  - `audit_logs` 补 `level` / `ip` 列与分页筛选索引（v1.65，`CREATE INDEX IF NOT EXISTS` 幂等）。
 - **备份范围**：全量 JSON 备份只覆盖 10 张业务表，**不含 `users` / `teams` / `audit_logs`**；导入只替换这 10 张表，账号与团队不受影响。
 - **加密密钥**：`data/.vault-key` 丢失后，数据库中已加密的模型 Key 将无法解密，迁移/换机时请与数据库一并保留。
 
@@ -381,7 +398,7 @@ bash autostart/start-newrock.sh stop
 
 ## API 概览
 
-服务启动时注册 **83 条** `/api` 路由（启动日志会逐条打印）。主要分组：
+服务启动时注册 **84 条** `/api` 路由（启动日志会逐条打印）。主要分组：
 
 | 分组 | 代表端点 |
 |---|---|
@@ -389,7 +406,7 @@ bash autostart/start-newrock.sh stop
 | 团队 / 用户 / 审计 | `GET /api/teams`、`POST /api/teams/create`、`GET /api/admin/users`、`POST /api/admin/users/create`、`/role`、`/features`、`/status`、`/kick`、`/delete`（支持 `force + data_mode`）、`/reset-password`、`/assign-team`、`GET /api/admin/features`、`POST /api/admin/features/matrix`、`GET /api/admin/backups`、`POST /api/admin/backups/run`、`GET /api/admin/audit-logs`、`GET /api/admin/usage/summary`、`GET /api/admin/usage/export`、`GET/POST /api/admin/usage/settings` |
 | 语境（遗留） | `GET /api/context/get`、`POST /api/context/save`、`POST /api/context/extract` |
 | 知识库 | `POST /api/kb/parse`、`/parse-markdown`、`/extract-text`、`/save`、`/update`、`/delete`；`GET /api/kb/list`、`/export` |
-| 提示词 / 快照 | `POST /api/prompt/assemble`、`/api/snapshots/create`、`/delete`；`GET /api/snapshots/list`、`/detail`、`/api/gate/export` |
+| 提示词 / 快照 | `POST /api/prompt/assemble`、`/api/snapshots/create`、`/delete`、`/update-remark`（v1.65）；`GET /api/snapshots/list`、`/detail`、`/api/gate/export` |
 | 客户 / 项目 | `GET/POST /api/companies*`、`/api/projects*`、`POST /api/projects/clone`（支持 `target_company_id` / `copy_mode`）、`/api/projects/pin`、`GET /api/projects/grants`（客户级/项目级）、`POST /api/projects/grants/save`、`GET /api/projects/transfer/candidates`、`POST /api/projects/transfer`、`GET /api/projects/export_zip` |
 | 评测 / 对话 | `POST /api/eval/run`、`/generate_questions`、`POST/GET /api/eval/runs`（评测历史）、`GET /api/eval/export`、`POST /api/chat/reply` |
 | 回收站 | `GET /api/recycle/list`（含 type_counts/batch/next_purge_at）、`POST /api/recycle/restore`、`POST /api/recycle/purge`、`POST /api/recycle/purge-batch`、`GET/POST /api/admin/recycle/settings`、`POST /api/admin/recycle/prune` |
@@ -418,7 +435,7 @@ bash autostart/start-newrock.sh stop
 
 ## 二次开发约定
 
-1. **前端纯原生**：不引入 UI 框架；`public/vendor/` 只放离线副本，CDN 仅作加速与兜底。
+1. **前端纯原生**：不引入 UI 框架；`public/vendor/` 存放本地离线副本（v1.65 起 marked / DOMPurify 只从本地加载，不再引用 CDN）。
 2. **禁止 contenteditable**：编辑器依赖「底层 mirror div + 上层透明 textarea」；修改高度/滚动/赋值时必须同步 mirror（`refreshEditor` / `syncEditorHeight` / `syncEditorGutter` / `syncEditorScroll`），程序赋值要使用原生 `value` setter 并派发 `input` 事件。
 3. **弹窗挂 body**：全屏弹窗/Portal 菜单必须挂在 `document.body`，避免被祖先 `overflow: hidden` 裁剪。
 4. **SQL 必须带归属过滤**：所有业务查询带 `user_id` 或角色判断，新增接口同样遵守。
@@ -436,7 +453,8 @@ bash autostart/start-newrock.sh stop
 6. **回收站保留 30 天**：到期自动串行清理；彻底删除不可恢复。
 7. **未做 HTTPS**：局域网仍为 HTTP 明文，仅用于可信内网。
 8. **真实浏览器自动化受本机限制**：本机系统策略拒绝 Edge 的命名管道/IPC，改用 jsdom DOM 级回归（见 `QA_REPORT_v1.63.md`）；像素级 UI 仍需人工抽查。
-9. **V1.65 候选**：知识库大文档自动分块；真实发布门禁与可选 HTTPS 仍按产品决定不做；用量告警目前只提示、不阻断。
+9. **知识库大文档仍不自动分块**（v1.65 未做，v1.66 候选）：`/api/kb/parse`（LLM 模式）仍按 500 字切块后**全量并发**，超长文档会占满模型队列并长时间挂起且失败块被静默丢弃；`/api/kb/parse-markdown` 一次接收全文并同步计算，超大文档会短暂阻塞事件循环；右侧「解析文本」仍固定调用 LLM 模式。建议大文档先人工拆分。
+10. **用量告警目前只提示、不阻断**；明细导出单次上限 5 万行（超出需缩小时间范围）。
 
 ---
 

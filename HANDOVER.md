@@ -9,13 +9,15 @@
 
 ## 0. 一句话现状
 
-项目是 **NewRock AI Workbench v1.64.0**，单机 Node.js + Express 5 + SQLite，生产服务跑在 `http://127.0.0.1:3100`（LAN 模式）。V1.64.0 已完成并通过冒烟 115/115 + 页面全按钮回归 105/105；生产 3100 已重启到 v1.64.0（备份策略不变：每日 10:00 / 保留 7 份 / 启动前快照关闭）。
+项目是 **NewRock AI Workbench v1.65.0**，单机 Node.js + Express 5 + SQLite，生产服务跑在 `http://127.0.0.1:3100`（LAN 模式）。V1.65.0 已完成并通过冒烟 142/142 + 页面全按钮回归 123/123（事件处理函数 113 个）；路由 84 条。备份策略不变（每日 10:00 / 保留 7 份 / 启动前快照关闭）。
+
+> 生产 3100 已确认运行 v1.65.0（health / 启动日志 84 条 / 审计 3 索引 / vendor 200）。本轮重启后该进程来自 DSH 会话内的后台任务，**会话结束会退出**；持久化请按 §1-1 用桌面双击 `autostart/start-newrock-silent.vbs` 重新拉起（端口自愈会替换旧实例）。
 
 ---
 
 ## 1. 接手前必须知道的 6 件事
 
-1. **生产服务不要随意重启**：V1.64 重启时 UAC 提权未能弹出，当前 3100 以当前用户进程运行（PID 以实际为准），普通 shell 即可停止；如恢复为管理员进程，普通 `taskkill` 可能 Access denied。前端静态改动 Ctrl+F5；`server.js` 改动需重启。一键重启：双击 `autostart\restart-newrock-elevated.bat`（弹 UAC 点“是”），或管理员 PowerShell 运行 `autostart\restart-newrock.ps1`；日志写入 `logs\restart-elevated.log`。
+1. **生产服务不要随意重启**：3100 若以**管理员权限**运行，普通 shell 的 `taskkill` 会报「拒绝访问」；UAC 提权重启（`autostart\restart-newrock-elevated.bat` 或管理员 PowerShell 跑 `restart-newrock.ps1`）可用，但**提权 PowerShell 退出后其子进程可能被连带终止**（2026-11-26 20:27 实测如此），所以重启后必须复核 `/api/health`，掉线就重新拉起。**最稳妥**：在桌面双击 `autostart\start-newrock-silent.vbs`（当前用户、无 UAC；端口被占时新实例会自愈替换旧监听）。前端静态改动 Ctrl+F5；`server.js` 改动必须重启。日志写入 `logs/service.log` / `logs/restart-elevated.log`。
 2. **生产库是 `data/newrock.db`**，禁止用于测试。V1.63.1 起**启动前快照默认关闭**；如需在结构迁移前备份，先手动「立即备份」，或临时设 `BACKUP_STARTUP_ENABLED=true`。
 3. **QA 必须隔离**：端口 3101 + `NEWROCK_DATA_DIR=.qa-test/data`；测试结束停进程并清理。生产库当前为 4 用户、2 模型配置、2 公司、3 项目、43 知识条目、3 提交（未被本轮测试触碰）。
 4. **Git**：本轮改动以 `git status -sb` 为准；提交前确认。**不要提交** `.env`、`data/`、`logs/`、`.session-headers.jsonl`、`.qa-test/`。
@@ -30,15 +32,16 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | `1.64.0`（package.json / 启动日志 / `/api/health`） |
-| 入口 | `server.js`（约 4.9k 行） |
-| 前端 | `public/index.html`（约 6.9k 行，单文件原生 HTML/CSS/JS） |
+| 版本 | `1.65.0`（package.json / 启动日志 / `/api/health`） |
+| 入口 | `server.js`（约 5.2k 行） |
+| 前端 | `public/index.html`（约 7.2k 行，单文件原生 HTML/CSS/JS） |
 | 数据库 | `data/newrock.db`（SQLite + WAL） |
 | 主密钥 / 会话密钥 | `data/.vault-key` / `data/.session-secret` |
-| 路由数 | **83 条** `/api` |
+| 路由数 | **84 条** `/api` |
 | 生产 URL | http://127.0.0.1:3100 |
-| 冒烟 | `node scripts/smoke-v1.64.mjs`（115 项，临时目录，零依赖） |
-| 页面回归 | `.qa-test\run-dom.ps1`（jsdom，105 项；依赖已装在 `.qa-test`，仓库依赖未变） |
+| 冒烟 | `node scripts/smoke-v1.65.mjs`（142 项，临时目录，零依赖） |
+| 页面回归 | `.qa-test\run-dom.ps1`（jsdom，123 项；依赖已装在 `.qa-test`，仓库依赖未变） |
+| 文案守卫 | `node scripts/qa-wording.mjs`（白名单外不得出现「快照」） |
 
 启动：
 
@@ -46,7 +49,7 @@
 cd D:\prompt-studio
 npm start        # = node server.js
 curl.exe -s http://127.0.0.1:3100/api/health
-# 期望 version=1.64.0 / db_ok / mode=lan
+# 期望 version=1.65.0 / db_ok / mode=lan
 ```
 
 > 不要改这两个「3000」：`EVAL_KB_MAX=3000`、关闭超时 `3000`。
@@ -98,6 +101,16 @@ curl.exe -s http://127.0.0.1:3100/api/health
 - **无结构变更**：只写 `app_settings`（`recycle_retention_days`、`usage_alert_daily_tokens`、`usage_alert_daily_cost`）；路由 78 → 83。
 - 新增审计动作：`recycle_purge_batch`、`recycle_retention_update`、`recycle_prune`、`usage_export`、`usage_alert_update`。
 
+### 3.6 V1.65 运维可用性与体验修复
+
+- **审计日志分页/筛选**：`GET /api/admin/audit-logs` 支持 `page/page_size(=limit)/level/action/user_id/q/from/to`，返回 `total/has_more/summary{info,warn,danger}`；`from/to` 非法或倒置 → 400 `INVALID_RANGE`；`limit` 上限 1000 → 200；`audit_logs` 新增 3 个索引（此前无索引）；面板加日期/用户/关键词/每页条数/翻页，仅超管。
+- **用量逐条明细导出**：`GET /api/admin/usage/export?mode=detail`，14 列（含项目/耗时/成本）+ 合计行 + BOM + CSV 注入防护；`max_rows` 默认 5 万，超限 400 `TOO_MANY_ROWS`（不静默截断）；`mode` 缺省或 `aggregate` 时聚合输出不变；抽出 `getModelPriceMap()` 复用。
+- **提交记录备注可编辑**：`POST /api/snapshots/update-remark` `{id,remark}`（≤200 字，空串清除）；`requireSnapshotAccess` + `requireProjectWritable` 双层校验；审计 `snapshot_remark_update`（代管自动 Warn）；列表备注单元格点击即改，只读项目不渲染入口。
+- **只读编辑器修复**：原只读样式给上层 textarea 加不透明底，把 mirror 文字整个盖住（正文不可见）；改为 10% 半透明 `--readonly-tint: rgba(15,23,42,0.10)` + 虚线边框，正文可见可复制。
+- **首登慢修复**：`index.html` 去掉两条解析阻塞的 bootcdn 脚本，改用 `/vendor/marked.min.js`（9.1.6）与 `/vendor/purify.min.js`（3.0.6）；`AUTH_PUBLIC_STATIC_RE` 增加 `vendor/`；访问日志加 ISO 时间戳。
+- **文案口径**：删除成功提示改为「已删除」，确认框改为「移入回收站（30 天内可恢复）」；用户可见文案统一「提交记录」；服务端 message/错误同步；新增 `scripts/qa-wording.mjs` 守卫（备份域「启动前快照」保留）。
+- **数据库**：仅 3 个索引，无表/列变更，无新增 `app_settings`；路由 83 → 84。
+
 ---
 
 ## 4. 代码地图
@@ -107,15 +120,20 @@ server.js                    后端：路由、DB/迁移、权限、加密、备
 public/index.html            前端全部 UI/JS
 public/login.html            登录/注册/首登改密
 lib/markdownChunker.js       Markdown 切片
-scripts/smoke-v1.64.mjs      后端 115 项冒烟
+public/vendor/               marked 9.1.6 / DOMPurify 3.0.6 本地库（v1.65 起唯一加载源）
+scripts/smoke-v1.65.mjs      后端 142 项冒烟
+scripts/smoke-v1.64.mjs      历史冒烟（保留参考）
 scripts/smoke-v1.63.mjs      历史冒烟（保留参考）
-scripts/qa-button-inventory.mjs  页面事件清单（109 个）
+scripts/qa-button-inventory.mjs  页面事件清单（113 个）
+scripts/qa-wording.mjs       文案守卫（用户可见文案不得出现「快照」）
 scripts/smoke-v1.62.mjs      历史冒烟（保留参考）
 .qa-test/                    QA 产物（已忽略）：dom-e2e.mjs / run-dom.ps1 / e2e.mjs / run-e2e.ps1
 autostart/                   Windows/Linux 自启脚本
 data/                        数据库、密钥、备份（不要提交）
 logs/                        运行日志
 Readme.md                    权威文档
+UPDATE_v1.65.md              V1.65 升级说明
+QA_REPORT_v1.65.md           V1.65 回归记录
 UPDATE_v1.64.md              V1.64 升级说明
 QA_REPORT_v1.64.md           V1.64 回归记录
 UPDATE_v1.63.md              V1.63 升级说明
@@ -155,19 +173,20 @@ API_REFERENCE.md             API 精简参考（以 server.js 实际路由为准
 ### 6.1 后端冒烟（首选，不碰生产库）
 
 ```powershell
-node scripts/smoke-v1.64.mjs
-# 期望 RESULT pass=115 fail=0（临时目录 data/tmp/smoke164-*）
+node scripts/smoke-v1.65.mjs
+# 期望 RESULT pass=142 fail=0（临时目录 data/tmp/smoke165-*）
 ```
 
 ### 6.2 页面全按钮回归（DOM 级）
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .qa-test\run-dom.ps1
-# 期望 RESULT pass=105 fail=0
+# 期望 RESULT pass=123 fail=0
 ```
 
 - 环境：3101 + `.qa-test/data` 全新库；`.qa-test` 内 mock LLM 3301；jsdom 执行真实页面脚本。
-- 覆盖：登录/首登改密、四个 Tab、侧边栏全部菜单、系统管理六面板、备份策略与清理、模型配置、回收站（含批量清理/保留期）、用量（含导出/阈值告警）、退出；末尾校验清单内 109 个事件处理函数全部已定义。
+- 覆盖：登录/首登改密、四个 Tab、侧边栏全部菜单、系统管理六面板、备份策略与清理、模型配置、回收站（含批量清理/保留期）、用量（含导出/阈值告警/明细导出）、审计（分页+筛选）、提交记录备注编辑、只读编辑器级联校验、本地 vendor 加载、退出；末尾校验清单内 113 个事件处理函数全部已定义。
+- 文案守卫：`node scripts/qa-wording.mjs` 期望「白名单外 0 条」。
 - **真实浏览器 E2E 不可用**：本机系统策略拒绝 Edge 的命名管道/IPC（mojo 0x5），Playwright/Edge 启动即崩溃；如需像素级回归，换一台不受限的机器或用真实浏览器人工抽查。
 
 ### 6.3 隔离 QA（人工）
@@ -194,21 +213,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .qa-test\run-dom.ps1
 13. **批量彻底删除不可恢复**：`/api/recycle/purge-batch` 单次最多 200 条，逐条校验归属；操作前建议先导出或确认批次。
 14. **回收站保留期修改不立即删除**：下次自动清理（启动 90 秒后首次，之后每 24h）才生效；需要立即清过期用「立即清理过期」。
 15. **用量告警只提示不阻断**：阈值按 UTC 日切分与近 7 天日均判定；0 表示关闭。
+16. **知识库大文档仍不自动分块**（v1.65 未做）：LLM 模式 `parseTxt` 按 500 字切块后全量并发，超长文档占满模型队列、长时间挂起且失败块静默丢弃；`parse-markdown` 一次收全文并同步计算，超大文档短时阻塞事件循环；右侧「解析文本」仍固定走 LLM。大文档先人工拆分。
+17. **审计日志不提供导出**；用量明细导出单次上限 5 万行（`max_rows` 可调至 10 万）。
+18. **`audit-logs` 的 `limit` 上限为 200**：旧调用若传 1000 会被归一为 200，改用 `page/page_size` 翻页。
+19. **文案口径守卫**：用户可见文案不得再出现「快照」，改「提交记录」；备份域「启动前快照」保留。改完文案先跑 `node scripts/qa-wording.mjs`。
 
 ---
 
-## 8. V1.65 候选（未开始）
+## 8. V1.66 候选（未开始）
 
-- 知识库自动分块解析大文档（当前超限只提示拆分；建议前端分片顺序调用现有 parse，先解决超长截断）。
-- 审计日志分页/时间筛选/导出（当前仅 limit + level/action 过滤）。
-- 用量逐条明细导出（当前 CSV 为聚合行）。
+- 知识库大文档自动分块（前端按标题/段落分片 → 顺序调用 `parse-markdown` → 去重 → 预览 → 批量入库；LLM 模式加上限与串行化；是否引入 `kb_parse_jobs` 另议）。
+- 审计日志导出（CSV）与按 `action` 下拉筛选。
+- 用量明细在面板内直接按用户/模型过滤（当前仅时间范围）。
 - 真实发布门禁、可选 HTTPS、模板/变量 UI 恢复：**按产品决定继续不做**。
 
 ---
 
 ## 9. 新窗口接管步骤
 
-1. 读：本文件 → `Readme.md` → `UPDATE_v1.63.md` → `QA_REPORT_v1.63.md` → DSH 工作区记忆。
+1. 读：本文件 → `Readme.md` → `UPDATE_v1.65.md` → `QA_REPORT_v1.65.md` → DSH 工作区记忆。
 2. 查状态：
    ```powershell
    git status -sb
@@ -216,7 +239,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .qa-test\run-dom.ps1
    curl.exe -s http://127.0.0.1:3100/api/health
    ```
 3. 不改生产：纯前端改动刷新即可；`server.js` 改动需管理员重启 3100。
-4. 改代码前先跑 `node scripts/smoke-v1.63.mjs`；涉及 UI 再跑 `.qa-test\run-dom.ps1`。
+4. 改代码前先跑 `node scripts/smoke-v1.65.mjs`；涉及 UI 再跑 `.qa-test\run-dom.ps1`；改文案跑 `scripts/qa-wording.mjs`。
 5. 提交只 add 代码/文档；不要提交 `.env`、`data/`、`logs/`、`.session-headers.jsonl`、`.qa-test/`。
 
 ---
@@ -230,22 +253,26 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .qa-test\run-dom.ps1
 
 ---
 
-## 11. 本轮提交清单（V1.64 改动尚未提交，确认后再 commit）
+## 11. 提交清单
+
+V1.64.0 已提交（`94c7806`）。V1.65.0 本轮改动尚未提交，确认后再 commit：
 
 ```
-feat(v1.63): 顶部系统管理合并 / 模板入口移除 / 文案与图标精修
-feat(v1.63): 评测落库、授权升级、回收站、知识库分页、用量看板、所有权移交、用户治理
-test(v1.63): 86 项冒烟 + 91 项页面全按钮回归
-docs(v1.63): README/UPDATE/QA/HANDOVER 同步
-fix(v1.63): 旧全量备份导入自动迁移 project_grants
-feat(v1.63): 父级公司整体置顶
-fix(v1.63): 授权面板/公司置顶在旧服务端下的提示 + 一键重启脚本
-fix(v1.63): 公司置顶菜单文案
-fix(v1.63): 重启脚本 UTF-8 BOM 兼容 Windows PowerShell 5.1
-feat(v1.63.1): 每日 10:00 备份、保留 7 份、关闭启动前快照、清理接口
-test(v1.63.1): 95 项冒烟 + 93 项 DOM 回归
-docs(v1.63.1): README/UPDATE/QA/HANDOVER/.env.example
+feat(v1.65): 审计日志分页/时间/用户/关键词筛选 + 3 索引，用量逐条明细导出
+feat(v1.65): 提交记录版本备注可编辑（update-remark + 列表内编辑 + Warn 审计）
+fix(v1.65): 共享只读项目编辑器正文被不透明底色遮挡（改 10% 半透明 + 虚线）
+fix(v1.65): 首登慢——marked/DOMPurify 改本地 vendor、/vendor/ 免登录、日志时间戳
+fix(v1.65): 文案口径统一为「提交记录」，删除提示改为「已删除」
+test(v1.65): 142 项冒烟 + 123 项 DOM 回归 + 113 个事件处理函数 + 文案守卫
+docs(v1.65): README/UPDATE/QA/HANDOVER/API_REFERENCE 同步
+```
+
+历史提交：
+
+```
 feat(v1.64): 回收站批量清理/保留期配置/立即清理，用量 CSV 导出与阈值告警
 test(v1.64): 115 项冒烟 + 105 项 DOM 回归 + 109 个事件处理函数
 docs(v1.64): README/UPDATE/QA/HANDOVER/API_REFERENCE
+feat(v1.63.1): 每日 10:00 备份、保留 7 份、关闭启动前快照、清理接口
+feat(v1.63): 顶部系统管理合并 / 模板入口移除 / 评测落库 / 授权升级 / 回收站 / 用量看板
 ```
