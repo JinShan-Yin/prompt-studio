@@ -40,7 +40,7 @@ import { parseMarkdownChunks } from './lib/markdownChunker.js'; // v1.61：本�
 // 一、常量与运行环境
 // ============================================================
 
-const APP_VERSION = '1.65.0';
+const APP_VERSION = '1.65.1';
 const PORT = Number(process.env.PORT) || 3100;
 /** V1.63：知识库单文件上传上限（MB），前端通过 /api/auth/config 读取 */
 const KB_MAX_FILE_MB = Math.max(1, Math.min(200, Number(process.env.KB_MAX_FILE_MB) || 20));

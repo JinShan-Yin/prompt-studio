@@ -9,9 +9,9 @@
 
 ## 0. 一句话现状
 
-项目是 **NewRock AI Workbench v1.65.0**，单机 Node.js + Express 5 + SQLite，生产服务跑在 `http://127.0.0.1:3100`（LAN 模式）。V1.65.0 已完成并通过冒烟 142/142 + 页面全按钮回归 123/123（事件处理函数 113 个）；路由 84 条。备份策略不变（每日 10:00 / 保留 7 份 / 启动前快照关闭）。
+项目是 **NewRock AI Workbench v1.65.1**，单机 Node.js + Express 5 + SQLite，生产服务跑在 `http://127.0.0.1:3100`（LAN 模式）。V1.65.1 已完成并通过冒烟 142/142 + 页面全按钮回归 139/139（事件处理函数 113 个）；路由 84 条。备份策略不变（每日 10:00 / 保留 7 份 / 启动前快照关闭）。
 
-> 生产 3100 已确认运行 v1.65.0（health / 启动日志 84 条 / 审计 3 索引 / vendor 200）。本轮重启后该进程来自 DSH 会话内的后台任务，**会话结束会退出**；持久化请按 §1-1 用桌面双击 `autostart/start-newrock-silent.vbs` 重新拉起（端口自愈会替换旧实例）。
+> 生产 3100 自 2026-11-26 20:33 起由桌面双击 `autostart/start-newrock-silent.vbs` 拉起的**持久进程**提供，与会话解耦；v1.65.1 的静态改动 Ctrl+F5 即生效，`/api/health` 版本号需重启（再次双击同一个 vbs，端口自愈会替换旧实例）后才变为 `1.65.1`。
 
 ---
 
@@ -32,7 +32,7 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | `1.65.0`（package.json / 启动日志 / `/api/health`） |
+| 版本 | `1.65.1`（package.json / 启动日志 / `/api/health`） |
 | 入口 | `server.js`（约 5.2k 行） |
 | 前端 | `public/index.html`（约 7.2k 行，单文件原生 HTML/CSS/JS） |
 | 数据库 | `data/newrock.db`（SQLite + WAL） |
@@ -40,7 +40,7 @@
 | 路由数 | **84 条** `/api` |
 | 生产 URL | http://127.0.0.1:3100 |
 | 冒烟 | `node scripts/smoke-v1.65.mjs`（142 项，临时目录，零依赖） |
-| 页面回归 | `.qa-test\run-dom.ps1`（jsdom，123 项；依赖已装在 `.qa-test`，仓库依赖未变） |
+| 页面回归 | `.qa-test\run-dom.ps1`（jsdom，139 项；依赖已装在 `.qa-test`，仓库依赖未变） |
 | 文案守卫 | `node scripts/qa-wording.mjs`（白名单外不得出现「快照」） |
 
 启动：
@@ -49,7 +49,7 @@
 cd D:\prompt-studio
 npm start        # = node server.js
 curl.exe -s http://127.0.0.1:3100/api/health
-# 期望 version=1.65.0 / db_ok / mode=lan
+# 期望 version=1.65.1 / db_ok / mode=lan
 ```
 
 > 不要改这两个「3000」：`EVAL_KB_MAX=3000`、关闭超时 `3000`。
@@ -111,6 +111,13 @@ curl.exe -s http://127.0.0.1:3100/api/health
 - **文案口径**：删除成功提示改为「已删除」，确认框改为「移入回收站（30 天内可恢复）」；用户可见文案统一「提交记录」；服务端 message/错误同步；新增 `scripts/qa-wording.mjs` 守卫（备份域「启动前快照」保留）。
 - **数据库**：仅 3 个索引，无表/列变更，无新增 `app_settings`；路由 83 → 84。
 
+### 3.7 V1.65.1 登录页改版 + 首页树默认收起（纯前端）
+
+- **登录页**（`public/login.html` 重写）：品牌移到卡片之外：`logo.png`（44px）与「AI Workbench」同一行，`align-items: baseline` 使文字底部与 logo 内文字底部齐平，整组 `justify-content: center`（`mix-blend-mode: multiply` 去掉 logo 白底；文字 `#0c479b` 取 logo「时」字同色，字号 18px/700 按 logo 大写字母高度 0.2944H 换算；品牌文案去掉「NewRock」，公司名由 logo 承载）；**删除「登录 / 注册」胶囊标签组与灰底框**（`.tabs/.tab` 已不存在）；卡片只留 `#msg` + 表单，输入框改浅灰填充 + 占位符 + `.sr-only` label；注册改为底部文字链接 `#register-entry/#register-link`（自助注册关闭时隐藏并显示管理员提示），注册面板加 `#back-to-login`；页脚 `.brand-foot → .login-foot`（显示版本与访问模式）。**登录鉴权/校验/首登改密逻辑零改动。**
+- **首页项目树**（`public/index.html`）：新增会话级 `expandedCompanyIds: Set`（内存、不落 localStorage），删除 `fetchData()` 里强制的 `open: true`；`renderTree` 四处读取点统一读 Set；`toggleCompany` 维护 Set；`fetchData` 清理已删公司 id；`selectProject` 自动展开父公司（新建/克隆后能看到高亮项）；新增 `window.fetchData` 暴露（回归用）。**折叠项仍渲染进 DOM，仅 `display:none`。**
+- **测试**：`scripts/smoke-v1.65.mjs` 版本断言改为读 `package.json`（避免升版即失败）；DOM 回归新增 16 条断言（登录页 9 + 新建项目自动展开 1 + 树折叠/保持/搜索 6），总数 123 → **139**。
+- **无 API / 无库变更**，路由仍 84；`/api/health` 版本 `1.65.0 → 1.65.1`。
+
 ---
 
 ## 4. 代码地图
@@ -132,8 +139,10 @@ autostart/                   Windows/Linux 自启脚本
 data/                        数据库、密钥、备份（不要提交）
 logs/                        运行日志
 Readme.md                    权威文档
-UPDATE_v1.65.md              V1.65 升级说明
+UPDATE_v1.65.md              V1.65 升级说明（登录页/项目树为 V1.65.1，见 UPDATE_v1.65.1.md）
 QA_REPORT_v1.65.md           V1.65 回归记录
+UPDATE_v1.65.1.md            V1.65.1 升级说明（登录页改版 + 首页树默认收起）
+QA_REPORT_v1.65.1.md         V1.65.1 回归记录
 UPDATE_v1.64.md              V1.64 升级说明
 QA_REPORT_v1.64.md           V1.64 回归记录
 UPDATE_v1.63.md              V1.63 升级说明
@@ -181,7 +190,7 @@ node scripts/smoke-v1.65.mjs
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .qa-test\run-dom.ps1
-# 期望 RESULT pass=123 fail=0
+# 期望 RESULT pass=139 fail=0
 ```
 
 - 环境：3101 + `.qa-test/data` 全新库；`.qa-test` 内 mock LLM 3301；jsdom 执行真实页面脚本。
@@ -255,7 +264,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .qa-test\run-dom.ps1
 
 ## 11. 提交清单
 
-V1.64.0 已提交（`94c7806`）。V1.65.0 本轮改动尚未提交，确认后再 commit：
+V1.64.0 已提交（`94c7806`）；V1.65.0 已提交并推送（`04ff8d1`，origin/main 已同步）。V1.65.1 改动尚未提交，确认后再 commit：
 
 ```
 feat(v1.65): 审计日志分页/时间/用户/关键词筛选 + 3 索引，用量逐条明细导出

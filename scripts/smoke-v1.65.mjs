@@ -15,6 +15,8 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const STAMP = new Date().toISOString().replace(/[:.]/g, '-');
 const TMP_ROOT = path.join(ROOT, 'data', 'tmp');
+// v1.65.1：版本断言改为读 package.json，避免每次升版都改测试
+const PKG_VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 const HOST = '127.0.0.1';
 let pass = 0;
 let fail = 0;
@@ -143,7 +145,7 @@ async function main() {
   ok('本地模式启动', await waitHealth(local.base));
   const c0 = makeClient(localPort);
   const health0 = await c0.request('/api/health');
-  ok('健康检查 200 / 版本 1.65.0', health0.status === 200 && health0.body.version === '1.65.0', JSON.stringify(health0.body));
+  ok('健康检查 200 / 版本 ' + PKG_VERSION, health0.status === 200 && health0.body.version === PKG_VERSION, JSON.stringify(health0.body));
   ok('本机模式：私有 Host 被拒', (await rawGet(localPort, '/api/health', '192.168.1.9:' + localPort)).status === 403);
   ok('本机模式：恶意 Host 被拒', (await rawGet(localPort, '/api/health', 'evil.example.com')).status === 403);
   const cfg0 = await c0.request('/api/auth/config');

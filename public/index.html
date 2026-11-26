@@ -1801,6 +1801,8 @@
 
   <script>
     let companies = [];
+    // v1.65.1：公司展开态（会话内记忆，登录/刷新默认全部收起；不写 localStorage）
+    const expandedCompanyIds = new Set();
     let activeProjectId = '';
     // V1.62：置顶改为服务端持久化（project_pins，每人一套），前端只读 p.pinned
     let currentDropdownTarget = null;
@@ -1867,13 +1869,18 @@
         const cJson = await safeFetchJson(`/api/companies`);
         const pJson = await safeFetchJson(`/api/projects`);
         if (cJson.success && pJson.success) {
-          companies = cJson.data.map(c => ({ ...c, open: true, children: pJson.data.filter(p => p.company_id === c.id) }));
+          companies = cJson.data.map(c => ({ ...c, children: pJson.data.filter(p => p.company_id === c.id) }));
+          // v1.65.1：展开态存于 expandedCompanyIds，数据刷新不重置用户手动展开；顺带清理已不存在的公司 id
+          const aliveCompanyIds = new Set(companies.map((c) => c.id));
+          Array.from(expandedCompanyIds).forEach((id) => { if (!aliveCompanyIds.has(id)) expandedCompanyIds.delete(id); });
           renderTree();
         }
       } catch (e) { console.error(e); }
       // 模块四：初始化时恢复 localStorage 持久化的测试用例并同步按钮显隐
       try { restoreTestCasesOnInit(); } catch (e) { console.error(e); }
     }
+    // v1.65.1：暴露给回归测试（模拟数据刷新，验证展开态保持）
+    window.fetchData = fetchData;
 
     /** 左侧树实时搜索：读取 #tree-search 关键字（小写 trim） */
     function getTreeSearchKeyword() {
@@ -2325,7 +2332,7 @@
                  <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
               </div>
             </div>
-            <div style="display: block;">
+            <div class="menu-children" data-company-id="${c.id}" style="display: block;">
               ${children.map(p => createTreeItemHTML(p, 'project', false)).join('')}
             </div>
           `;
@@ -2340,11 +2347,12 @@
       const pinnedCompanyIds = new Set(pinnedCompanies.map(c => c.id));
       let pinnedHtml = '';
       pinnedCompanies.forEach(c => {
+        const isOpen = expandedCompanyIds.has(c.id);
         const children = Array.isArray(c.children) ? c.children : [];
         pinnedHtml += `
           <div class="menu-parent pinned-company" onclick="toggleCompany('${c.id}')">
             <div style="display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden;">
-              <span style="font-size: 12px; color: #909399; flex-shrink:0;">${c.open ? '▼' : '▶'}</span>
+              <span class="tree-toggle" aria-hidden="true" style="font-size: 12px; color: #909399; flex-shrink:0;">${isOpen ? '▼' : '▶'}</span>
               <span style="font-size: 12px; flex-shrink:0;">📌</span>
               <span title="${escapeHtml(c.name)}" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(c.name)}</span>
               <span style="font-size: 11px; color: #909399; flex-shrink:0;">（全部项目）</span>
@@ -2353,7 +2361,7 @@
                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
             </div>
           </div>
-          <div style="display: ${c.open ? 'block' : 'none'};">
+          <div class="menu-children" data-company-id="${c.id}" style="display: ${isOpen ? 'block' : 'none'};">
             ${children.map(p => createTreeItemHTML(p, 'project', true)).join('')}
           </div>
         `;
@@ -2373,18 +2381,19 @@
       // 渲染全部（公司整体置顶 / 单项目置顶均不再重复出现在下方树）
       companies.forEach(c => {
         if (Number(c.pinned) === 1) return;
+        const isOpen = expandedCompanyIds.has(c.id);
         const visibleChildren = c.children.filter(p => Number(p.pinned) !== 1);
         html += `
           <div class="menu-parent" onclick="toggleCompany('${c.id}')">
             <div style="display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden;">
-              <span style="font-size: 12px; color: #909399; flex-shrink:0;">${c.open ? '▼' : '▶'}</span>
+              <span class="tree-toggle" aria-hidden="true" style="font-size: 12px; color: #909399; flex-shrink:0;">${isOpen ? '▼' : '▶'}</span>
               <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
             </div>
             <div class="more-btn" onclick="showMenu(event, '${c.id}', 'company')">
                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
             </div>
           </div>
-          <div style="display: ${c.open ? 'block' : 'none'};">
+          <div class="menu-children" data-company-id="${c.id}" style="display: ${isOpen ? 'block' : 'none'};">
             ${visibleChildren.map(p => createTreeItemHTML(p, 'project', false)).join('')}
           </div>
         `;
@@ -2419,13 +2428,18 @@
 
     function toggleCompany(id) {
       const c = companies.find(x => x.id === id);
-      if (c) { c.open = !c.open; renderTree(); }
+      if (!c) return;
+      if (expandedCompanyIds.has(id)) expandedCompanyIds.delete(id); else expandedCompanyIds.add(id);
+      renderTree();
     }
 
     function selectProject(id, name) {
       // 切换项目前先备份上一项目草稿（localStorage 实时草稿，防丢）
       if (activeProjectId && activeProjectId !== id) saveEditorDrafts(activeProjectId);
       activeProjectId = id;
+      // v1.65.1：选中项目时确保其父公司展开，避免新建/克隆后树里看不到当前项目
+      const parentCompany = companies.find((c) => Array.isArray(c.children) && c.children.some((p) => p.id === id));
+      if (parentCompany) expandedCompanyIds.add(parentCompany.id);
       // 未显式传 name 时，从已加载项目数据中查找，避免显示 undefined
       let displayName = name;
       if (displayName == null || displayName === '') {
@@ -7120,7 +7134,7 @@
           closeCloneModal();
           await fetchData();
           const target = companies.find((c) => c.id === d.company_id);
-          if (target) { target.open = true; renderTree(); }
+          if (target) { expandedCompanyIds.add(target.id); renderTree(); }
           if (d.project_id) selectProject(d.project_id, d.name || '');
         } else {
           showToast((d && (d.error || d.message)) || '克隆失败');
