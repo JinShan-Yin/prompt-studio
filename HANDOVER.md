@@ -17,7 +17,7 @@
 
 ## 1. 接手前必须知道的 6 件事
 
-1. **生产服务不要随意重启**：3100 若以**管理员权限**运行，普通 shell 的 `taskkill` 会报「拒绝访问」；UAC 提权重启（`autostart\restart-newrock-elevated.bat` 或管理员 PowerShell 跑 `restart-newrock.ps1`）可用，但**提权 PowerShell 退出后其子进程可能被连带终止**（2026-11-26 20:27 实测如此），所以重启后必须复核 `/api/health`，掉线就重新拉起。**最稳妥**：在桌面双击 `autostart\start-newrock-silent.vbs`（当前用户、无 UAC；端口被占时新实例会自愈替换旧监听）。前端静态改动 Ctrl+F5；`server.js` 改动必须重启。日志写入 `logs/service.log` / `logs/restart-elevated.log`。
+1. **生产服务不要随意重启**：3100 若以**管理员权限**运行，普通 shell 的 `taskkill` 会报「拒绝访问」；UAC 提权重启（`autostart\restart-newrock-elevated.bat` 或管理员 PowerShell 跑 `restart-newrock.ps1`）可用，但**提权 PowerShell 退出后其子进程可能被连带终止**（2026-11-26 20:27 实测如此），所以重启后必须复核 `/api/health`，掉线就重新拉起。**重启的正确顺序**（2026-11-26 21:46 实测）：只双击 `autostart\start-newrock-silent.vbs` **不会**替换已在跑的实例——旧进程占着 3100，新进程静默退出且 `logs/service.log` 不出现新 banner（曾因此「以为重启了」却仍是旧版本 70 分钟）。可靠做法：① `cmd /c "netstat -ano | findstr :3100"` 找监听 PID → `Stop-Process -Id <PID> -Force`；② `wscript.exe autostart\start-newrock-silent.vbs`；③ 轮询 `/api/health` 确认版本变化。wscript 拉起的 node 会脱离当前 shell（跨工具调用存活），无需 UAC；`restart-newrock-elevated.bat` 仍可用但其子进程可能随提权窗口退出被连带终止。前端静态改动 Ctrl+F5；`server.js` 改动必须重启。日志写入 `logs/service.log` / `logs/restart-elevated.log`。
 2. **生产库是 `data/newrock.db`**，禁止用于测试。V1.63.1 起**启动前快照默认关闭**；如需在结构迁移前备份，先手动「立即备份」，或临时设 `BACKUP_STARTUP_ENABLED=true`。
 3. **QA 必须隔离**：端口 3101 + `NEWROCK_DATA_DIR=.qa-test/data`；测试结束停进程并清理。生产库当前为 4 用户、2 模型配置、2 公司、3 项目、43 知识条目、3 提交（未被本轮测试触碰）。
 4. **Git**：本轮改动以 `git status -sb` 为准；提交前确认。**不要提交** `.env`、`data/`、`logs/`、`.session-headers.jsonl`、`.qa-test/`。
