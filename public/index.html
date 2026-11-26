@@ -1626,13 +1626,25 @@
               <option value="kb">知识条目</option>
               <option value="snapshot">提交记录</option>
             </select>
+            <label class="sysadmin-check" title="到期后自动彻底删除（仅超级管理员可改）">保留期
+              <select id="recycle-retention-select" class="form-input" style="width:106px;" onchange="saveRecycleRetention()">
+                <option value="7">7 天</option>
+                <option value="15">15 天</option>
+                <option value="30">30 天</option>
+                <option value="60">60 天</option>
+                <option value="90">90 天</option>
+              </select>
+            </label>
+            <button type="button" class="btn-plain" id="recycle-prune-btn" onclick="pruneRecycleExpired()" title="立即彻底删除已过期记录">立即清理过期</button>
+            <button type="button" class="btn-plain" style="color:#d9534f;" onclick="purgeRecycleSelected()">彻底删除所选</button>
             <button type="button" class="btn-link" onclick="loadRecycleList()">刷新</button>
             <span id="recycle-status" class="sysadmin-status"></span>
           </div>
+          <div id="recycle-summary" class="sysadmin-hint" style="margin-bottom:8px;"></div>
           <div class="sysadmin-table-wrap">
             <table class="table sysadmin-table">
-              <thead><tr><th>类型</th><th>名称</th><th>删除时间</th><th>剩余</th><th>操作</th></tr></thead>
-              <tbody id="recycle-tbody"><tr><td colspan="5" style="text-align:center;color:#909399;">加载中...</td></tr></tbody>
+              <thead><tr><th style="width:34px;"><input type="checkbox" id="recycle-select-all" onchange="toggleRecycleSelectAll(this.checked)" title="全选当前页" /></th><th>类型</th><th>名称</th><th>删除时间</th><th>剩余</th><th>操作</th></tr></thead>
+              <tbody id="recycle-tbody"><tr><td colspan="6" style="text-align:center;color:#909399;">加载中...</td></tr></tbody>
             </table>
           </div>
           <div class="sysadmin-toolbar" style="margin-top:10px;">
@@ -1651,9 +1663,18 @@
               <option value="90">最近 90 天</option>
               <option value="365">最近 365 天</option>
             </select>
+            <button type="button" class="btn-plain" onclick="exportUsageCsv()">⬇ 导出 CSV</button>
+            <label class="sysadmin-check" title="0 = 关闭告警">日 token 阈值
+              <input id="usage-alert-tokens" class="form-input" type="number" min="0" step="1000" style="width:120px;" placeholder="0=关闭" />
+            </label>
+            <label class="sysadmin-check" title="0 = 关闭告警">日成本阈值(元)
+              <input id="usage-alert-cost" class="form-input" type="number" min="0" step="0.01" style="width:110px;" placeholder="0=关闭" />
+            </label>
+            <button type="button" class="btn-plain" id="usage-alert-save" onclick="saveUsageAlerts()">保存阈值</button>
             <button type="button" class="btn-link" onclick="loadUsageSummary()">刷新</button>
             <span id="usage-status" class="sysadmin-status"></span>
           </div>
+          <div id="usage-alert-banner" class="sysadmin-hint" style="display:none; border:1px solid #f0c36d; background:#fff8e6; color:#8a6d3b; border-radius:8px; padding:8px 10px; margin-bottom:10px;"></div>
           <div id="usage-summary-cards" class="sysadmin-list"></div>
           <div class="sysadmin-section-title" style="margin-top:14px;">按模型</div>
           <div class="sysadmin-table-wrap">
@@ -5680,7 +5701,7 @@
     let grantBackendVersion = '';
     let grantPanel = { company: null, projects: [], teams: [], users: [], grants: { company: [], project: [] } };
     let grantSelectedProjects = [];
-    let recycleState = { page: 1, pageSize: 20, total: 0, retention: 30 };
+    let recycleState = { page: 1, pageSize: 20, total: 0, retention: 30, counts: {}, nextPurgeAt: '', lastPurgeAt: '' };
     let usageState = { days: 30 };
 
     function isManagerRole() {
@@ -6305,36 +6326,59 @@
     }
     window.openCompanyGrants = openCompanyGrants;
 
-    // ---------- V1.63：回收站 ----------
+    // ---------- V1.63：回收站（V1.64：批量清理 / 保留期 / 类型统计） ----------
+    function resetRecycleSelection() {
+      const all = document.getElementById('recycle-select-all');
+      if (all) all.checked = false;
+      document.querySelectorAll('.recycle-row-cb').forEach(function (cb) { cb.checked = false; });
+    }
+    function getSelectedRecycleItems() {
+      return Array.prototype.slice.call(document.querySelectorAll('.recycle-row-cb:checked')).map(function (cb) {
+        return { type: cb.getAttribute('data-type'), id: cb.getAttribute('data-id') };
+      });
+    }
+    function toggleRecycleSelectAll(checked) {
+      document.querySelectorAll('.recycle-row-cb').forEach(function (cb) { cb.checked = !!checked; });
+    }
+    window.toggleRecycleSelectAll = toggleRecycleSelectAll;
+
     async function loadRecycleList(page) {
       if (typeof page === 'number' && page > 0) recycleState.page = page;
       const tbody = document.getElementById('recycle-tbody');
       if (!tbody) return;
       const typeEl = document.getElementById('recycle-type-select');
       const statusEl = document.getElementById('recycle-status');
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#909399;">加载中...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#909399;">加载中...</td></tr>';
       try {
         const d = await safeFetchJson('/api/recycle/list?type=' + encodeURIComponent(typeEl ? typeEl.value : 'all') + '&page=' + recycleState.page + '&page_size=' + recycleState.pageSize);
         if (!d || !d.success) {
-          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--danger);">' + escapeHtml((d && (d.error || d.message)) || '加载失败') + '</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--danger);">' + escapeHtml((d && (d.error || d.message)) || '加载失败') + '</td></tr>';
           return;
         }
         recycleState.total = Number(d.total) || 0;
         recycleState.retention = Number(d.retention_days) || 30;
+        recycleState.counts = d.type_counts || {};
+        recycleState.nextPurgeAt = d.next_purge_at || '';
+        recycleState.lastPurgeAt = d.last_purge_at || '';
         const rows = Array.isArray(d.data) ? d.data : [];
         if (rows.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#909399;">回收站为空</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#909399;">回收站为空</td></tr>';
         } else {
           tbody.innerHTML = rows.map(function (item) {
             const typeText = { company: '客户/行业', project: '项目', kb: '知识条目', snapshot: '提交记录' }[item.type] || item.type;
             const remain = item.expire_at ? Math.max(0, Math.ceil((Date.parse(item.expire_at) - Date.now()) / 86400000)) : '—';
             const sub = item.company_name || item.project_name || '';
-            return '<tr><td>' + typeText + '</td>'
+            const batchBtn = item.batch
+              ? '<button type="button" class="btn-link" title="彻底删除同一删除批次进入回收站的记录" onclick="purgeRecycleBatch(\'' + item.type + '\',\'' + item.batch + '\')">按批次</button>'
+              : '';
+            return '<tr><td><input type="checkbox" class="recycle-row-cb" data-type="' + item.type + '" data-id="' + item.id + '" /></td>'
+              + '<td>' + typeText + '</td>'
               + '<td>' + escapeHtml(item.name || item.id) + (sub ? '<div class="sysadmin-hint">' + escapeHtml(sub) + '</div>' : '') + '</td>'
               + '<td>' + escapeHtml(formatDateTime(item.deleted_at)) + '</td>'
               + '<td>' + remain + ' 天</td>'
               + '<td><button type="button" class="btn-link" onclick="restoreRecycleItem(\'' + item.type + '\',\'' + item.id + '\')">恢复</button>'
-              + '<button type="button" class="btn-link" style="color:#d9534f;" onclick="purgeRecycleItem(\'' + item.type + '\',\'' + item.id + '\')">彻底删除</button></td></tr>';
+              + '<button type="button" class="btn-link" style="color:#d9534f;" onclick="purgeRecycleItem(\'' + item.type + '\',\'' + item.id + '\')">彻底删除</button>'
+              + batchBtn + '</td></tr>';
           }).join('');
         }
         const totalPages = Math.max(1, Math.ceil(recycleState.total / recycleState.pageSize));
@@ -6346,9 +6390,26 @@
         if (prev) prev.disabled = recycleState.page <= 1;
         if (next) next.disabled = recycleState.page >= totalPages;
         if (hint) hint.innerText = '保留期 ' + recycleState.retention + ' 天，到期自动彻底删除';
+        const isSuper = !!(currentUserInfo && currentUserInfo.role === 'superadmin');
+        const retSel = document.getElementById('recycle-retention-select');
+        if (retSel) { retSel.value = String(recycleState.retention); retSel.disabled = !isSuper; }
+        const pruneBtn = document.getElementById('recycle-prune-btn');
+        if (pruneBtn) pruneBtn.disabled = !isSuper;
+        const summaryEl = document.getElementById('recycle-summary');
+        if (summaryEl) {
+          const counts = recycleState.counts || {};
+          const parts = ['共 ' + (Number(d.total_all) || recycleState.total) + ' 条'];
+          if (Number(counts.company)) parts.push('客户/行业 ' + counts.company);
+          if (Number(counts.project)) parts.push('项目 ' + counts.project);
+          if (Number(counts.kb)) parts.push('知识条目 ' + counts.kb);
+          if (Number(counts.snapshot)) parts.push('提交记录 ' + counts.snapshot);
+          if (recycleState.nextPurgeAt) parts.push('下次自动清理 ' + formatDateTime(recycleState.nextPurgeAt));
+          summaryEl.innerText = parts.join(' · ');
+        }
+        resetRecycleSelection();
         if (statusEl) statusEl.innerText = '';
       } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--danger);">' + escapeHtml((e && e.message) || '加载失败') + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--danger);">' + escapeHtml((e && e.message) || '加载失败') + '</td></tr>';
       }
     }
     window.loadRecycleList = loadRecycleList;
@@ -6381,10 +6442,89 @@
     }
     window.purgeRecycleItem = purgeRecycleItem;
 
-    // ---------- V1.63：LLM 用量看板 ----------
+    async function purgeRecycleSelected() {
+      const items = getSelectedRecycleItems();
+      if (items.length === 0) { showToast('请先勾选要彻底删除的记录'); return; }
+      if (!confirm('彻底删除所选 ' + items.length + ' 条？删除后不可恢复。')) return;
+      try {
+        const d = await safeFetchJson('/api/recycle/purge-batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: items }) });
+        showToast((d && (d.success ? (d.message || '已彻底删除') : (d.error || d.message))) || '删除失败');
+        if (d && d.success) await loadRecycleList();
+      } catch (e) { showToast((e && e.message) || '删除失败'); }
+    }
+    window.purgeRecycleSelected = purgeRecycleSelected;
+
+    async function purgeRecycleBatch(type, batch) {
+      if (!batch) return;
+      if (!confirm('彻底删除该删除批次（含级联记录）？删除后不可恢复。')) return;
+      try {
+        const d = await safeFetchJson('/api/recycle/purge-batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: type, batch: batch }) });
+        showToast((d && (d.success ? (d.message || '已彻底删除') : (d.error || d.message))) || '删除失败');
+        if (d && d.success) await loadRecycleList();
+      } catch (e) { showToast((e && e.message) || '删除失败'); }
+    }
+    window.purgeRecycleBatch = purgeRecycleBatch;
+
+    async function saveRecycleRetention() {
+      const sel = document.getElementById('recycle-retention-select');
+      if (!sel) return;
+      const days = Number(sel.value) || 30;
+      if (!(currentUserInfo && currentUserInfo.role === 'superadmin')) {
+        sel.value = String(recycleState.retention);
+        showToast('仅超级管理员可修改保留期');
+        return;
+      }
+      try {
+        const d = await safeFetchJson('/api/admin/recycle/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ retention_days: days }) });
+        if (d && d.success) {
+          recycleState.retention = Number(d.data && d.data.retention_days) || days;
+          showToast(d.message || '保留期已保存');
+          await loadRecycleList();
+        } else {
+          sel.value = String(recycleState.retention);
+          showToast((d && (d.error || d.message)) || '保存失败');
+        }
+      } catch (e) {
+        sel.value = String(recycleState.retention);
+        showToast((e && e.message) || '保存失败');
+      }
+    }
+    window.saveRecycleRetention = saveRecycleRetention;
+
+    async function pruneRecycleExpired() {
+      if (!(currentUserInfo && currentUserInfo.role === 'superadmin')) { showToast('仅超级管理员可立即清理'); return; }
+      if (!confirm('立即彻底删除所有已过期记录？删除后不可恢复。')) return;
+      try {
+        const d = await safeFetchJson('/api/admin/recycle/prune', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+        showToast((d && (d.success ? (d.message || '已清理') : (d.error || d.message))) || '清理失败');
+        if (d && d.success) await loadRecycleList();
+      } catch (e) { showToast((e && e.message) || '清理失败'); }
+    }
+    window.pruneRecycleExpired = pruneRecycleExpired;
+
+    // ---------- V1.63：LLM 用量看板（V1.64：CSV 导出 / 阈值告警） ----------
     function usageNumber(value) {
       const num = Number(value) || 0;
       return num >= 1000000 ? (num / 1000000).toFixed(2) + 'M' : (num >= 1000 ? (num / 1000).toFixed(1) + 'K' : String(num));
+    }
+    function usageAlertText(alert) {
+      const isTokens = alert.kind === 'tokens';
+      const scope = alert.scope === 'today' ? '今日' : '近 7 天日均';
+      const label = isTokens ? '总 token' : '估算成本';
+      const actual = isTokens ? usageNumber(alert.actual) : Number(alert.actual || 0).toFixed(2) + ' 元';
+      const threshold = isTokens ? usageNumber(alert.threshold) : Number(alert.threshold || 0).toFixed(2) + ' 元';
+      return '⚠️ ' + scope + label + ' ' + actual + ' 已超过阈值 ' + threshold;
+    }
+    function renderUsageAlerts(alerts) {
+      const banner = document.getElementById('usage-alert-banner');
+      if (!banner) return;
+      if (!Array.isArray(alerts) || alerts.length === 0) {
+        banner.style.display = 'none';
+        banner.innerText = '';
+        return;
+      }
+      banner.innerHTML = alerts.map(function (alert) { return '<div>' + escapeHtml(usageAlertText(alert)) + '</div>'; }).join('');
+      banner.style.display = '';
     }
     async function loadUsageSummary() {
       const daysEl = document.getElementById('usage-days-select');
@@ -6400,6 +6540,15 @@
         }
         const data = d.data || {};
         const totals = data.totals || {};
+        const isSuper = !!(currentUserInfo && currentUserInfo.role === 'superadmin');
+        const thresholds = data.thresholds || { tokens: 0, cost: 0 };
+        const tokensEl = document.getElementById('usage-alert-tokens');
+        const costEl = document.getElementById('usage-alert-cost');
+        const saveBtn = document.getElementById('usage-alert-save');
+        if (tokensEl) { tokensEl.value = String(Number(thresholds.tokens) || 0); tokensEl.disabled = !isSuper; }
+        if (costEl) { costEl.value = String(Number(thresholds.cost) || 0); costEl.disabled = !isSuper; }
+        if (saveBtn) saveBtn.disabled = !isSuper;
+        renderUsageAlerts(data.alerts || []);
         const cards = document.getElementById('usage-summary-cards');
         if (cards) {
           cards.innerHTML = [
@@ -6443,6 +6592,40 @@
       }
     }
     window.loadUsageSummary = loadUsageSummary;
+
+    function exportUsageCsv() {
+      const url = '/api/admin/usage/export?days=' + encodeURIComponent(usageState.days);
+      try {
+        const a = document.createElement('a');
+        a.href = url;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } catch (e) {
+        window.open(url);
+      }
+      showToast('已开始导出用量 CSV');
+    }
+    window.exportUsageCsv = exportUsageCsv;
+
+    async function saveUsageAlerts() {
+      if (!(currentUserInfo && currentUserInfo.role === 'superadmin')) { showToast('仅超级管理员可修改告警阈值'); return; }
+      const tokensEl = document.getElementById('usage-alert-tokens');
+      const costEl = document.getElementById('usage-alert-cost');
+      const tokens = Number(tokensEl && tokensEl.value !== '' ? tokensEl.value : 0);
+      const cost = Number(costEl && costEl.value !== '' ? costEl.value : 0);
+      if (!isFinite(tokens) || tokens < 0 || !isFinite(cost) || cost < 0) {
+        showToast('阈值需为不小于 0 的数字（0 = 关闭）');
+        return;
+      }
+      try {
+        const d = await safeFetchJson('/api/admin/usage/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alert_daily_tokens: tokens, alert_daily_cost: cost }) });
+        showToast((d && (d.success ? (d.message || '告警阈值已保存') : (d.error || d.message))) || '保存失败');
+        if (d && d.success) await loadUsageSummary();
+      } catch (e) { showToast((e && e.message) || '保存失败'); }
+    }
+    window.saveUsageAlerts = saveUsageAlerts;
 
     // ---------- V1.63：项目所有权移交 ----------
     async function openProjectTransfer(projectId) {

@@ -40,7 +40,7 @@ import { parseMarkdownChunks } from './lib/markdownChunker.js'; // v1.61：本�
 // 一、常量与运行环境
 // ============================================================
 
-const APP_VERSION = '1.63.1';
+const APP_VERSION = '1.64.0';
 const PORT = Number(process.env.PORT) || 3100;
 /** V1.63：知识库单文件上传上限（MB），前端通过 /api/auth/config 读取 */
 const KB_MAX_FILE_MB = Math.max(1, Math.min(200, Number(process.env.KB_MAX_FILE_MB) || 20));
@@ -2581,10 +2581,7 @@ route(['GET'], '/api/admin/audit-logs', async (req, res) => {
 // ------------------------------------------------------------
 
 // ---------- V1.63：LLM 用量 / 成本汇总（管理员；团管按团队） ----------
-route(['GET'], '/api/admin/usage/summary', async (req, res) => {
-  const admin = currentSessionUser(req);
-  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
-  const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+function collectUsageSummary(admin, days) {
   const from = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
   const ids = visibleOwnerIds(admin);
   const selectSql = 'SELECT user_id, project_id, provider, model_name, purpose, status, prompt_tokens, completion_tokens, total_tokens, created_at FROM llm_usage WHERE created_at >= ?';
@@ -2614,6 +2611,7 @@ route(['GET'], '/api/admin/usage/summary', async (req, res) => {
   const byUser = new Map();
   const byDay = new Map();
   const byPurpose = new Map();
+  const byCombo = new Map();
   let errorRequests = 0;
   const addTo = (target, prompt, completion, total, cost, isError) => {
     target.requests += 1;
@@ -2644,11 +2642,37 @@ route(['GET'], '/api/admin/usage/summary', async (req, res) => {
     const purposeKey = String(row.purpose || 'chat');
     if (!byPurpose.has(purposeKey)) byPurpose.set(purposeKey, { purpose: purposeKey, ...emptyAgg() });
     addTo(byPurpose.get(purposeKey), prompt, completion, total, cost, isError);
+    const comboKey = [dayKey, String(row.model_name || ''), String(row.provider || ''), purposeKey, userKey].join('\u0001');
+    if (!byCombo.has(comboKey)) {
+      byCombo.set(comboKey, { date: dayKey, model_name: row.model_name || '', provider: row.provider || '', purpose: purposeKey, user_id: userKey, username: usernames.get(userKey) || (userKey ? userKey : '(未知)'), ...emptyAgg() });
+    }
+    addTo(byCombo.get(comboKey), prompt, completion, total, cost, isError);
   }
   const roundCost = (value) => Math.round(value * 1000000) / 1000000;
   const finalize = (item) => ({ ...item, est_cost: roundCost(item.est_cost) });
-  sendJson(res, 200, {
-    success: true,
+  // V1.64：告警阈值（0 = 关闭）——今日总量 / 近 7 天日均
+  const thresholds = getUsageAlertSettings();
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const dayKeyOffset = (offset) => new Date(Date.now() - offset * 86400000).toISOString().slice(0, 10);
+  const todayAgg = byDay.get(todayKey) || { total_tokens: 0, est_cost: 0 };
+  let sum7Tokens = 0;
+  let sum7Cost = 0;
+  for (let i = 0; i < 7; i += 1) {
+    const agg = byDay.get(dayKeyOffset(i));
+    if (agg) { sum7Tokens += agg.total_tokens; sum7Cost += agg.est_cost; }
+  }
+  const avg7Tokens = sum7Tokens / 7;
+  const avg7Cost = sum7Cost / 7;
+  const alerts = [];
+  if (thresholds.tokens > 0) {
+    if (todayAgg.total_tokens > thresholds.tokens) alerts.push({ kind: 'tokens', scope: 'today', threshold: thresholds.tokens, actual: todayAgg.total_tokens, date: todayKey });
+    if (avg7Tokens > thresholds.tokens) alerts.push({ kind: 'tokens', scope: '7d_avg', threshold: thresholds.tokens, actual: Math.round(avg7Tokens), date: todayKey });
+  }
+  if (thresholds.cost > 0) {
+    if (todayAgg.est_cost > thresholds.cost) alerts.push({ kind: 'cost', scope: 'today', threshold: thresholds.cost, actual: roundCost(todayAgg.est_cost), date: todayKey });
+    if (avg7Cost > thresholds.cost) alerts.push({ kind: 'cost', scope: '7d_avg', threshold: thresholds.cost, actual: roundCost(avg7Cost), date: todayKey });
+  }
+  return {
     data: {
       range: { days, from },
       totals: { ...finalize(totals), error_requests: errorRequests },
@@ -2656,8 +2680,62 @@ route(['GET'], '/api/admin/usage/summary', async (req, res) => {
       by_user: [...byUser.values()].map(finalize).sort((a, b) => b.total_tokens - a.total_tokens),
       by_day: [...byDay.values()].map(finalize).sort((a, b) => String(a.date).localeCompare(String(b.date))),
       by_purpose: [...byPurpose.values()].map(finalize).sort((a, b) => b.total_tokens - a.total_tokens),
+      thresholds,
+      alerts,
+      today: { date: todayKey, total_tokens: todayAgg.total_tokens, est_cost: roundCost(todayAgg.est_cost) },
     },
-  });
+    combos: [...byCombo.values()].map((item) => ({ ...finalize(item), est_cost: roundCost(item.est_cost) }))
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.model_name).localeCompare(String(b.model_name))),
+  };
+}
+
+route(['GET'], '/api/admin/usage/summary', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+  const result = collectUsageSummary(admin, days);
+  sendJson(res, 200, { success: true, data: result.data });
+});
+
+/** V1.64：用量 CSV 导出（按天 × 模型 × 用途 × 用户聚合；UTF-8 BOM） */
+route(['GET'], '/api/admin/usage/export', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+  const result = collectUsageSummary(admin, days);
+  const csvCell = (value) => {
+    const text = String(value === null || value === undefined ? '' : value);
+    return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  };
+  const lines = [['日期', '模型', '提供方', '用途', '用户', '请求数', '输入token', '输出token', '总token', '估算成本(元)'].map(csvCell).join(',')];
+  for (const row of result.combos) {
+    lines.push([row.date, row.model_name, row.provider, row.purpose, row.username, row.requests, row.prompt_tokens, row.completion_tokens, row.total_tokens, Number(row.est_cost || 0).toFixed(6)].map(csvCell).join(','));
+  }
+  const totals = result.data.totals;
+  lines.push(['合计', '', '', '', '', totals.requests, totals.prompt_tokens, totals.completion_tokens, totals.total_tokens, Number(totals.est_cost || 0).toFixed(6)].map(csvCell).join(','));
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const fileName = `usage-${stamp}-${days}d.csv`;
+  logAction(admin.id, 'usage_export', 'usage', '', `days=${days} rows=${result.combos.length}`);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.send('\uFEFF' + lines.join('\r\n'));
+});
+
+/** V1.64：用量告警阈值（读取管理可见；写入仅超管）——合并注册避免同路径 405 */
+route(['GET', 'POST'], '/api/admin/usage/settings', async (req, res) => {
+  const admin = currentSessionUser(req);
+  if (!admin || !['superadmin', 'teamadmin'].includes(admin.role)) return sendJson(res, 403, { success: false, error: '需要管理权限' });
+  if (req.method === 'GET') return sendJson(res, 200, { success: true, data: getUsageAlertSettings() });
+  if (admin.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可修改告警阈值' });
+  const body = req.body || {};
+  const tokens = Number(body.alert_daily_tokens);
+  const cost = Number(body.alert_daily_cost);
+  if (!Number.isFinite(tokens) || tokens < 0 || tokens > 1e12) return sendJson(res, 400, { success: false, error: 'token 阈值需为 0 ~ 1e12 的数字（0 = 关闭）' });
+  if (!Number.isFinite(cost) || cost < 0 || cost > 1e9) return sendJson(res, 400, { success: false, error: '成本阈值需为 0 ~ 1e9 的数字（0 = 关闭）' });
+  setAppSetting('usage_alert_daily_tokens', String(Math.floor(tokens)));
+  setAppSetting('usage_alert_daily_cost', String(cost));
+  logAction(admin.id, 'usage_alert_update', 'usage', '', `tokens=${Math.floor(tokens)} cost=${cost}`, 'Warn');
+  sendJson(res, 200, { success: true, message: '告警阈值已保存', data: getUsageAlertSettings() });
 });
 
 route(['GET'], '/api/context/get', async (req, res) => {
@@ -3056,6 +3134,41 @@ function recycleRetentionDays() {
   } catch (e) { /* ignore */ }
   return 30;
 }
+/** V1.64：通用 app_settings 读写（回收站保留期 / 用量告警阈值共用） */
+function getAppSetting(key, fallback = '') {
+  try {
+    const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(String(key));
+    return row && row.value !== undefined && row.value !== null ? String(row.value) : fallback;
+  } catch (e) { return fallback; }
+}
+function setAppSetting(key, value) {
+  db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(String(key), String(value));
+}
+/** V1.64：用量告警阈值（0 = 关闭） */
+function getUsageAlertSettings() {
+  const tokensRaw = Number(getAppSetting('usage_alert_daily_tokens', '0'));
+  const costRaw = Number(getAppSetting('usage_alert_daily_cost', '0'));
+  const tokens = Number.isFinite(tokensRaw) && tokensRaw > 0 ? Math.floor(tokensRaw) : 0;
+  const cost = Number.isFinite(costRaw) && costRaw > 0 ? costRaw : 0;
+  return { tokens, cost };
+}
+/** V1.64：回收站各类型条数（与列表同一套归属过滤口径） */
+function countRecycleByType(user) {
+  const ids = visibleOwnerIds(user);
+  const totals = { company: 0, project: 0, kb: 0, snapshot: 0 };
+  for (const [type, table] of Object.entries(RECYCLE_TYPE_TABLE)) {
+    let sql = `SELECT COUNT(*) AS c FROM ${table} WHERE COALESCE(deleted_at, '') <> ''`;
+    const params = [];
+    if (ids !== null) {
+      if (ids.length === 0) { totals[type] = 0; continue; }
+      sql += ` AND user_id IN (${ids.map(() => '?').join(', ')})`;
+      params.push(...ids);
+    }
+    try { totals[type] = Number(db.prepare(sql).get(...params).c) || 0; } catch (e) { totals[type] = 0; }
+  }
+  totals.all = totals.company + totals.project + totals.kb + totals.snapshot;
+  return totals;
+}
 function recycleExpireAt(deletedAt) {
   const days = recycleRetentionDays();
   const time = Date.parse(String(deletedAt || ''));
@@ -3239,6 +3352,7 @@ function listRecycleItems(user, typeFilter, page, pageSize) {
       name: recycleTypeName({ ...row, type }),
       deleted_at: row.deleted_at || '',
       deleted_by: row.deleted_by || '',
+      batch: row.deleted_batch || '',
       expire_at: recycleExpireAt(row.deleted_at),
       ...extra,
     });
@@ -3399,7 +3513,19 @@ route(['GET'], '/api/recycle/list', async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size) || 20));
   const data = listRecycleItems(user, type, page, pageSize);
-  sendJson(res, 200, { success: true, data: data.items, total: data.total, page: data.page, page_size: data.page_size, retention_days: data.retention_days });
+  const counts = countRecycleByType(user);
+  sendJson(res, 200, {
+    success: true,
+    data: data.items,
+    total: data.total,
+    page: data.page,
+    page_size: data.page_size,
+    retention_days: data.retention_days,
+    type_counts: counts,
+    total_all: counts.all,
+    next_purge_at: nextRecyclePurgeAt || '',
+    last_purge_at: lastRecyclePurgeAt || '',
+  });
 });
 route(['POST'], '/api/recycle/restore', async (req, res) => {
   const user = requireRecycleManager(currentSessionUser(req));
@@ -3422,6 +3548,94 @@ route(['POST'], '/api/recycle/purge', async (req, res) => {
   purgeRecycleEntity(type, id);
   logAction(user.id, 'recycle_purge', type, id, 'Danger');
   sendJson(res, 200, { success: true, message: '已彻底删除（不可恢复）' });
+});
+
+/**
+ * V1.64：批量彻底删除（勾选多条 / 按删除批次）
+ * - 逐条串行，单次上限 200 条；
+ * - 每条重新做归属校验，防越权；
+ * - 上级（公司/项目）级联删除后，子记录已不存在，计为 skipped 而非失败。
+ */
+route(['POST'], '/api/recycle/purge-batch', async (req, res) => {
+  const user = requireRecycleManager(currentSessionUser(req));
+  const body = req.body || {};
+  const MAX_BATCH = 200;
+  let targets = [];
+  if (Array.isArray(body.items)) {
+    targets = body.items
+      .map((item) => ({ type: String((item && item.type) || ''), id: String((item && item.id) || '') }))
+      .filter((item) => RECYCLE_TYPE_TABLE[item.type] && item.id);
+  } else if (body.batch) {
+    const type = ['all', 'company', 'project', 'kb', 'snapshot'].includes(String(body.type || 'all')) ? String(body.type || 'all') : 'all';
+    const tables = type === 'all' ? Object.values(RECYCLE_TYPE_TABLE) : [RECYCLE_TYPE_TABLE[type]];
+    for (const table of tables) {
+      const rows = db.prepare(`SELECT id FROM ${table} WHERE COALESCE(deleted_at, '') <> '' AND deleted_batch = ?`).all(String(body.batch));
+      for (const row of rows) targets.push({ type: RECYCLE_TABLE_TYPE[table], id: row.id });
+    }
+  }
+  const seen = new Set();
+  targets = targets.filter((item) => {
+    const key = item.type + ':' + item.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (targets.length === 0) return sendJson(res, 400, { success: false, error: '没有可清理的记录' });
+  if (targets.length > MAX_BATCH) return sendJson(res, 400, { success: false, error: `单次最多清理 ${MAX_BATCH} 条，请分批操作` });
+  let purged = 0;
+  let skipped = 0;
+  const failed = [];
+  for (const target of targets) {
+    const table = RECYCLE_TYPE_TABLE[target.type];
+    const exists = table ? db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(target.id) : null;
+    if (!exists) { skipped += 1; continue; }
+    try {
+      requireRecycleRecord(user, target.type, target.id);
+      purgeRecycleEntity(target.type, target.id);
+      purged += 1;
+    } catch (e) {
+      failed.push({ type: target.type, id: target.id, error: e.message });
+    }
+  }
+  logAction(user.id, 'recycle_purge_batch', 'recycle', '', `purged=${purged} failed=${failed.length} skipped=${skipped}`, 'Danger');
+  sendJson(res, 200, {
+    success: true,
+    message: `已彻底删除 ${purged} 条${failed.length ? `，失败 ${failed.length} 条` : ''}${skipped ? `，${skipped} 条已随上级删除` : ''}`,
+    purged,
+    failed,
+    skipped,
+  });
+});
+
+/** V1.64：回收站保留期与清理状态（管理可见；超管可改）——同一路径必须合并注册，避免 405 */
+route(['GET', 'POST'], '/api/admin/recycle/settings', async (req, res) => {
+  const user = requireRecycleManager(currentSessionUser(req));
+  if (req.method === 'GET') {
+    return sendJson(res, 200, {
+      success: true,
+      data: {
+        retention_days: recycleRetentionDays(),
+        next_purge_at: nextRecyclePurgeAt || '',
+        last_purge_at: lastRecyclePurgeAt || '',
+        counts: countRecycleByType(user),
+      },
+    });
+  }
+  if (user.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可修改回收站保留期' });
+  const days = Number((req.body || {}).retention_days);
+  if (!Number.isFinite(days) || days < 1 || days > 365) return sendJson(res, 400, { success: false, error: '保留期需为 1 ~ 365 天' });
+  const safeDays = Math.floor(days);
+  setAppSetting('recycle_retention_days', String(safeDays));
+  logAction(user.id, 'recycle_retention_update', 'recycle', '', `days=${safeDays}`, 'Warn');
+  sendJson(res, 200, { success: true, message: `保留期已改为 ${safeDays} 天（下次自动清理生效）`, data: { retention_days: recycleRetentionDays() } });
+});
+
+route(['POST'], '/api/admin/recycle/prune', async (req, res) => {
+  const user = requireRecycleManager(currentSessionUser(req));
+  if (user.role !== 'superadmin') return sendJson(res, 403, { success: false, error: '仅超级管理员可立即清理回收站' });
+  const purged = purgeExpiredRecycle();
+  logAction(user.id, 'recycle_prune', 'recycle', '', `purged=${purged}`, 'Danger');
+  sendJson(res, 200, { success: true, message: purged > 0 ? `已清理 ${purged} 条过期记录` : '没有过期记录需要清理', purged });
 });
 
 // ---------- V1.62：项目置顶（每用户各自一套） ----------
@@ -4771,10 +4985,15 @@ function startAutoBackupScheduler() {
 
 /** V1.63：回收站过期清理（启动 90 秒后首次，之后每 24 小时；串行删除） */
 let recycleTimer = null;
+let lastRecyclePurgeAt = '';
+let nextRecyclePurgeAt = '';
 function startRecycleScheduler() {
   const runOnce = () => {
     try { purgeExpiredRecycle(); } catch (e) { console.warn('[recycle] 自动清理失败:', e.message); }
+    lastRecyclePurgeAt = new Date().toISOString();
+    nextRecyclePurgeAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   };
+  nextRecyclePurgeAt = new Date(Date.now() + 90 * 1000).toISOString();
   setTimeout(runOnce, 90 * 1000).unref();
   recycleTimer = setInterval(runOnce, 24 * 60 * 60 * 1000);
   recycleTimer.unref();
@@ -4782,7 +5001,7 @@ function startRecycleScheduler() {
 
 (async () => {
   console.log('========================================');
-  console.log(' NewRock AI Workbench v1.63.1（纯 Node.js + Express）');
+  console.log(' NewRock AI Workbench v1.64.0（纯 Node.js + Express）');
   console.log('========================================');
   console.log(`[server] 数据目录: ${DATA_DIR}`);
   console.log(`[server] 数据库: ${DB_PATH}`);

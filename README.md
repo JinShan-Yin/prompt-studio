@@ -1,15 +1,16 @@
-# NewRock AI Workbench v1.63.1
+# NewRock AI Workbench v1.64.0
 
 企业级、多租户的**提示词协作与 AI 资产管理平台**。纯 Node.js（Express 5）+ 原生前端构建，用于集中管理 AI 智能体的提示词、知识库、多模型路由、提交记录与自动化评测。数据通过 SQLite 本地存储；默认仅监听本机 `127.0.0.1:3100`，开启 `LAN_ACCESS` 后可让局域网内设备访问。
 
-> **版本说明**：当前代码为 **v1.60 底座 + v1.61 知识库结构化升级 + v1.62（局域网 / 权限框架 / 置顶 / 跨公司克隆 / 个人 Key / 账号治理 / 备份与运维）+ v1.63（评测历史 / 客户级授权 / 回收站 / 知识库分页 / 用量看板 / 所有权移交 / 用户治理 + 顶部精简）+ v1.63.1（备份降噪：每日 10:00 / 保留 7 份 / 关闭启动前快照）**。
-> `package.json`、启动日志与 `/api/health` 统一为 `1.63.1`。
+> **版本说明**：当前代码为 **v1.60 底座 + v1.61 知识库结构化升级 + v1.62（局域网 / 权限框架 / 置顶 / 跨公司克隆 / 个人 Key / 账号治理 / 备份与运维）+ v1.63（评测历史 / 客户级授权 / 回收站 / 知识库分页 / 用量看板 / 所有权移交 / 用户治理 + 顶部精简）+ v1.63.1（备份降噪：每日 10:00 / 保留 7 份 / 关闭启动前快照）+ v1.64（回收站批量治理与保留期配置 / 用量 CSV 导出与阈值告警）**。
+> `package.json`、启动日志与 `/api/health` 统一为 `1.64.0`。
 
 ---
 
 ## 目录
 
 - [功能特性](#功能特性)
+- [v1.64 更新要点](#v164-更新要点)
 - [v1.63.1 更新要点](#v1631-更新要点)
 - [v1.63 更新要点](#v163-更新要点)
 - [v1.62 更新要点](#v162-更新要点)
@@ -107,6 +108,19 @@
 - 静态资源托管、SPA 回退、`/favicon.ico` 映射品牌 logo。
 - 三套开机自启：systemd、supervisord、Windows 任务计划 + VBS 静默启动（详见 `autostart/`）。
 - 管理员一键重启：双击 `autostart/restart-newrock-elevated.bat`（UAC 点“是”），或运行 `autostart/restart-newrock.ps1`（停旧进程 → 后台启动 → 等待 `/api/health` 并打印版本，日志见 `logs/restart-elevated.log`）。
+
+---
+
+## v1.64 更新要点
+
+| 类别 | 内容 |
+|---|---|
+| 回收站批量清理 | 当前页复选框 + 全选 +「彻底删除所选」；支持按删除批次清理。新接口 `POST /api/recycle/purge-batch`：逐条串行、单次上限 200、逐条校验归属，上级级联后子记录计为 skipped |
+| 保留期可视化 | 回收站面板 7/15/30/60/90 天下拉（仅超管可改）；`GET\|POST /api/admin/recycle/settings` 读写保留期与清理状态；改保留期不立即删除，下次自动清理生效 |
+| 立即清理过期 | `POST /api/admin/recycle/prune`（仅超管）串行清理过期记录并写 Danger 审计；面板显示类型统计、总数、下次/上次清理时间 |
+| 用量 CSV 导出 | `GET /api/admin/usage/export`：按日期 × 模型 × 用途 × 用户聚合，UTF-8 BOM + 合计行；超管全量、团管按团队 |
+| 用量阈值告警 | 日 token / 日成本阈值（0=关闭，仅超管可改）；汇总返回 thresholds/alerts/today；超阈值在面板顶部黄条提示，**只展示不阻断** |
+| 兼容性 | 无数据库结构变更，仅写 app_settings 三行；同路径 GET/POST 合并注册避免 405；原单条 purge 与汇总字段保持兼容 |
 
 ---
 
@@ -233,7 +247,7 @@ curl -I http://127.0.0.1:3100/               # 未登录 302 到登录页
 
 ```
 .
-├── server.js                  # 主入口：路由、中间件、DB 初始化、LLM 路由、启动逻辑（约 2800 行）
+├── server.js                  # 主入口：路由、中间件、DB 初始化、LLM 路由、启动逻辑（约 4.9k 行）
 ├── package.json
 ├── .env.example               # 环境变量模板
 ├── lib/
@@ -367,18 +381,18 @@ bash autostart/start-newrock.sh stop
 
 ## API 概览
 
-服务启动时注册 **78 条** `/api` 路由（启动日志会逐条打印）。主要分组：
+服务启动时注册 **83 条** `/api` 路由（启动日志会逐条打印）。主要分组：
 
 | 分组 | 代表端点 |
 |---|---|
 | 鉴权 / 探活 | `POST /api/auth/login`、`/logout`、`/register`、`/change-password`；`GET /api/auth/me`、`/api/auth/config`、`/api/health` |
-| 团队 / 用户 / 审计 | `GET /api/teams`、`POST /api/teams/create`、`GET /api/admin/users`、`POST /api/admin/users/create`、`/role`、`/features`、`/status`、`/kick`、`/delete`（支持 `force + data_mode`）、`/reset-password`、`/assign-team`、`GET /api/admin/features`、`POST /api/admin/features/matrix`、`GET /api/admin/backups`、`POST /api/admin/backups/run`、`GET /api/admin/audit-logs`、`GET /api/admin/usage/summary` |
+| 团队 / 用户 / 审计 | `GET /api/teams`、`POST /api/teams/create`、`GET /api/admin/users`、`POST /api/admin/users/create`、`/role`、`/features`、`/status`、`/kick`、`/delete`（支持 `force + data_mode`）、`/reset-password`、`/assign-team`、`GET /api/admin/features`、`POST /api/admin/features/matrix`、`GET /api/admin/backups`、`POST /api/admin/backups/run`、`GET /api/admin/audit-logs`、`GET /api/admin/usage/summary`、`GET /api/admin/usage/export`、`GET/POST /api/admin/usage/settings` |
 | 语境（遗留） | `GET /api/context/get`、`POST /api/context/save`、`POST /api/context/extract` |
 | 知识库 | `POST /api/kb/parse`、`/parse-markdown`、`/extract-text`、`/save`、`/update`、`/delete`；`GET /api/kb/list`、`/export` |
 | 提示词 / 快照 | `POST /api/prompt/assemble`、`/api/snapshots/create`、`/delete`；`GET /api/snapshots/list`、`/detail`、`/api/gate/export` |
 | 客户 / 项目 | `GET/POST /api/companies*`、`/api/projects*`、`POST /api/projects/clone`（支持 `target_company_id` / `copy_mode`）、`/api/projects/pin`、`GET /api/projects/grants`（客户级/项目级）、`POST /api/projects/grants/save`、`GET /api/projects/transfer/candidates`、`POST /api/projects/transfer`、`GET /api/projects/export_zip` |
 | 评测 / 对话 | `POST /api/eval/run`、`/generate_questions`、`POST/GET /api/eval/runs`（评测历史）、`GET /api/eval/export`、`POST /api/chat/reply` |
-| 回收站 | `GET /api/recycle/list`、`POST /api/recycle/restore`、`POST /api/recycle/purge` |
+| 回收站 | `GET /api/recycle/list`（含 type_counts/batch/next_purge_at）、`POST /api/recycle/restore`、`POST /api/recycle/purge`、`POST /api/recycle/purge-batch`、`GET/POST /api/admin/recycle/settings`、`POST /api/admin/recycle/prune` |
 | 模型 / 设置 | `GET/POST /api/settings/api-key`、`GET /api/models`、`POST /api/models/save`、`/delete`、`/test` |
 | 模板 / 润色 | `GET /api/templates`、`POST /api/templates/save`、`/delete`、`/extract`、`POST /api/ai/polish` |
 | 备份 | `GET /api/backup/export`、`POST /api/backup/import`、`GET /api/admin/backups`、`POST /api/admin/backups/run`、`POST /api/admin/backups/prune` |
@@ -422,7 +436,7 @@ bash autostart/start-newrock.sh stop
 6. **回收站保留 30 天**：到期自动串行清理；彻底删除不可恢复。
 7. **未做 HTTPS**：局域网仍为 HTTP 明文，仅用于可信内网。
 8. **真实浏览器自动化受本机限制**：本机系统策略拒绝 Edge 的命名管道/IPC，改用 jsdom DOM 级回归（见 `QA_REPORT_v1.63.md`）；像素级 UI 仍需人工抽查。
-9. **V1.64 候选**：真实发布门禁、可选 HTTPS、知识库自动分块、用量导出/告警、回收站保留期配置。
+9. **V1.65 候选**：知识库大文档自动分块；真实发布门禁与可选 HTTPS 仍按产品决定不做；用量告警目前只提示、不阻断。
 
 ---
 
